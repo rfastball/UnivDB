@@ -34,7 +34,7 @@ Option Explicit
 '    - 리포트 빌더를 시작합니다. (Factory Method)
 '    - 예: UnivDB.Report("Emp").Exclude(...).BuildToSheet ...
 '
-' 5. Join(Left, Right, Key, [Type], [Prefix]) -> clsTable
+' 5. Join(Left, Right, Key, [Type], [Prefix], [RightKey]) -> clsTable
 '    - 두 테이블을 조인하여 새로운 테이블을 반환합니다.
 '    - Type: jtInner(1), jtLeft(2), jtRight(3), jtFull(4), jtLeftAnti(5) 등
 ' ------------------------------------------------------------------------------
@@ -76,7 +76,7 @@ Option Explicit
 ' - .CreateKey(New, Src, Len)    : 키 컬럼 생성 (Left 함수 적용)
 '
 ' [데이터 결합 및 변환]
-' - .JoinTable(Ref, Key, [Type], [Prefix]) : 다른 테이블과 조인
+' - .JoinTable(Ref, Key, [Type], [Prefix], [RightKey]) : 다른 테이블과 조인
 ' - .FillFromMap(Tgt, Src, Def)  : 조인된 데이터로 값 채우기 (VLOOKUP 효과)
 ' - .ConvertDates(Cols...)       : 텍스트 날짜를 실제 날짜형으로 변환
 '

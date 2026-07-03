@@ -92,11 +92,12 @@ End Function
 Public Function JoinTable(ByVal tRef As clsTable, _
                           ByVal sKey As String, _
                           Optional ByVal jType As joinType = jtLeft, _
-                          Optional ByVal sRightPrefix As String = "") As clsReportBuilder
+                          Optional ByVal sRightPrefix As String = "", _
+                          Optional ByVal sRightKey As String = "") As clsReportBuilder
                           
     ' UnivDB.Join을 호출하여 테이블 병합 수행
     ' [UPDATE] 추가된 jType과 sRightPrefix를 파사드(UnivDB)로 전달
-    Set m_tWork = UnivDB.Join(m_tWork, tRef, sKey, jType, sRightPrefix)
+    Set m_tWork = UnivDB.Join(m_tWork, tRef, sKey, jType, sRightPrefix, sRightKey)
     m_bIsSafeCopy = True ' Join 결과는 항상 새로운 테이블임
     
     ' 메서드 체이닝을 위해 자기 자신(Me)을 반환
