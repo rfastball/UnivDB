@@ -86,7 +86,7 @@ End Sub
 
 Public Sub Test_Generation_StaleIndex_FailFast()
     Dim T As clsTable
-    Dim idx As DictHashIndex
+    Dim idx As DbHashIndex
     Dim lErr As Long
 
     Set T = NewGenTable()
@@ -114,7 +114,7 @@ End Sub
 
 Public Sub Test_Generation_MixedBinding_FailFast()
     Dim T As clsTable
-    Dim idx As DictHashIndex
+    Dim idx As DbHashIndex
     Dim rows As DbRowList
     Dim rowSet As DbRowSet
     Dim lErr As Long

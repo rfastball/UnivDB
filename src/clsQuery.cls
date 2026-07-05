@@ -60,7 +60,7 @@ End Function
 ' 설명: 가장 먼저 호출하여 후보군을 대폭 줄이는 것을 권장
 ' ------------------------------------------------------------------------------
 Public Function Where(ByVal sColName As String, ByVal vValue As Variant) As clsQuery
-    Dim idx As DictHashIndex
+    Dim idx As DbHashIndex
     Dim rows As DbRowList
 
     ' 0. 세대 계약: 이전 조건의 후보군이 stale이면 즉시 실패

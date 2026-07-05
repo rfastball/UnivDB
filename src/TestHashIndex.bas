@@ -26,7 +26,7 @@ End Sub
 
 Public Sub Test_TableHashIndex_SelectRows_Parity()
     Dim T As clsTable
-    Dim idx As DictHashIndex
+    Dim idx As DbHashIndex
     Dim rows As DbRowList
 
     Set T = NewHashIndexTable()
@@ -37,6 +37,34 @@ Public Sub Test_TableHashIndex_SelectRows_Parity()
     LogShim.AssertEq "table_hashindex_count", T.SelectRows("Dept", "IT").Count, rows.Count
     LogShim.AssertEq "table_hashindex_first", T.SelectRows("Dept", "IT")(1), rows.RowAt(1)
     LogShim.AssertEq "table_hashindex_second", T.SelectRows("Dept", "IT")(2), rows.RowAt(2)
+End Sub
+
+Public Sub Test_HashIndex_InterfaceDispatch_Parity()
+    Dim idx As DbHashIndex
+    Dim rows As DbRowList
+    Dim cur As DbIndexCursor
+    Dim lRowSum As Long
+
+    ' DbHashIndex 인터페이스 경유 디스패치가 구체 표면과 동치인지 확인
+    Set idx = New DictHashIndex
+    idx.AddRow "IT", 2
+    idx.AddRow "it", 3
+    idx.AddRow Empty, 4
+    idx.AddRow CVErr(xlErrNA), 5
+
+    LogShim.AssertEq "iface_key_count", 2, idx.CountKeys
+    LogShim.AssertEq "iface_try_case", True, idx.TryGetRows("IT", rows)
+    LogShim.AssertEq "iface_case_count", 2, rows.Count
+    LogShim.AssertEq "iface_try_error", False, idx.TryGetRows(CVErr(xlErrNA), rows)
+
+    Set cur = idx.Cursor
+    Do While cur.MoveNext
+        lRowSum = lRowSum + cur.Rows.Count
+    Loop
+    LogShim.AssertEq "iface_cursor_rowsum", 3, lRowSum
+
+    idx.Clear
+    LogShim.AssertEq "iface_clear_count", 0, idx.CountKeys
 End Sub
 
 Public Sub Test_QueryWhere_UsesHashIndex_Path()

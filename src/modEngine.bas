@@ -39,7 +39,7 @@ Public Function JoinTable(ByVal tLeft As clsTable, _
     Dim lRowIdx As Long
     Dim vKey As Variant
     
-    Dim idxLeft As DictHashIndex, idxRight As DictHashIndex
+    Dim idxLeft As DbHashIndex, idxRight As DbHashIndex
     Dim cur As DbIndexCursor
     Dim leftRows As DbRowList, rightRows As DbRowList
     Dim vItemLeft As Long, vItemRight As Long

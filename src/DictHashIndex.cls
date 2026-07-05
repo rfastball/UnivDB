@@ -9,6 +9,8 @@ Attribute VB_PredeclaredId = False
 Attribute VB_Exposed = True
 Option Explicit
 
+Implements DbHashIndex
+
 Private mDict As Object
 
 ' 세대 계약 결속 (ObjPtr 스냅샷 - 객체 참조 아님, 순환 참조 방지)
@@ -86,9 +88,33 @@ Public Function Cursor() As DbIndexCursor
 End Function
 
 Private Function NormalizeKey(ByVal key As Variant) As String
-    If IsEmpty(key) Then
-        NormalizeKey = ""
-    Else
-        NormalizeKey = CStr(key)
-    End If
+    NormalizeKey = modIndexKey.NormalizeIndexKey(key)
 End Function
+
+' ==============================================================================
+' DbHashIndex 인터페이스 위임 (기존 Public 표면 유지)
+' ==============================================================================
+
+Private Sub DbHashIndex_AddRow(ByVal key As Variant, ByVal rowId As Long)
+    AddRow key, rowId
+End Sub
+
+Private Function DbHashIndex_TryGetRows(ByVal key As Variant, ByRef outRows As DbRowList) As Boolean
+    DbHashIndex_TryGetRows = TryGetRows(key, outRows)
+End Function
+
+Private Property Get DbHashIndex_CountKeys() As Long
+    DbHashIndex_CountKeys = CountKeys
+End Property
+
+Private Sub DbHashIndex_Clear()
+    Clear
+End Sub
+
+Private Function DbHashIndex_Cursor() As DbIndexCursor
+    Set DbHashIndex_Cursor = Cursor()
+End Function
+
+Private Sub DbHashIndex_EnsureCurrent(ByVal tbl As clsTable)
+    EnsureCurrent tbl
+End Sub

@@ -255,9 +255,9 @@ End Function
 ' ==============================================================================
 
 ' 3-1. 인덱스 생성 및 획득 (By 컬럼명)
-Public Function GetHashIndex(ByVal sColName As String) As DictHashIndex
+Public Function GetHashIndex(ByVal sColName As String) As DbHashIndex
     Dim lCol As Long
-    Dim idxResult As DictHashIndex
+    Dim idxResult As DbHashIndex
     
     sColName = UCase(Trim(sColName))
     
@@ -280,7 +280,8 @@ Public Function GetHashIndex(ByVal sColName As String) As DictHashIndex
 End Function
 
 ' 3-1b. 인덱스 생성 및 획득 (By 숫자 인덱스)
-Public Function GetHashIndexByIndex(ByVal lCol As Long) As DictHashIndex
+' 빌드는 구체 백엔드(DictHashIndex)로, 반환은 인터페이스로
+Public Function GetHashIndexByIndex(ByVal lCol As Long) As DbHashIndex
     Dim i As Long
     Dim idx As DictHashIndex
     
@@ -306,7 +307,7 @@ End Function
 
 ' 3-2a. 특정 조건에 맞는 행 번호들 찾기 (By 컬럼명) - DictHashIndex 어댑터 (호환 shim)
 Public Function SelectRows(ByVal sColName As String, ByVal vValue As Variant) As Collection
-    Dim idx As DictHashIndex
+    Dim idx As DbHashIndex
     Dim rows As DbRowList
 
     Set idx = GetHashIndex(sColName)
@@ -322,7 +323,7 @@ End Function
 
 ' 3-2b. 특정 조건에 맞는 행 번호들 찾기 (By 숫자 인덱스) - DictHashIndex 어댑터 (호환 shim)
 Public Function SelectRowsByIndex(ByVal lCol As Long, ByVal vValue As Variant) As Collection
-    Dim idx As DictHashIndex
+    Dim idx As DbHashIndex
     Dim rows As DbRowList
 
     Set idx = GetHashIndexByIndex(lCol)
@@ -338,7 +339,7 @@ End Function
 
 ' 3-3a. 특정 컬럼의 고유값 목록 추출 (By 컬럼명) - DictHashIndex 어댑터 (호환 shim)
 Public Function GetUniqueKeys(ByVal sColName As String) As Variant
-    Dim idx As DictHashIndex
+    Dim idx As DbHashIndex
     Set idx = GetHashIndex(sColName)
 
     If idx Is Nothing Then
@@ -350,7 +351,7 @@ End Function
 
 ' 3-3b. 특정 컬럼의 고유값 목록 추출 (By 숫자 인덱스) - DictHashIndex 어댑터 (호환 shim)
 Public Function GetUniqueKeysByIndex(ByVal lCol As Long) As Variant
-    Dim idx As DictHashIndex
+    Dim idx As DbHashIndex
     Set idx = GetHashIndexByIndex(lCol)
 
     If idx Is Nothing Then
@@ -361,7 +362,7 @@ Public Function GetUniqueKeysByIndex(ByVal lCol As Long) As Variant
 End Function
 
 ' [Internal] 인덱스 커서 순회로 키 배열 생성 (삽입 순서 = 행 순서 유지)
-Private Function KeysFromIndex(ByVal idx As DictHashIndex) As Variant
+Private Function KeysFromIndex(ByVal idx As DbHashIndex) As Variant
     Dim cur As DbIndexCursor
     Dim vKeys() As Variant
     Dim lPos As Long
@@ -663,7 +664,7 @@ End Sub
 ' 설명: 키가 같으면 덮어쓰고(Update), 없으면 추가(Insert)합니다.
 ' 전략: Update는 In-place로 즉시 처리, Insert는 모아서 배치로 처리 (배열 재할당 비용 최소화)
 Public Sub UpsertFrom(ByVal tSource As clsTable, ByVal sKeyCol As String)
-    Dim idxKey As DictHashIndex
+    Dim idxKey As DbHashIndex
     Dim rowsForKey As DbRowList
     Dim vSourceData As Variant
     Dim vKey As Variant
