@@ -739,9 +739,10 @@ End Sub
 ' 설명: 키가 같으면 덮어쓰고(Update), 없으면 추가(Insert)합니다.
 ' 전략: Update는 In-place로 즉시 처리, Insert는 모아서 배치로 처리 (배열 재할당 비용 최소화)
 Public Sub UpsertFrom(ByVal tSource As clsTable, ByVal sKeyCol As String)
-    Dim dicIndex As Object
+    Dim idxKey As DictHashIndex
+    Dim rowsForKey As DbRowList
     Dim vSourceData As Variant
-    Dim vKey As Variant, sKey As String
+    Dim vKey As Variant
     Dim lSourceRow As Long, lTargetRow As Long
     Dim i As Long, j As Long
     Dim bUpdated As Boolean
@@ -774,21 +775,21 @@ Public Sub UpsertFrom(ByVal tSource As clsTable, ByVal sKeyCol As String)
     End If
     
     ' 2. 타겟 테이블 인덱싱 (고속 검색 준비)
-    Set dicIndex = Me.GetIndex(sKeyCol)
-    If dicIndex Is Nothing Then Err.Raise 9999, , "Upsert Error: Target table missing key column"
-    
+    Set idxKey = Me.GetHashIndex(sKeyCol)
+    If idxKey Is Nothing Then Err.Raise 9999, , "Upsert Error: Target table missing key column"
+
     vSourceData = tSource.RawArray
     Set colNewRows = New Collection
-    
+
     ' 3. Source 데이터 순회 및 분류 (Update vs Insert)
+    ' 키 정규화(Empty/CStr/vbTextCompare)는 TryGetRows가 담당
     For lSourceRow = 2 To tSource.RowCount
         vKey = vSourceData(lSourceRow, lKeyColSource)
-        If IsEmpty(vKey) Then sKey = "" Else sKey = CStr(vKey)
-        
-        If dicIndex.exists(sKey) Then
+
+        If idxKey.TryGetRows(vKey, rowsForKey) Then
             ' [UPDATE] 키 존재 -> 기존 행 덮어쓰기 (In-place)
-            ' 주의: 중복 키가 있다면 첫 번째 매칭 행만 업데이트 (Collection의 1번 요소)
-            lTargetRow = dicIndex(sKey)(1)
+            ' 주의: 중복 키가 있다면 첫 번째 매칭 행만 업데이트
+            lTargetRow = rowsForKey.RowAt(1)
             
             For Each vKey In dicColMap.Keys
                 lSourceColIdx = vKey
