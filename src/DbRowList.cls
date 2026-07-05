@@ -12,6 +12,34 @@ Option Explicit
 Private mRows() As Long
 Private mCount As Long
 
+' 세대 계약 결속 (ObjPtr 스냅샷 - 객체 참조 아님, 순환 참조 방지)
+Private mOwnerPtr As LongPtr
+Private mGeneration As Long
+
+' @desc 테이블을 받아 현재 세대에 결속함
+Public Sub BindTo(ByVal tbl As clsTable)
+    mOwnerPtr = ObjPtr(tbl)
+    mGeneration = tbl.Generation
+End Sub
+
+Friend Sub BindRaw(ByVal ownerPtr As LongPtr, ByVal gen As Long)
+    mOwnerPtr = ownerPtr
+    mGeneration = gen
+End Sub
+
+' @desc 테이블을 받아 결속 세대와 일치 검증함, stale 시 9998 에러
+Public Sub EnsureCurrent(ByVal tbl As clsTable)
+    modDbContract.AssertCurrentGeneration mOwnerPtr, mGeneration, tbl, "DbRowList.EnsureCurrent"
+End Sub
+
+Friend Property Get OwnerPtr() As LongPtr
+    OwnerPtr = mOwnerPtr
+End Property
+
+Friend Property Get BoundGeneration() As Long
+    BoundGeneration = mGeneration
+End Property
+
 Public Sub Append(ByVal rowId As Long)
     If mCount = 0 Then
         ReDim mRows(1 To 8)

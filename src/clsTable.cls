@@ -28,6 +28,7 @@ Private m_dicHashIndices As Object  ' 내부 실행용 인덱스 캐시 (Key: Co
 Private m_lRowCount As Long
 Private m_lColCount As Long
 Private m_lHeaderRowIndex As Long   ' 헤더가 위치한 행 번호 (기본 1)
+Private m_lGeneration As Long       ' 구조 변경(행 수/순서/컬럼 배치)마다 증가하는 세대 번호
 
 ' [초기화]
 Private Sub Class_Initialize()
@@ -186,9 +187,17 @@ End Sub
 Public Sub Clear()
     m_vData = Empty
     m_dicHeaders.RemoveAll
-    InvalidateAllIndices
+    BumpGeneration
     m_lRowCount = 0
     m_lColCount = 0
+End Sub
+
+' 세대 증가 = 전체 파생물(인덱스/RowSet/RowList) 실효. 구조 변경 경로에서만 호출.
+' 값 전용 변경(Value Let, UpdateBatch, Compute, CopyColumn)은 rowID가 유효하므로
+' 세대를 올리지 않고 per-column 무효화만 수행한다.
+Private Sub BumpGeneration()
+    m_lGeneration = m_lGeneration + 1
+    InvalidateAllIndices
 End Sub
 
 Private Sub InvalidateAllIndices()
@@ -346,7 +355,9 @@ Public Function GetHashIndex(ByVal sColName As String) As DictHashIndex
     sColName = UCase(Trim(sColName))
     
     If m_dicHashIndices.exists(sColName) Then
-        Set GetHashIndex = m_dicHashIndices(sColName)
+        Set idxResult = m_dicHashIndices(sColName)
+        idxResult.EnsureCurrent Me ' 불변식 방어: 캐시된 인덱스는 항상 현재 세대여야 함
+        Set GetHashIndex = idxResult
         Exit Function
     End If
     
@@ -367,17 +378,20 @@ Public Function GetHashIndexByIndex(ByVal lCol As Long) As DictHashIndex
     Dim idx As DictHashIndex
     
     If m_dicHashIndices.exists(lCol) Then
-        Set GetHashIndexByIndex = m_dicHashIndices(lCol)
+        Set idx = m_dicHashIndices(lCol)
+        idx.EnsureCurrent Me ' 불변식 방어: 캐시된 인덱스는 항상 현재 세대여야 함
+        Set GetHashIndexByIndex = idx
         Exit Function
     End If
     
     If lCol < LBound(m_vData, 2) Or lCol > UBound(m_vData, 2) Then Exit Function
     
     Set idx = New DictHashIndex
+    idx.BindTo Me
     For i = (m_lHeaderRowIndex + 1) To m_lRowCount
         idx.AddRow m_vData(i, lCol), i
     Next i
-    
+
     Set m_dicHashIndices(lCol) = idx
     Set GetHashIndexByIndex = idx
 End Function
@@ -446,6 +460,11 @@ End Function
 ' ==============================================================================
 ' [4] 속성 (Properties)
 ' ==============================================================================
+
+' @desc 구조 변경마다 증가하는 현재 세대 번호 반환
+Public Property Get Generation() As Long
+    Generation = m_lGeneration
+End Property
 
 Public Property Get RowCount() As Long
     RowCount = m_lRowCount
@@ -821,10 +840,10 @@ Public Sub UpsertFrom(ByVal tSource As clsTable, ByVal sKeyCol As String)
         m_vData = vNewData
         m_lRowCount = lNewTotal
         
-        ' 중요: 행 번호가 바뀌거나 추가되었으므로 기존 인덱스는 무효화
-        InvalidateAllIndices
+        ' 중요: 행 번호가 바뀌거나 추가되었으므로 세대 증가 (전체 파생물 실효)
+        BumpGeneration
     ElseIf bUpdated Then
-        InvalidateAllIndices
+        BumpGeneration
     End If
 End Sub
 
@@ -905,8 +924,8 @@ Public Sub DeleteBatch(ByVal sWhereCol As String, ByVal vWhereVal As Variant)
     m_vData = vNewData
     m_lRowCount = lNewRowCount
     
-    ' 행 번호가 완전히 바뀌었으므로 모든 인덱스 초기화 필수
-    InvalidateAllIndices
+    ' 행 번호가 완전히 바뀌었으므로 세대 증가 (전체 파생물 실효)
+    BumpGeneration
 End Sub
 
 ' ==============================================================================
@@ -980,8 +999,8 @@ Public Sub AddColumn(ByVal sColName As String, Optional ByVal vInitialValue As V
             m_vData(i, m_lColCount) = vInitialValue
         Next i
     End If
-    
-    InvalidateAllIndices
+
+    BumpGeneration
 End Sub
 ' 9-2-2. 기존 컬럼 삭제
 ' sColName: 삭제할 헤더명
@@ -1019,8 +1038,8 @@ Public Sub RemoveColumn(ByVal sColName As String)
     For j = 1 To m_lColCount
         m_dicHeaders(UCase(Trim(m_vData(m_lHeaderRowIndex, j)))) = j
     Next j
-    
-    InvalidateAllIndices
+
+    BumpGeneration
 End Sub
 
 ' ==============================================================================
@@ -1104,9 +1123,9 @@ Public Function SelectColumns(ParamArray vCols() As Variant) As clsTable
         sColName = Trim(CStr(m_vData(m_lHeaderRowIndex, j)))
         m_dicHeaders(UCase(sColName)) = j
     Next j
-    
-    InvalidateAllIndices
-    
+
+    BumpGeneration
+
     Set SelectColumns = Me
 End Function
 
@@ -1252,7 +1271,7 @@ Private Sub RebuildData(ByRef arrSortedIndices() As Long)
     
     ' 3. 교체
     m_vData = vNewData
-    
-    ' 인덱스가 바뀌었으므로 캐시 초기화 필수
-    InvalidateAllIndices
+
+    ' 행 순서가 바뀌었으므로 세대 증가 (전체 파생물 실효)
+    BumpGeneration
 End Sub

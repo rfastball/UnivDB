@@ -62,15 +62,19 @@ End Function
 Public Function Where(ByVal sColName As String, ByVal vValue As Variant) As clsQuery
     Dim idx As DictHashIndex
     Dim rows As DbRowList
-    
+
+    ' 0. 세대 계약: 이전 조건의 후보군이 stale이면 즉시 실패
+    EnsureCandidatesCurrent
+
     ' 1. 내부 HashIndex에서 행 번호 추출 (O(1))
     Set idx = m_SourceTable.GetHashIndex(sColName)
-    
+
     ' 2. DbRowList를 후보 RowSet에 반영
     If Not idx Is Nothing Then
         If idx.TryGetRows(vValue, rows) Then
             If m_bIsFirstCondition Then
                 Set m_setCandidates = New DbRowSet
+                m_setCandidates.BindTo m_SourceTable
                 m_setCandidates.LoadFromRowList rows
                 m_bIsFirstCondition = False
             Else
@@ -78,15 +82,17 @@ Public Function Where(ByVal sColName As String, ByVal vValue As Variant) As clsQ
             End If
         Else
             Set m_setCandidates = New DbRowSet
+            m_setCandidates.BindTo m_SourceTable
             m_bIsFirstCondition = False
         End If
     ElseIf m_bIsFirstCondition Then
         Set m_setCandidates = New DbRowSet
+        m_setCandidates.BindTo m_SourceTable
         m_bIsFirstCondition = False
     Else
         m_setCandidates.Clear
     End If
-    
+
     Set Where = Me
 End Function
 
@@ -101,9 +107,11 @@ Public Function Filter(ByVal sColName As String, ByVal sOp As String, ByVal vVal
     Dim setSurvivors As New DbRowSet
     Dim vRowID As Variant
     Dim i As Long
-    
+
+    EnsureCandidatesCurrent
     If m_bIsFirstCondition Then InitializeAllRows
     If m_setCandidates.Count = 0 Then Set Filter = Me: Exit Function
+    setSurvivors.BindTo m_SourceTable
     
     ' 1. [Hoisting] 루프 외부에서 모든 전처리 완료
     Dim lColIdx As Long
@@ -132,6 +140,7 @@ Public Function Filter(ByVal sColName As String, ByVal sOp As String, ByVal vVal
             ' 비교값 사전 변환
             If Not IsNumeric(vValue) Then ' 비교값이 숫자가 아니면 필터링 결과 0
                 Set m_setCandidates = New DbRowSet
+                m_setCandidates.BindTo m_SourceTable
                 Set Filter = Me
                 Exit Function
             End If
@@ -300,7 +309,8 @@ End Function
 Public Function Update() As Long
     Dim vRowID As Variant, vCol As Variant
     Dim lCount As Long
-    
+
+    EnsureCandidatesCurrent
     If m_setCandidates Is Nothing Then InitializeAllRows
     If m_dicUpdates.Count = 0 Or m_setCandidates.Count = 0 Then Update = 0: Exit Function
     
@@ -328,7 +338,8 @@ Public Function Delete() As Long
     Dim lTotalRows As Long, lTotalCols As Long
     Dim lDeleteCount As Long
     Dim lKeepCount As Long
-    
+
+    EnsureCandidatesCurrent
     If m_setCandidates Is Nothing Then InitializeAllRows
     lDeleteCount = m_setCandidates.Count
     If lDeleteCount = 0 Then Delete = 0: Exit Function
@@ -431,7 +442,8 @@ Public Function SelectTable() As clsTable
     Dim i As Long, j As Long, R As Long
     Dim sCol As String
     
-    ' 1. [Candidate Check] 후보군 확인
+    ' 1. [Candidate Check] 후보군 확인 (stale 후보군은 세대 계약으로 즉시 실패)
+    EnsureCandidatesCurrent
     If m_setCandidates Is Nothing Then
         InitializeAllRows
     End If
@@ -532,8 +544,15 @@ End Function
 ' 전체 행을 후보군으로 초기화 (Where 없이 Filter 먼저 호출 시)
 Private Sub InitializeAllRows()
     Set m_setCandidates = New DbRowSet
+    m_setCandidates.BindTo m_SourceTable
     m_setCandidates.FromAllRows m_SourceTable.RowCount, 2
     m_bIsFirstCondition = False
+End Sub
+
+' 세대 계약: 보유 중인 후보 RowSet이 소스 테이블의 현재 세대와 일치하는지 검증
+Private Sub EnsureCandidatesCurrent()
+    If m_setCandidates Is Nothing Then Exit Sub
+    m_setCandidates.EnsureCurrent m_SourceTable
 End Sub
 
 

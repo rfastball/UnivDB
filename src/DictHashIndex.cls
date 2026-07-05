@@ -11,6 +11,10 @@ Option Explicit
 
 Private mDict As Object
 
+' 세대 계약 결속 (ObjPtr 스냅샷 - 객체 참조 아님, 순환 참조 방지)
+Private mOwnerPtr As LongPtr
+Private mGeneration As Long
+
 Private Sub Class_Initialize()
     Set mDict = CreateObject("Scripting.Dictionary")
     mDict.CompareMode = vbTextCompare
@@ -23,18 +27,30 @@ End Sub
 Public Sub AddRow(ByVal key As Variant, ByVal rowId As Long)
     Dim sKey As String
     Dim rows As DbRowList
-    
+
     If IsError(key) Then Exit Sub
     sKey = NormalizeKey(key)
-    
+
     If mDict.exists(sKey) Then
         Set rows = mDict(sKey)
     Else
         Set rows = New DbRowList
+        rows.BindRaw mOwnerPtr, mGeneration
         mDict.Add sKey, rows
     End If
-    
+
     rows.Append rowId
+End Sub
+
+' @desc 테이블을 받아 현재 세대에 결속함
+Public Sub BindTo(ByVal tbl As clsTable)
+    mOwnerPtr = ObjPtr(tbl)
+    mGeneration = tbl.Generation
+End Sub
+
+' @desc 테이블을 받아 결속 세대와 일치 검증함, stale 시 9998 에러
+Public Sub EnsureCurrent(ByVal tbl As clsTable)
+    modDbContract.AssertCurrentGeneration mOwnerPtr, mGeneration, tbl, "DictHashIndex.EnsureCurrent"
 End Sub
 
 Public Function TryGetRows(ByVal key As Variant, ByRef outRows As DbRowList) As Boolean

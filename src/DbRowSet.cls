@@ -13,6 +13,47 @@ Private mFlags() As Boolean
 Private mMaxRow As Long
 Private mCount As Long
 
+' 세대 계약 결속 (ObjPtr 스냅샷 - 객체 참조 아님, 순환 참조 방지)
+Private mOwnerPtr As LongPtr
+Private mGeneration As Long
+
+' @desc 테이블을 받아 현재 세대에 결속함
+Public Sub BindTo(ByVal tbl As clsTable)
+    mOwnerPtr = ObjPtr(tbl)
+    mGeneration = tbl.Generation
+End Sub
+
+Friend Sub BindRaw(ByVal ownerPtr As LongPtr, ByVal gen As Long)
+    mOwnerPtr = ownerPtr
+    mGeneration = gen
+End Sub
+
+' @desc 테이블을 받아 결속 세대와 일치 검증함, stale 시 9998 에러
+Public Sub EnsureCurrent(ByVal tbl As clsTable)
+    modDbContract.AssertCurrentGeneration mOwnerPtr, mGeneration, tbl, "DbRowSet.EnsureCurrent"
+End Sub
+
+Friend Property Get OwnerPtr() As LongPtr
+    OwnerPtr = mOwnerPtr
+End Property
+
+Friend Property Get BoundGeneration() As Long
+    BoundGeneration = mGeneration
+End Property
+
+' 결합 대상 RowList의 결속을 승계하거나, 서로 다른 결속이면 즉시 실패
+Private Sub AdoptOrVerifyBinding(ByVal rows As DbRowList)
+    If rows Is Nothing Then Exit Sub
+    If rows.OwnerPtr = 0 Then Exit Sub
+
+    If mOwnerPtr = 0 Then
+        BindRaw rows.OwnerPtr, rows.BoundGeneration
+    ElseIf mOwnerPtr <> rows.OwnerPtr Or mGeneration <> rows.BoundGeneration Then
+        Err.Raise modDbContract.DB_ERR_STALE_GENERATION, "DbRowSet", _
+            "Derived structures bound to different table generations"
+    End If
+End Sub
+
 Public Sub Clear()
     Erase mFlags
     mMaxRow = 0
@@ -37,7 +78,8 @@ End Sub
 
 Public Sub LoadFromRowList(ByVal rows As DbRowList)
     Dim i As Long
-    
+
+    AdoptOrVerifyBinding rows
     Clear
     If rows Is Nothing Then Exit Sub
     
@@ -66,7 +108,8 @@ Public Sub IntersectWithRowList(ByVal rows As DbRowList)
     Dim i As Long
     Dim rowId As Long
     Dim newCount As Long
-    
+
+    AdoptOrVerifyBinding rows
     If mCount = 0 Then Exit Sub
     If rows Is Nothing Or rows.Count = 0 Then
         Clear
