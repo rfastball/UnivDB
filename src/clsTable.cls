@@ -22,6 +22,7 @@ Option Explicit
 Private m_vData As Variant          ' 전체 데이터 (2D Array, 1-based or 0-based)
 Private m_dicHeaders As Object      ' 컬럼명 -> 열 번호 매핑 (Key: String, Value: Long)
 Private m_dicIndices As Object      ' 생성된 인덱스 캐시 (Key: ColName, Value: Dictionary)
+Private m_dicHashIndices As Object  ' 내부 실행용 인덱스 캐시 (Key: ColName/Index, Value: DictHashIndex)
 
 ' [메타 데이터]
 Private m_lRowCount As Long
@@ -32,12 +33,14 @@ Private m_lHeaderRowIndex As Long   ' 헤더가 위치한 행 번호 (기본 1)
 Private Sub Class_Initialize()
     Set m_dicHeaders = CreateObject("Scripting.Dictionary")
     Set m_dicIndices = CreateObject("Scripting.Dictionary")
+    Set m_dicHashIndices = CreateObject("Scripting.Dictionary")
     m_lHeaderRowIndex = 1
 End Sub
 
 Private Sub Class_Terminate()
     Set m_dicHeaders = Nothing
     Set m_dicIndices = Nothing
+    Set m_dicHashIndices = Nothing
     m_vData = Empty
 End Sub
 
@@ -190,6 +193,7 @@ End Sub
 
 Private Sub InvalidateAllIndices()
     If Not m_dicIndices Is Nothing Then m_dicIndices.RemoveAll
+    If Not m_dicHashIndices Is Nothing Then m_dicHashIndices.RemoveAll
 End Sub
 
 Private Sub InvalidateIndexByColumnName(ByVal sColName As String)
@@ -197,10 +201,12 @@ Private Sub InvalidateIndexByColumnName(ByVal sColName As String)
     
     sColName = UCase(Trim(sColName))
     If m_dicIndices.exists(sColName) Then m_dicIndices.Remove sColName
+    If m_dicHashIndices.exists(sColName) Then m_dicHashIndices.Remove sColName
     
     If m_dicHeaders.exists(sColName) Then
         lCol = m_dicHeaders(sColName)
         If m_dicIndices.exists(lCol) Then m_dicIndices.Remove lCol
+        If m_dicHashIndices.exists(lCol) Then m_dicHashIndices.Remove lCol
     End If
 End Sub
 
@@ -208,10 +214,12 @@ Private Sub InvalidateIndexByIndex(ByVal lCol As Long)
     Dim vKey As Variant
     
     If m_dicIndices.exists(lCol) Then m_dicIndices.Remove lCol
+    If m_dicHashIndices.exists(lCol) Then m_dicHashIndices.Remove lCol
     
     For Each vKey In m_dicHeaders.Keys
         If CLng(m_dicHeaders(vKey)) = lCol Then
             If m_dicIndices.exists(CStr(vKey)) Then m_dicIndices.Remove CStr(vKey)
+            If m_dicHashIndices.exists(CStr(vKey)) Then m_dicHashIndices.Remove CStr(vKey)
         End If
     Next vKey
 End Sub
@@ -328,6 +336,50 @@ Public Function GetIndexByIndex(ByVal lCol As Long) As Object
     ' 4. 캐시 등록 및 반환
     Set m_dicIndices(lCol) = dicIdx
     Set GetIndexByIndex = dicIdx
+End Function
+
+' 3-1c. 내부 실행용 HashIndex 생성 및 획득 (By 컬럼명)
+Public Function GetHashIndex(ByVal sColName As String) As DictHashIndex
+    Dim lCol As Long
+    Dim idxResult As DictHashIndex
+    
+    sColName = UCase(Trim(sColName))
+    
+    If m_dicHashIndices.exists(sColName) Then
+        Set GetHashIndex = m_dicHashIndices(sColName)
+        Exit Function
+    End If
+    
+    If Not m_dicHeaders.exists(sColName) Then Exit Function
+    lCol = m_dicHeaders(sColName)
+    
+    Set idxResult = GetHashIndexByIndex(lCol)
+    If Not idxResult Is Nothing Then
+        Set m_dicHashIndices(sColName) = idxResult
+    End If
+    
+    Set GetHashIndex = idxResult
+End Function
+
+' 3-1d. 내부 실행용 HashIndex 생성 및 획득 (By 숫자 인덱스)
+Public Function GetHashIndexByIndex(ByVal lCol As Long) As DictHashIndex
+    Dim i As Long
+    Dim idx As DictHashIndex
+    
+    If m_dicHashIndices.exists(lCol) Then
+        Set GetHashIndexByIndex = m_dicHashIndices(lCol)
+        Exit Function
+    End If
+    
+    If lCol < LBound(m_vData, 2) Or lCol > UBound(m_vData, 2) Then Exit Function
+    
+    Set idx = New DictHashIndex
+    For i = (m_lHeaderRowIndex + 1) To m_lRowCount
+        idx.AddRow m_vData(i, lCol), i
+    Next i
+    
+    Set m_dicHashIndices(lCol) = idx
+    Set GetHashIndexByIndex = idx
 End Function
 
 

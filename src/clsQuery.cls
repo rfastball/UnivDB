@@ -60,18 +60,23 @@ End Function
 ' 설명: 가장 먼저 호출하여 후보군을 대폭 줄이는 것을 권장
 ' ------------------------------------------------------------------------------
 Public Function Where(ByVal sColName As String, ByVal vValue As Variant) As clsQuery
-    Dim colRows As Collection
+    Dim idx As DictHashIndex
+    Dim rows As DbRowList
     Dim setStep As clsSet
-    Dim vRow As Variant
+    Dim i As Long
     
-    ' 1. 인덱스에서 행 번호 추출 (O(1))
-    Set colRows = m_SourceTable.SelectRows(sColName, vValue)
+    ' 1. 내부 HashIndex에서 행 번호 추출 (O(1))
+    Set idx = m_SourceTable.GetHashIndex(sColName)
     
-    ' 2. Collection -> clsSet 변환
+    ' 2. DbRowList -> clsSet 변환
     Set setStep = New clsSet
-    For Each vRow In colRows
-        setStep.Add vRow
-    Next vRow
+    If Not idx Is Nothing Then
+        If idx.TryGetRows(vValue, rows) Then
+            For i = 1 To rows.Count
+                setStep.Add rows.RowAt(i)
+            Next i
+        End If
+    End If
     
     ' 3. 집합 연산 (교집합)
     If m_bIsFirstCondition Then
