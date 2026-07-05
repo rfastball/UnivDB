@@ -64,14 +64,6 @@ Public Sub Clear()
     mDict.RemoveAll
 End Sub
 
-Public Function KeysArray() As Variant
-    If mDict.Count = 0 Then
-        KeysArray = Array()
-    Else
-        KeysArray = mDict.Keys
-    End If
-End Function
-
 Public Function Cursor() As DbIndexCursor
     Dim cur As New DbIndexCursor
     Set Cursor = cur.Init(mDict)
