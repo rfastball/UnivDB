@@ -183,9 +183,37 @@ End Sub
 Public Sub Clear()
     m_vData = Empty
     m_dicHeaders.RemoveAll
-    m_dicIndices.RemoveAll
+    InvalidateAllIndices
     m_lRowCount = 0
     m_lColCount = 0
+End Sub
+
+Private Sub InvalidateAllIndices()
+    If Not m_dicIndices Is Nothing Then m_dicIndices.RemoveAll
+End Sub
+
+Private Sub InvalidateIndexByColumnName(ByVal sColName As String)
+    Dim lCol As Long
+    
+    sColName = UCase(Trim(sColName))
+    If m_dicIndices.exists(sColName) Then m_dicIndices.Remove sColName
+    
+    If m_dicHeaders.exists(sColName) Then
+        lCol = m_dicHeaders(sColName)
+        If m_dicIndices.exists(lCol) Then m_dicIndices.Remove lCol
+    End If
+End Sub
+
+Private Sub InvalidateIndexByIndex(ByVal lCol As Long)
+    Dim vKey As Variant
+    
+    If m_dicIndices.exists(lCol) Then m_dicIndices.Remove lCol
+    
+    For Each vKey In m_dicHeaders.Keys
+        If CLng(m_dicHeaders(vKey)) = lCol Then
+            If m_dicIndices.exists(CStr(vKey)) Then m_dicIndices.Remove CStr(vKey)
+        End If
+    Next vKey
 End Sub
 
 ' ==============================================================================
@@ -645,6 +673,7 @@ Public Sub UpsertFrom(ByVal tSource As clsTable, ByVal sKeyCol As String)
     Dim vKey As Variant, sKey As String
     Dim lSourceRow As Long, lTargetRow As Long
     Dim i As Long, j As Long
+    Dim bUpdated As Boolean
     
     Dim colNewRows As Collection ' 신규 행 임시 저장소
     Dim vNewRow As Variant
@@ -695,6 +724,7 @@ Public Sub UpsertFrom(ByVal tSource As clsTable, ByVal sKeyCol As String)
                 lTargetColIdx = dicColMap(vKey)
                 m_vData(lTargetRow, lTargetColIdx) = vSourceData(lSourceRow, lSourceColIdx)
             Next vKey
+            bUpdated = True
         Else
             ' [INSERT] 키 미존재 -> 신규 행 임시 저장
             ' 전체 컬럼 크기만큼 배열 확보
@@ -740,7 +770,9 @@ Public Sub UpsertFrom(ByVal tSource As clsTable, ByVal sKeyCol As String)
         m_lRowCount = lNewTotal
         
         ' 중요: 행 번호가 바뀌거나 추가되었으므로 기존 인덱스는 무효화
-        m_dicIndices.RemoveAll
+        InvalidateAllIndices
+    ElseIf bUpdated Then
+        InvalidateAllIndices
     End If
 End Sub
 
@@ -767,8 +799,8 @@ Public Sub UpdateBatch(ByVal sSetCol As String, ByVal vSetVal As Variant, _
             m_vData(CLng(vRowID), lSetColIdx) = vSetVal
         Next vRowID
         
-        ' 해당 컬럼의 데이터가 변했으므로, 해당 컬럼에 대한 인덱스가 있다면 제거해야 함
-        If m_dicIndices.exists(sSetCol) Then m_dicIndices.Remove sSetCol
+        ' 해당 컬럼의 데이터가 변했으므로 관련 인덱스 캐시를 제거
+        InvalidateIndexByColumnName sSetCol
     End If
 End Sub
 
@@ -822,7 +854,7 @@ Public Sub DeleteBatch(ByVal sWhereCol As String, ByVal vWhereVal As Variant)
     m_lRowCount = lNewRowCount
     
     ' 행 번호가 완전히 바뀌었으므로 모든 인덱스 초기화 필수
-    m_dicIndices.RemoveAll
+    InvalidateAllIndices
 End Sub
 
 ' ==============================================================================
@@ -841,6 +873,7 @@ Public Property Let Value(ByVal lRow As Long, ByVal sColName As String, ByVal vV
         ' 행 범위 체크
         If lRow >= (m_lHeaderRowIndex + 1) And lRow <= m_lRowCount Then
             m_vData(lRow, lCol) = vVal
+            InvalidateIndexByColumnName sColName
         End If
     Else
         ' 컬럼이 없으면 에러 대신 무시하거나 디버그 메시지
@@ -864,6 +897,8 @@ Public Sub CopyColumn(ByVal sSourceCol As String, ByVal sTargetCol As String)
     For i = (m_lHeaderRowIndex + 1) To m_lRowCount
         m_vData(i, idxDst) = m_vData(i, idxSrc)
     Next i
+    
+    InvalidateIndexByColumnName sTargetCol
 End Sub
 
 ' 9-2-1. 새로운 컬럼 추가 (리포트 생성 시 필수)
@@ -893,6 +928,8 @@ Public Sub AddColumn(ByVal sColName As String, Optional ByVal vInitialValue As V
             m_vData(i, m_lColCount) = vInitialValue
         Next i
     End If
+    
+    InvalidateAllIndices
 End Sub
 ' 9-2-2. 기존 컬럼 삭제
 ' sColName: 삭제할 헤더명
@@ -930,6 +967,8 @@ Public Sub RemoveColumn(ByVal sColName As String)
     For j = 1 To m_lColCount
         m_dicHeaders(UCase(Trim(m_vData(m_lHeaderRowIndex, j)))) = j
     Next j
+    
+    InvalidateAllIndices
 End Sub
 
 ' ==============================================================================
@@ -1014,7 +1053,7 @@ Public Function SelectColumns(ParamArray vCols() As Variant) As clsTable
         m_dicHeaders(UCase(sColName)) = j
     Next j
     
-    m_dicIndices.RemoveAll ' 인덱스 무효화
+    InvalidateAllIndices
     
     Set SelectColumns = Me
 End Function
@@ -1053,6 +1092,8 @@ Public Sub Compute(ByVal sTargetCol As String, ByVal sCol1 As String, ByVal sOp 
         End Select
         On Error GoTo 0
     Next i
+    
+    InvalidateIndexByColumnName sTargetCol
 End Sub
 
 Public Property Get Value(ByVal lRow As Long, ByVal sColName As String) As Variant
@@ -1161,5 +1202,5 @@ Private Sub RebuildData(ByRef arrSortedIndices() As Long)
     m_vData = vNewData
     
     ' 인덱스가 바뀌었으므로 캐시 초기화 필수
-    m_dicIndices.RemoveAll
+    InvalidateAllIndices
 End Sub
