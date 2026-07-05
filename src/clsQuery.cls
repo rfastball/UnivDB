@@ -16,7 +16,7 @@ Option Explicit
 ' ==============================================================================
 
 Private m_SourceTable As clsTable
-Private m_setCandidates As clsSet   ' 현재 살아남은 후보 행 번호(RowID) 집합
+Private m_setCandidates As DbRowSet ' 현재 살아남은 후보 행 번호(RowID) 집합
 Private m_bIsFirstCondition As Boolean
 Private m_dicUpdates As Object       ' 업데이트할 컬럼과 값 저장 (Set 절)
 
@@ -62,29 +62,29 @@ End Function
 Public Function Where(ByVal sColName As String, ByVal vValue As Variant) As clsQuery
     Dim idx As DictHashIndex
     Dim rows As DbRowList
-    Dim setStep As clsSet
-    Dim i As Long
     
     ' 1. 내부 HashIndex에서 행 번호 추출 (O(1))
     Set idx = m_SourceTable.GetHashIndex(sColName)
     
-    ' 2. DbRowList -> clsSet 변환
-    Set setStep = New clsSet
+    ' 2. DbRowList를 후보 RowSet에 반영
     If Not idx Is Nothing Then
         If idx.TryGetRows(vValue, rows) Then
-            For i = 1 To rows.Count
-                setStep.Add rows.RowAt(i)
-            Next i
+            If m_bIsFirstCondition Then
+                Set m_setCandidates = New DbRowSet
+                m_setCandidates.LoadFromRowList rows
+                m_bIsFirstCondition = False
+            Else
+                m_setCandidates.IntersectWithRowList rows
+            End If
+        Else
+            Set m_setCandidates = New DbRowSet
+            m_bIsFirstCondition = False
         End If
-    End If
-    
-    ' 3. 집합 연산 (교집합)
-    If m_bIsFirstCondition Then
-        Set m_setCandidates = setStep
+    ElseIf m_bIsFirstCondition Then
+        Set m_setCandidates = New DbRowSet
         m_bIsFirstCondition = False
     Else
-        ' 이미 후보군이 있다면 교집합(AND) 수행
-        Set m_setCandidates = m_setCandidates.Intersection(setStep)
+        m_setCandidates.Clear
     End If
     
     Set Where = Me
@@ -98,7 +98,7 @@ End Function
 ' 설명: 연산자(sOp)에 따라 수치/문자 경로를 분리하고, 모든 전처리를 루프 외부로 격리 (Hoisting).
 '       루프 내부의 함수 호출 및 메모리 할당을 제거하여 성능을 극대화.
 Public Function Filter(ByVal sColName As String, ByVal sOp As String, ByVal vValue As Variant) As clsQuery
-    Dim setSurvivors As New clsSet
+    Dim setSurvivors As New DbRowSet
     Dim vRowID As Variant
     Dim i As Long
     
@@ -118,7 +118,7 @@ Public Function Filter(ByVal sColName As String, ByVal sOp As String, ByVal vVal
     
     ' 1-2. 소스 배열 로컬 변수에 할당 (클래스 인터페이스 호출 오버헤드 제거)
     vSource = m_SourceTable.RawArray
-    vCandidates = m_setCandidates.KeysArray
+    vCandidates = m_setCandidates.ToArray
     
     ' 2. [Dual Path] 연산자 종류에 따라 실행 경로 분기
     Select Case UCase(Trim(sOp))
@@ -131,7 +131,7 @@ Public Function Filter(ByVal sColName As String, ByVal sOp As String, ByVal vVal
             
             ' 비교값 사전 변환
             If Not IsNumeric(vValue) Then ' 비교값이 숫자가 아니면 필터링 결과 0
-                Set m_setCandidates = New clsSet
+                Set m_setCandidates = New DbRowSet
                 Set Filter = Me
                 Exit Function
             End If
@@ -142,12 +142,12 @@ Public Function Filter(ByVal sColName As String, ByVal sOp As String, ByVal vVal
                 vCell = vSource(vCandidates(i), lColIdx)
                 If IsNumeric(vCell) Then
                     Select Case UCase(Trim(sOp))
-                        Case "=": If CDbl(vCell) = dTarget Then setSurvivors.Add vCandidates(i)
-                        Case "<>": If CDbl(vCell) <> dTarget Then setSurvivors.Add vCandidates(i)
-                        Case ">": If CDbl(vCell) > dTarget Then setSurvivors.Add vCandidates(i)
-                        Case "<": If CDbl(vCell) < dTarget Then setSurvivors.Add vCandidates(i)
-                        Case ">=": If CDbl(vCell) >= dTarget Then setSurvivors.Add vCandidates(i)
-                        Case "<=": If CDbl(vCell) <= dTarget Then setSurvivors.Add vCandidates(i)
+                        Case "=": If CDbl(vCell) = dTarget Then setSurvivors.AddRow vCandidates(i)
+                        Case "<>": If CDbl(vCell) <> dTarget Then setSurvivors.AddRow vCandidates(i)
+                        Case ">": If CDbl(vCell) > dTarget Then setSurvivors.AddRow vCandidates(i)
+                        Case "<": If CDbl(vCell) < dTarget Then setSurvivors.AddRow vCandidates(i)
+                        Case ">=": If CDbl(vCell) >= dTarget Then setSurvivors.AddRow vCandidates(i)
+                        Case "<=": If CDbl(vCell) <= dTarget Then setSurvivors.AddRow vCandidates(i)
                     End Select
                 End If
             Next i
@@ -163,27 +163,27 @@ Public Function Filter(ByVal sColName As String, ByVal sOp As String, ByVal vVal
                 Case "IS" ' StrComp 기반의 대소문자 무시 비교 (=)
                     For i = LBound(vCandidates) To UBound(vCandidates)
                         If StrComp(CStr(vSource(vCandidates(i), lColIdx)), sTarget, vbTextCompare) = 0 Then
-                            setSurvivors.Add vCandidates(i)
+                            setSurvivors.AddRow vCandidates(i)
                         End If
                     Next i
                 Case "IS NOT" ' StrComp 기반의 대소문자 무시 비교 (<>)
                     For i = LBound(vCandidates) To UBound(vCandidates)
                         If StrComp(CStr(vSource(vCandidates(i), lColIdx)), sTarget, vbTextCompare) <> 0 Then
-                            setSurvivors.Add vCandidates(i)
+                            setSurvivors.AddRow vCandidates(i)
                         End If
                     Next i
                 Case "LIKE" ' VBA Like 연산자
                     sTarget = UCase(sTarget) ' Like는 vbTextCompare를 지원 안하므로 UCase 필요
                     For i = LBound(vCandidates) To UBound(vCandidates)
                         If UCase(CStr(vSource(vCandidates(i), lColIdx))) Like sTarget Then
-                            setSurvivors.Add vCandidates(i)
+                            setSurvivors.AddRow vCandidates(i)
                         End If
                     Next i
                 Case "NOT LIKE"
                      sTarget = UCase(sTarget)
                      For i = LBound(vCandidates) To UBound(vCandidates)
                         If Not (UCase(CStr(vSource(vCandidates(i), lColIdx))) Like sTarget) Then
-                            setSurvivors.Add vCandidates(i)
+                            setSurvivors.AddRow vCandidates(i)
                         End If
                     Next i
             End Select
@@ -304,7 +304,7 @@ Public Function Update() As Long
     If m_setCandidates Is Nothing Then InitializeAllRows
     If m_dicUpdates.Count = 0 Or m_setCandidates.Count = 0 Then Update = 0: Exit Function
     
-    For Each vRowID In m_setCandidates.KeysArray
+    For Each vRowID In m_setCandidates.ToArray
         For Each vCol In m_dicUpdates.Keys
             m_SourceTable.Value(CLng(vRowID), CStr(vCol)) = m_dicUpdates(vCol)
         Next vCol
@@ -335,7 +335,7 @@ Public Function Delete() As Long
     
     ' 1. 삭제할 RowID 마킹
     Set dicToDelete = CreateObject("Scripting.Dictionary")
-    vRowIDs = m_setCandidates.KeysArray
+    vRowIDs = m_setCandidates.ToArray
     If Not IsEmpty(vRowIDs) Then
         For i = LBound(vRowIDs) To UBound(vRowIDs)
             dicToDelete(vRowIDs(i)) = Empty
@@ -480,7 +480,7 @@ Public Function SelectTable() As clsTable
     
     ' 5. [Data Fetch] 데이터 고속 복사
     If lResultRows > 0 Then
-        vRowIDs = m_setCandidates.KeysArray
+        vRowIDs = m_setCandidates.ToArray
         
         ' [핵심] lResultRows만큼만 루프 수행 (정렬 없는 경우 Limit까지만 돎)
         ' vRowIDs는 0-based array이므로 0부터 시작
@@ -531,11 +531,8 @@ End Function
 
 ' 전체 행을 후보군으로 초기화 (Where 없이 Filter 먼저 호출 시)
 Private Sub InitializeAllRows()
-    Dim i As Long
-    Set m_setCandidates = New clsSet
-    For i = 2 To m_SourceTable.RowCount ' 1은 헤더
-        m_setCandidates.Add i
-    Next i
+    Set m_setCandidates = New DbRowSet
+    m_setCandidates.FromAllRows m_SourceTable.RowCount, 2
     m_bIsFirstCondition = False
 End Sub
 
