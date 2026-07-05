@@ -4,7 +4,7 @@ Option Explicit
 
 ' ==============================================================================
 ' Module: modEngine
-' Description: clsTable과 clsSet을 활용한 고속 쿼리 연산 엔진 (v2.2)
+' Description: clsTable과 내부 HashIndex/RowList를 활용한 고속 쿼리 연산 엔진
 ' Update: Semi-Join (존재 확인) 지원 추가
 ' ==============================================================================
 
@@ -31,10 +31,6 @@ Public Function JoinTable(ByVal tLeft As clsTable, _
                           Optional ByVal jType As joinType = jtInner, _
                           Optional ByVal sRightPrefix As String = "") As clsTable
                           
-    Dim setLeft As clsSet, setRight As clsSet
-    Dim vSets As Variant
-    Dim setCommon As clsSet, setLeftOnly As clsSet, setRightOnly As clsSet
-    
     Dim vResultData As Variant
     Dim lRows As Long, lCols As Long
     Dim lLeftCols As Long, lRightCols As Long
@@ -43,8 +39,11 @@ Public Function JoinTable(ByVal tLeft As clsTable, _
     Dim lRowIdx As Long
     Dim vKey As Variant
     
-    Dim colLeftRows As Collection, colRightRows As Collection
-    Dim vItemLeft As Variant, vItemRight As Variant
+    Dim idxLeft As DictHashIndex, idxRight As DictHashIndex
+    Dim cur As DbIndexCursor
+    Dim leftRows As DbRowList, rightRows As DbRowList
+    Dim vItemLeft As Long, vItemRight As Long
+    Dim a As Long, b As Long
     Dim vLeftData As Variant, vRightData As Variant
     
     ' 헤더 처리를 위한 변수
@@ -64,17 +63,9 @@ Public Function JoinTable(ByVal tLeft As clsTable, _
     If Err.Number <> 0 Then MsgBox "Right Table Join Key 없음: " & sRightKey, vbCritical: Exit Function
     On Error GoTo 0
     
-    ' 2. [Set Operation] 키 분류 (Single-Pass)
-    ' 숫자 인덱스를 사용하여 조회 (v2.5.1)
-    Set setLeft = New clsSet: setLeft.LoadFromArray tLeft.GetUniqueKeysByIndex(lLeftKeyCol)
-    Set setRight = New clsSet: setRight.LoadFromArray tRight.GetUniqueKeysByIndex(lRightKeyCol)
-    
-    ' srAllSplit: 0=Intersect, 1=LeftOnly, 2=RightOnly
-    vSets = setLeft.Compare(setRight, srAllSplit)
-    
-    Set setCommon = vSets(0)
-    Set setLeftOnly = vSets(1)
-    Set setRightOnly = vSets(2)
+    ' 2. [Hash Index] 내부 실행용 인덱스 확보
+    Set idxLeft = tLeft.GetHashIndexByIndex(lLeftKeyCol)
+    Set idxRight = tRight.GetHashIndexByIndex(lRightKeyCol)
     
     ' 3. [Size Estimation] 조인 타입별 행 개수 계산
     lRows = 0
@@ -83,36 +74,44 @@ Public Function JoinTable(ByVal tLeft As clsTable, _
     If (jType = jtInner Or jType = jtLeft Or jType = jtRight Or jType = jtFull Or _
         jType = jtLeftSemi Or jType = jtRightSemi) Then
         
-        If setCommon.Count > 0 Then
-            For Each vKey In setCommon.KeysArray
+        Set cur = idxRight.Cursor
+        Do While cur.MoveNext
+            vKey = cur.Key
+            Set rightRows = cur.Rows
+            If idxLeft.TryGetRows(vKey, leftRows) Then
                 If jType = jtLeftSemi Then
-                    lRows = lRows + tLeft.SelectRowsByIndex(lLeftKeyCol, vKey).Count
+                    lRows = lRows + leftRows.Count
                 ElseIf jType = jtRightSemi Then
-                    lRows = lRows + tRight.SelectRowsByIndex(lRightKeyCol, vKey).Count
+                    lRows = lRows + rightRows.Count
                 Else
-                    lRows = lRows + (tLeft.SelectRowsByIndex(lLeftKeyCol, vKey).Count * _
-                                     tRight.SelectRowsByIndex(lRightKeyCol, vKey).Count)
+                    lRows = lRows + (leftRows.Count * rightRows.Count)
                 End If
-            Next vKey
-        End If
+            End If
+        Loop
     End If
     
     ' (B) Left Only Keys
     If (jType = jtLeft Or jType = jtFull Or jType = jtLeftAnti) Then
-        If setLeftOnly.Count > 0 Then
-            For Each vKey In setLeftOnly.KeysArray
-                lRows = lRows + tLeft.SelectRowsByIndex(lLeftKeyCol, vKey).Count
-            Next vKey
-        End If
+        Set cur = idxLeft.Cursor
+        Do While cur.MoveNext
+            vKey = cur.Key
+            If Not idxRight.TryGetRows(vKey, rightRows) Then
+                Set leftRows = cur.Rows
+                lRows = lRows + leftRows.Count
+            End If
+        Loop
     End If
     
     ' (C) Right Only Keys
     If (jType = jtRight Or jType = jtFull Or jType = jtRightAnti) Then
-        If setRightOnly.Count > 0 Then
-            For Each vKey In setRightOnly.KeysArray
-                lRows = lRows + tRight.SelectRowsByIndex(lRightKeyCol, vKey).Count
-            Next vKey
-        End If
+        Set cur = idxRight.Cursor
+        Do While cur.MoveNext
+            vKey = cur.Key
+            If Not idxLeft.TryGetRows(vKey, leftRows) Then
+                Set rightRows = cur.Rows
+                lRows = lRows + rightRows.Count
+            End If
+        Loop
     End If
     
     ' 4. [Allocation & Header Processing] 결과 배열 생성 및 헤더 충돌 방지
@@ -176,56 +175,72 @@ Public Function JoinTable(ByVal tLeft As clsTable, _
     
     ' (Part 1) Common Keys
     If (jType = jtInner Or jType = jtLeft Or jType = jtRight Or jType = jtFull Or _
-        jType = jtLeftSemi Or jType = jtRightSemi) And setCommon.Count > 0 Then
+        jType = jtLeftSemi Or jType = jtRightSemi) Then
         
-        For Each vKey In setCommon.KeysArray
-            Set colLeftRows = tLeft.SelectRowsByIndex(lLeftKeyCol, vKey)
-            Set colRightRows = tRight.SelectRowsByIndex(lRightKeyCol, vKey)
+        Set cur = idxRight.Cursor
+        Do While cur.MoveNext
+            vKey = cur.Key
+            Set rightRows = cur.Rows
+            If Not idxLeft.TryGetRows(vKey, leftRows) Then GoTo NextCommonKey
             
             If jType = jtLeftSemi Then
-                For Each vItemLeft In colLeftRows
+                For a = 1 To leftRows.Count
+                    vItemLeft = leftRows.RowAt(a)
                     For j = 1 To lLeftCols: vResultData(lRowIdx, j) = vLeftData(vItemLeft, j): Next j
                     lRowIdx = lRowIdx + 1
-                Next vItemLeft
+                Next a
                 
             ElseIf jType = jtRightSemi Then
-                For Each vItemRight In colRightRows
+                For b = 1 To rightRows.Count
+                    vItemRight = rightRows.RowAt(b)
                     For j = 1 To lRightCols: vResultData(lRowIdx, j) = vRightData(vItemRight, j): Next j
                     lRowIdx = lRowIdx + 1
-                Next vItemRight
+                Next b
                 
             Else
-                For Each vItemLeft In colLeftRows
-                    For Each vItemRight In colRightRows
+                For a = 1 To leftRows.Count
+                    vItemLeft = leftRows.RowAt(a)
+                    For b = 1 To rightRows.Count
+                        vItemRight = rightRows.RowAt(b)
                         For j = 1 To lLeftCols: vResultData(lRowIdx, j) = vLeftData(vItemLeft, j): Next j
                         For j = 1 To lRightCols: vResultData(lRowIdx, lLeftCols + j) = vRightData(vItemRight, j): Next j
                         lRowIdx = lRowIdx + 1
-                    Next vItemRight
-                Next vItemLeft
+                    Next b
+                Next a
             End If
-        Next vKey
+NextCommonKey:
+        Loop
     End If
     
     ' (Part 2) Left Only Processing
-    If (jType = jtLeft Or jType = jtFull Or jType = jtLeftAnti) And setLeftOnly.Count > 0 Then
-        For Each vKey In setLeftOnly.KeysArray
-            Set colLeftRows = tLeft.SelectRowsByIndex(lLeftKeyCol, vKey)
-            For Each vItemLeft In colLeftRows
+    If (jType = jtLeft Or jType = jtFull Or jType = jtLeftAnti) Then
+        Set cur = idxLeft.Cursor
+        Do While cur.MoveNext
+            vKey = cur.Key
+            If idxRight.TryGetRows(vKey, rightRows) Then GoTo NextLeftOnlyKey
+            Set leftRows = cur.Rows
+            For a = 1 To leftRows.Count
+                vItemLeft = leftRows.RowAt(a)
                 For j = 1 To lLeftCols: vResultData(lRowIdx, j) = vLeftData(vItemLeft, j): Next j
                 
                 If jType <> jtLeftAnti Then
                     For j = 1 To lRightCols: vResultData(lRowIdx, lLeftCols + j) = Empty: Next j
                 End If
                 lRowIdx = lRowIdx + 1
-            Next vItemLeft
-        Next vKey
+            Next a
+NextLeftOnlyKey:
+        Loop
     End If
     
     ' (Part 3) Right Only Processing
-    If (jType = jtRight Or jType = jtFull Or jType = jtRightAnti) And setRightOnly.Count > 0 Then
-        For Each vKey In setRightOnly.KeysArray
-            Set colRightRows = tRight.SelectRowsByIndex(lRightKeyCol, vKey)
-            For Each vItemRight In colRightRows
+    If (jType = jtRight Or jType = jtFull Or jType = jtRightAnti) Then
+        Set cur = idxRight.Cursor
+        Do While cur.MoveNext
+            vKey = cur.Key
+            If idxLeft.TryGetRows(vKey, leftRows) Then GoTo NextRightOnlyKey
+            Set rightRows = cur.Rows
+            For b = 1 To rightRows.Count
+                vItemRight = rightRows.RowAt(b)
                 If jType <> jtRightAnti Then
                     For j = 1 To lLeftCols: vResultData(lRowIdx, j) = Empty: Next j
                     For j = 1 To lRightCols: vResultData(lRowIdx, lLeftCols + j) = vRightData(vItemRight, j): Next j
@@ -233,8 +248,9 @@ Public Function JoinTable(ByVal tLeft As clsTable, _
                     For j = 1 To lRightCols: vResultData(lRowIdx, j) = vRightData(vItemRight, j): Next j
                 End If
                 lRowIdx = lRowIdx + 1
-            Next vItemRight
-        Next vKey
+            Next b
+NextRightOnlyKey:
+        Loop
     End If
     
     ' 6. 결과 반환

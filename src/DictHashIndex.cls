@@ -72,6 +72,11 @@ Public Function KeysArray() As Variant
     End If
 End Function
 
+Public Function Cursor() As DbIndexCursor
+    Dim cur As New DbIndexCursor
+    Set Cursor = cur.Init(mDict)
+End Function
+
 Private Function NormalizeKey(ByVal key As Variant) As String
     If IsEmpty(key) Then
         NormalizeKey = ""
