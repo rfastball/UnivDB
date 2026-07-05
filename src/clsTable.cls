@@ -21,8 +21,7 @@ Option Explicit
 ' [저장소]
 Private m_vData As Variant          ' 전체 데이터 (2D Array, 1-based or 0-based)
 Private m_dicHeaders As Object      ' 컬럼명 -> 열 번호 매핑 (Key: String, Value: Long)
-Private m_dicIndices As Object      ' 생성된 인덱스 캐시 (Key: ColName, Value: Dictionary)
-Private m_dicHashIndices As Object  ' 내부 실행용 인덱스 캐시 (Key: ColName/Index, Value: DictHashIndex)
+Private m_dicHashIndices As Object  ' 인덱스 캐시 (Key: ColName/Index, Value: DictHashIndex) - 유일한 인덱스 진실
 
 ' [메타 데이터]
 Private m_lRowCount As Long
@@ -33,14 +32,12 @@ Private m_lGeneration As Long       ' 구조 변경(행 수/순서/컬럼 배치
 ' [초기화]
 Private Sub Class_Initialize()
     Set m_dicHeaders = CreateObject("Scripting.Dictionary")
-    Set m_dicIndices = CreateObject("Scripting.Dictionary")
     Set m_dicHashIndices = CreateObject("Scripting.Dictionary")
     m_lHeaderRowIndex = 1
 End Sub
 
 Private Sub Class_Terminate()
     Set m_dicHeaders = Nothing
-    Set m_dicIndices = Nothing
     Set m_dicHashIndices = Nothing
     m_vData = Empty
 End Sub
@@ -201,36 +198,19 @@ Private Sub BumpGeneration()
 End Sub
 
 Private Sub InvalidateAllIndices()
-    If Not m_dicIndices Is Nothing Then m_dicIndices.RemoveAll
     If Not m_dicHashIndices Is Nothing Then m_dicHashIndices.RemoveAll
 End Sub
 
 Private Sub InvalidateIndexByColumnName(ByVal sColName As String)
     Dim lCol As Long
-    
+
     sColName = UCase(Trim(sColName))
-    If m_dicIndices.exists(sColName) Then m_dicIndices.Remove sColName
     If m_dicHashIndices.exists(sColName) Then m_dicHashIndices.Remove sColName
-    
+
     If m_dicHeaders.exists(sColName) Then
         lCol = m_dicHeaders(sColName)
-        If m_dicIndices.exists(lCol) Then m_dicIndices.Remove lCol
         If m_dicHashIndices.exists(lCol) Then m_dicHashIndices.Remove lCol
     End If
-End Sub
-
-Private Sub InvalidateIndexByIndex(ByVal lCol As Long)
-    Dim vKey As Variant
-    
-    If m_dicIndices.exists(lCol) Then m_dicIndices.Remove lCol
-    If m_dicHashIndices.exists(lCol) Then m_dicHashIndices.Remove lCol
-    
-    For Each vKey In m_dicHeaders.Keys
-        If CLng(m_dicHeaders(vKey)) = lCol Then
-            If m_dicIndices.exists(CStr(vKey)) Then m_dicIndices.Remove CStr(vKey)
-            If m_dicHashIndices.exists(CStr(vKey)) Then m_dicHashIndices.Remove CStr(vKey)
-        End If
-    Next vKey
 End Sub
 
 ' ==============================================================================
@@ -274,80 +254,7 @@ End Function
 ' [3] 인덱싱 및 검색 (Core Engine)
 ' ==============================================================================
 
-' 3-1a. 인덱스 생성 및 획득 (By 컬럼명)
-Public Function GetIndex(ByVal sColName As String) As Object
-    Dim lCol As Long
-    Dim dicResult As Object
-    
-    sColName = UCase(Trim(sColName))
-    
-    ' 1. 캐시 확인 (키: 컬럼명)
-    If m_dicIndices.exists(sColName) Then
-        Set GetIndex = m_dicIndices(sColName)
-        Exit Function
-    End If
-    
-    ' 2. 컬럼 인덱스 찾기
-    If Not m_dicHeaders.exists(sColName) Then
-        Exit Function ' 컬럼 없음
-    End If
-    lCol = m_dicHeaders(sColName)
-    
-    ' 3. 숫자 인덱스 기반으로 실제 인덱스 생성/조회
-    Set dicResult = GetIndexByIndex(lCol) ' This will build and cache it for lCol if needed
-    
-    ' 4. 컬럼명 기준으로도 캐시 등록
-    If Not dicResult Is Nothing Then
-        Set m_dicIndices(sColName) = dicResult
-    End If
-    Set GetIndex = dicResult
-End Function
-
-' 3-1b. 인덱스 생성 및 획득 (By 숫자 인덱스) - v2.5.1 최적화
-Public Function GetIndexByIndex(ByVal lCol As Long) As Object
-    Dim i As Long
-    Dim vVal As Variant
-    Dim sKey As String
-    Dim dicIdx As Object
-    Dim colRows As Collection
-
-    ' 1. 캐시 확인 (키: 숫자 인덱스)
-    If m_dicIndices.exists(lCol) Then
-        Set GetIndexByIndex = m_dicIndices(lCol)
-        Exit Function
-    End If
-
-    ' 2. 컬럼 유효성 검사 (배열 범위)
-    If lCol < LBound(m_vData, 2) Or lCol > UBound(m_vData, 2) Then
-        Exit Function
-    End If
-
-    ' 3. 인덱스 빌드 시작
-    Set dicIdx = CreateObject("Scripting.Dictionary")
-    dicIdx.CompareMode = vbTextCompare ' 대소문자 무시
-
-    For i = (m_lHeaderRowIndex + 1) To m_lRowCount
-        vVal = m_vData(i, lCol)
-        
-        If Not IsError(vVal) Then
-            If IsEmpty(vVal) Then sKey = "" Else sKey = CStr(vVal)
-            
-            If Not dicIdx.exists(sKey) Then
-                Set colRows = New Collection
-                dicIdx.Add sKey, colRows
-            Else
-                Set colRows = dicIdx(sKey)
-            End If
-            colRows.Add i
-        End If
-    Next i
-
-    ' 4. 캐시 등록 및 반환
-    Set m_dicIndices(lCol) = dicIdx
-    Set GetIndexByIndex = dicIdx
-End Function
-
-' 3-1c. 내부 실행용 HashIndex 생성 및 획득 (By 컬럼명)
+' 3-1. 인덱스 생성 및 획득 (By 컬럼명)
 Public Function GetHashIndex(ByVal sColName As String) As DictHashIndex
     Dim lCol As Long
     Dim idxResult As DictHashIndex
@@ -372,7 +279,7 @@ Public Function GetHashIndex(ByVal sColName As String) As DictHashIndex
     Set GetHashIndex = idxResult
 End Function
 
-' 3-1d. 내부 실행용 HashIndex 생성 및 획득 (By 숫자 인덱스)
+' 3-1b. 인덱스 생성 및 획득 (By 숫자 인덱스)
 Public Function GetHashIndexByIndex(ByVal lCol As Long) As DictHashIndex
     Dim i As Long
     Dim idx As DictHashIndex
@@ -397,64 +304,81 @@ Public Function GetHashIndexByIndex(ByVal lCol As Long) As DictHashIndex
 End Function
 
 
-' 3-2a. 특정 조건에 맞는 행 번호들 찾기 (By 컬럼명)
+' 3-2a. 특정 조건에 맞는 행 번호들 찾기 (By 컬럼명) - DictHashIndex 어댑터 (호환 shim)
 Public Function SelectRows(ByVal sColName As String, ByVal vValue As Variant) As Collection
-    Dim dicIdx As Object
-    Dim sKey As String
-    
-    Set dicIdx = GetIndex(sColName)
-    If dicIdx Is Nothing Then Set SelectRows = New Collection: Exit Function
-    
-    If IsEmpty(vValue) Then sKey = "" Else sKey = CStr(vValue)
-    
-    ' CompareMode 설정으로 인해 대소문자 무시 검색
-    If dicIdx.exists(sKey) Then
-        Set SelectRows = dicIdx(sKey)
+    Dim idx As DictHashIndex
+    Dim rows As DbRowList
+
+    Set idx = GetHashIndex(sColName)
+    If idx Is Nothing Then Set SelectRows = New Collection: Exit Function
+
+    ' 키 정규화(Empty/CStr/대소문자 무시)는 TryGetRows가 담당
+    If idx.TryGetRows(vValue, rows) Then
+        Set SelectRows = rows.ToCollection
     Else
         Set SelectRows = New Collection
     End If
 End Function
 
-' 3-2b. 특정 조건에 맞는 행 번호들 찾기 (By 숫자 인덱스) - v2.5.1 최적화
+' 3-2b. 특정 조건에 맞는 행 번호들 찾기 (By 숫자 인덱스) - DictHashIndex 어댑터 (호환 shim)
 Public Function SelectRowsByIndex(ByVal lCol As Long, ByVal vValue As Variant) As Collection
-    Dim dicIdx As Object
-    Dim sKey As String
+    Dim idx As DictHashIndex
+    Dim rows As DbRowList
 
-    Set dicIdx = GetIndexByIndex(lCol)
-    If dicIdx Is Nothing Then Set SelectRowsByIndex = New Collection: Exit Function
+    Set idx = GetHashIndexByIndex(lCol)
+    If idx Is Nothing Then Set SelectRowsByIndex = New Collection: Exit Function
 
-    If IsEmpty(vValue) Then sKey = "" Else sKey = CStr(vValue)
-    
-    If dicIdx.exists(sKey) Then
-        Set SelectRowsByIndex = dicIdx(sKey)
+    If idx.TryGetRows(vValue, rows) Then
+        Set SelectRowsByIndex = rows.ToCollection
     Else
         Set SelectRowsByIndex = New Collection
     End If
 End Function
 
 
-' 3-3a. 특정 컬럼의 고유값 목록 추출 (By 컬럼명)
+' 3-3a. 특정 컬럼의 고유값 목록 추출 (By 컬럼명) - DictHashIndex 어댑터 (호환 shim)
 Public Function GetUniqueKeys(ByVal sColName As String) As Variant
-    Dim dicIdx As Object
-    Set dicIdx = GetIndex(sColName)
-    
-    If dicIdx Is Nothing Then
+    Dim idx As DictHashIndex
+    Set idx = GetHashIndex(sColName)
+
+    If idx Is Nothing Then
         GetUniqueKeys = Array()
     Else
-        GetUniqueKeys = dicIdx.Keys
+        GetUniqueKeys = KeysFromIndex(idx)
     End If
 End Function
 
-' 3-3b. 특정 컬럼의 고유값 목록 추출 (By 숫자 인덱스) - v2.5.1 최적화
+' 3-3b. 특정 컬럼의 고유값 목록 추출 (By 숫자 인덱스) - DictHashIndex 어댑터 (호환 shim)
 Public Function GetUniqueKeysByIndex(ByVal lCol As Long) As Variant
-    Dim dicIdx As Object
-    Set dicIdx = GetIndexByIndex(lCol)
-    
-    If dicIdx Is Nothing Then
+    Dim idx As DictHashIndex
+    Set idx = GetHashIndexByIndex(lCol)
+
+    If idx Is Nothing Then
         GetUniqueKeysByIndex = Array()
     Else
-        GetUniqueKeysByIndex = dicIdx.Keys
+        GetUniqueKeysByIndex = KeysFromIndex(idx)
     End If
+End Function
+
+' [Internal] 인덱스 커서 순회로 키 배열 생성 (삽입 순서 = 행 순서 유지)
+Private Function KeysFromIndex(ByVal idx As DictHashIndex) As Variant
+    Dim cur As DbIndexCursor
+    Dim vKeys() As Variant
+    Dim lPos As Long
+
+    If idx.CountKeys = 0 Then
+        KeysFromIndex = Array()
+        Exit Function
+    End If
+
+    ReDim vKeys(0 To idx.CountKeys - 1)
+    Set cur = idx.Cursor
+    Do While cur.MoveNext
+        vKeys(lPos) = cur.Key
+        lPos = lPos + 1
+    Loop
+
+    KeysFromIndex = vKeys
 End Function
 
 ' ==============================================================================

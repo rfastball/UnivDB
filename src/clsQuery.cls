@@ -332,8 +332,6 @@ End Function
 Public Function Delete() As Long
     Dim vSource As Variant
     Dim vNewData As Variant
-    Dim vRowIDs As Variant
-    Dim dicToDelete As Object
     Dim i As Long, j As Long, R As Long
     Dim lTotalRows As Long, lTotalCols As Long
     Dim lDeleteCount As Long
@@ -343,35 +341,26 @@ Public Function Delete() As Long
     If m_setCandidates Is Nothing Then InitializeAllRows
     lDeleteCount = m_setCandidates.Count
     If lDeleteCount = 0 Then Delete = 0: Exit Function
-    
-    ' 1. 삭제할 RowID 마킹
-    Set dicToDelete = CreateObject("Scripting.Dictionary")
-    vRowIDs = m_setCandidates.ToArray
-    If Not IsEmpty(vRowIDs) Then
-        For i = LBound(vRowIDs) To UBound(vRowIDs)
-            dicToDelete(vRowIDs(i)) = Empty
-        Next i
-    End If
-    
-    ' 2. 데이터 재구성 (삭제 대상 제외)
+
+    ' 1. 데이터 재구성 (삭제 대상은 후보 RowSet의 ContainsRow로 직접 판정)
     vSource = m_SourceTable.RawArray
     lTotalRows = UBound(vSource, 1)
     lTotalCols = UBound(vSource, 2)
     lKeepCount = lTotalRows - lDeleteCount
-    
+
     ReDim vNewData(1 To lKeepCount, 1 To lTotalCols)
-    
+
     R = 1
     For j = 1 To lTotalCols: vNewData(1, j) = vSource(1, j): Next j ' 헤더
-    
+
     For i = 2 To lTotalRows
-        If Not dicToDelete.exists(i) Then
+        If Not m_setCandidates.ContainsRow(i) Then
             R = R + 1
             For j = 1 To lTotalCols: vNewData(R, j) = vSource(i, j): Next j
         End If
     Next i
     
-    ' 3. 테이블 갱신
+    ' 2. 테이블 갱신
     m_SourceTable.LoadFromArray vNewData, True
     Set m_setCandidates = Nothing: m_bIsFirstCondition = True
     
