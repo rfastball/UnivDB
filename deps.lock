@@ -2,12 +2,13 @@
   "packages": [
     {
       "name": "UnivCore",
-      "version": "20260706_1746",
+      "version": "20260706_1804",
       "source": "..\\UnivCore\\releases\\UnivCore_latest.txt",
-      "resolvedFile": "..\\UnivCore\\releases\\UnivCore_20260706_1746.txt",
-      "integrity": "sha256-c2bdd0378f363e2c4f19da1efd73258d214ae80795ee07f3d305b2e166ec60f2",
+      "resolvedFile": "..\\UnivCore\\releases\\UnivCore_20260706_1804.txt",
+      "integrity": "sha256-22a3d2eaaea38deb94f82eff0e8696ab3e09a31d117d1555efeb7f8ba9466e44",
       "files": [
         { "name": "Core_clsFastHash.cls", "sha256": "513f48e03fea177432fa3d131a0db45d60a5b79e4f46bfbe75aa1939bbb13996" },
+        { "name": "Core_clsLongList.cls", "sha256": "290d0bae8c80c797243e575aface432a5a22efab0042a2bd11bccd7393a5685c" },
         { "name": "Core_clsSet.cls", "sha256": "ae10e4fc4bf0c10f26e7c3a5905cd5e0b4c3df1dda6e4ae448d99aa036d27145" },
         { "name": "Core_Enums.bas", "sha256": "ce2ed7bf5f8720645a9c0f26721194fd919106d626c1ba8d1ddaeae4e8aa7d2c" },
         { "name": "Core_modCompare.bas", "sha256": "de027e7f77e65a48d6fb0cbef6e7e40a150236f08f195b11a1ce767074c48137" },

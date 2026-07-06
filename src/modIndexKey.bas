@@ -8,6 +8,12 @@ Option Explicit
 ' - IsError 값은 정규화 대상 아님 - 호출부(AddRow/TryGetRows)가 사전에 skip
 ' - 비교는 대소문자 무시 (vbTextCompare) - 백엔드의 저장소 설정이 보장
 
+' 인덱스 백엔드 선택자 (clsTable.IndexBackend) - 자동 선택 없음, 명시적 옵션 (Phase 8 정책)
+Public Enum DbIndexBackend
+    dbBackendDict = 0 ' Scripting.Dictionary 기반 (기본)
+    dbBackendCore = 1 ' Core_clsFastHash 기반 (실험)
+End Enum
+
 ' @desc 인덱스 키 값 받아 정규화된 문자열 키 반환, Empty 시 빈 문자열
 Public Function NormalizeIndexKey(ByVal key As Variant) As String
     If IsEmpty(key) Then

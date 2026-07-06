@@ -1,6 +1,6 @@
 Attribute VB_Name = "TestBenchDb"
 ' @desc DB 레이어 성능 baseline 측정 벤치마크 담당
-' @depends UnivDB, modEngine, LogShim
+' @depends UnivDB, modEngine, modIndexKey, LogShim
 Option Explicit
 
 ' Phase 7 준비 벤치마크 스위트 (2026-07-05_next_direction.md 7.4 목록).
@@ -34,6 +34,10 @@ Private Function TicMs() As Double
     TicMs = (t1 - mT0) / mFreq * 1000#
 End Function
 
+Private Function BackendName(ByVal b As Long) As String
+    If b = dbBackendCore Then BackendName = "core" Else BackendName = "dict"
+End Function
+
 Private Function Median3(ByVal a As Double, ByVal b As Double, ByVal c As Double) As Double
     Dim mx As Double, mn As Double
     mx = a: If b > mx Then mx = b
@@ -52,29 +56,35 @@ Public Sub Test_BenchDb_IndexBuild()
     Dim idx As DbHashIndex
     Dim msLow(0 To 2) As Double, msHigh(0 To 2) As Double
     Dim R As Long
+    Dim b As Long
 
-    ' warm-up (지연 초기화 배출)
-    Set T = BuildBenchTable(BENCH_ROWS)
-    Set idx = T.GetHashIndex("ID")
-
-    For R = 0 To 2
-        Set T = BuildBenchTable(BENCH_ROWS) ' 캐시 없는 신선한 테이블에서 빌드 측정
-        TicStart
-        Set idx = T.GetHashIndex("ID")
-        msLow(R) = TicMs
-        LogShim.AssertEq "bench_idx_low_keys_" & R, CLng(BENCH_ROWS), idx.CountKeys
-
+    For b = dbBackendDict To dbBackendCore
+        ' warm-up (지연 초기화 배출)
         Set T = BuildBenchTable(BENCH_ROWS)
-        TicStart
-        Set idx = T.GetHashIndex("Dept")
-        msHigh(R) = TicMs
-        LogShim.AssertEq "bench_idx_high_keys_" & R, 5, idx.CountKeys
-    Next R
+        T.IndexBackend = b
+        Set idx = T.GetHashIndex("ID")
 
-    LogShim.LogEvent "bench_db_index_build", _
-        Array("rows", "lowdup_ms", "highdup_ms"), _
-        Array(BENCH_ROWS, CLng(Median3(msLow(0), msLow(1), msLow(2))), _
-              CLng(Median3(msHigh(0), msHigh(1), msHigh(2))))
+        For R = 0 To 2
+            Set T = BuildBenchTable(BENCH_ROWS) ' 캐시 없는 신선한 테이블에서 빌드 측정
+            T.IndexBackend = b
+            TicStart
+            Set idx = T.GetHashIndex("ID")
+            msLow(R) = TicMs
+            LogShim.AssertEq "bench_idx_low_keys_" & BackendName(b) & "_" & R, CLng(BENCH_ROWS), idx.CountKeys
+
+            Set T = BuildBenchTable(BENCH_ROWS)
+            T.IndexBackend = b
+            TicStart
+            Set idx = T.GetHashIndex("Dept")
+            msHigh(R) = TicMs
+            LogShim.AssertEq "bench_idx_high_keys_" & BackendName(b) & "_" & R, 5, idx.CountKeys
+        Next R
+
+        LogShim.LogEvent "bench_db_index_build", _
+            Array("backend", "rows", "lowdup_ms", "highdup_ms"), _
+            Array(BackendName(b), BENCH_ROWS, CLng(Median3(msLow(0), msLow(1), msLow(2))), _
+                  CLng(Median3(msHigh(0), msHigh(1), msHigh(2))))
+    Next b
 End Sub
 
 ' ==============================================================================
@@ -91,52 +101,60 @@ Public Sub Test_BenchDb_WhereEquality()
     Dim msHit(0 To 2) As Double, msMiss(0 To 2) As Double
     Dim msDup(0 To 2) As Double, msMulti(0 To 2) As Double
 
+    Dim b As Long
+
     Set T = GetBench20k()
-    ' 인덱스 프리워밍 (빌드 비용은 1번 벤치가 담당)
-    T.GetHashIndex "ID"
-    T.GetHashIndex "Dept"
-    T.GetHashIndex "Score"
 
-    ' warm-up
-    Set q = UnivDB.Query(T).Where("ID", BENCH_ROWS \ 2)
+    For b = dbBackendDict To dbBackendCore
+        T.IndexBackend = b ' 백엔드 전환 (캐시 실효 후 재빌드)
+        ' 인덱스 프리워밍 (빌드 비용은 1번 벤치가 담당)
+        T.GetHashIndex "ID"
+        T.GetHashIndex "Dept"
+        T.GetHashIndex "Score"
 
-    For R = 0 To 2
-        TicStart
-        For i = 1 To ITER_LIGHT
-            Set q = UnivDB.Query(T).Where("ID", BENCH_ROWS \ 2) ' hit (저중복 = 고유 키)
-        Next i
-        msHit(R) = TicMs
+        ' warm-up
+        Set q = UnivDB.Query(T).Where("ID", BENCH_ROWS \ 2)
 
-        TicStart
-        For i = 1 To ITER_LIGHT
-            Set q = UnivDB.Query(T).Where("ID", -1) ' miss
-        Next i
-        msMiss(R) = TicMs
+        For R = 0 To 2
+            TicStart
+            For i = 1 To ITER_LIGHT
+                Set q = UnivDB.Query(T).Where("ID", BENCH_ROWS \ 2) ' hit (저중복 = 고유 키)
+            Next i
+            msHit(R) = TicMs
 
-        TicStart
-        For i = 1 To ITER_HEAVY
-            Set q = UnivDB.Query(T).Where("Dept", "D3") ' 고중복 (~4000행 적재)
-        Next i
-        msDup(R) = TicMs
+            TicStart
+            For i = 1 To ITER_LIGHT
+                Set q = UnivDB.Query(T).Where("ID", -1) ' miss
+            Next i
+            msMiss(R) = TicMs
 
-        TicStart
-        For i = 1 To ITER_MULTI
-            Set q = UnivDB.Query(T).Where("Dept", "D3").Where("Score", 503) ' 교집합
-        Next i
-        msMulti(R) = TicMs
-    Next R
+            TicStart
+            For i = 1 To ITER_HEAVY
+                Set q = UnivDB.Query(T).Where("Dept", "D3") ' 고중복 (~4000행 적재)
+            Next i
+            msDup(R) = TicMs
 
-    LogShim.AssertEq "bench_where_hit_count", 1, T.SelectRows("ID", BENCH_ROWS \ 2).Count
-    LogShim.AssertEq "bench_where_dup_count", 4000, T.SelectRows("Dept", "D3").Count
+            TicStart
+            For i = 1 To ITER_MULTI
+                Set q = UnivDB.Query(T).Where("Dept", "D3").Where("Score", 503) ' 교집합
+            Next i
+            msMulti(R) = TicMs
+        Next R
 
-    LogShim.LogEvent "bench_db_where", _
-        Array("rows", "iters_light", "iters_heavy", "iters_multi", _
-              "hit_ms", "miss_ms", "highdup_ms", "multi_ms"), _
-        Array(BENCH_ROWS, ITER_LIGHT, ITER_HEAVY, ITER_MULTI, _
-              CLng(Median3(msHit(0), msHit(1), msHit(2))), _
-              CLng(Median3(msMiss(0), msMiss(1), msMiss(2))), _
-              CLng(Median3(msDup(0), msDup(1), msDup(2))), _
-              CLng(Median3(msMulti(0), msMulti(1), msMulti(2))))
+        LogShim.AssertEq "bench_where_hit_count_" & BackendName(b), 1, T.SelectRows("ID", BENCH_ROWS \ 2).Count
+        LogShim.AssertEq "bench_where_dup_count_" & BackendName(b), 4000, T.SelectRows("Dept", "D3").Count
+
+        LogShim.LogEvent "bench_db_where", _
+            Array("backend", "rows", "iters_light", "iters_heavy", "iters_multi", _
+                  "hit_ms", "miss_ms", "highdup_ms", "multi_ms"), _
+            Array(BackendName(b), BENCH_ROWS, ITER_LIGHT, ITER_HEAVY, ITER_MULTI, _
+                  CLng(Median3(msHit(0), msHit(1), msHit(2))), _
+                  CLng(Median3(msMiss(0), msMiss(1), msMiss(2))), _
+                  CLng(Median3(msDup(0), msDup(1), msDup(2))), _
+                  CLng(Median3(msMulti(0), msMulti(1), msMulti(2))))
+    Next b
+
+    T.IndexBackend = dbBackendDict ' 공유 테이블 기본 백엔드 복원
 End Sub
 
 ' ==============================================================================
@@ -181,62 +199,70 @@ End Sub
 ' ==============================================================================
 
 Public Sub Test_BenchDb_Join()
-    Dim tL As clsTable, tR As clsTable
+    Dim tL11 As clsTable, tR11 As clsTable
+    Dim tL1N As clsTable, tR1N As clsTable
+    Dim tLNN As clsTable, tRNN As clsTable
+    Dim tLNo As clsTable, tRNo As clsTable
     Dim tRes As clsTable
     Dim R As Long
+    Dim b As Long
     Dim ms11(0 To 2) As Double, ms1N(0 To 2) As Double
     Dim msNN(0 To 2) As Double, msNoMatch(0 To 2) As Double
 
-    ' 1:1 - 양쪽 고유 키 5k
-    Set tL = BuildJoinTable(5000, 5000, 0)
-    Set tR = BuildJoinTable(5000, 5000, 0)
-    Set tRes = JoinTable(tL, tR, "K", "K", jtInner, "R_") ' warm-up (인덱스 빌드 흡수)
-    For R = 0 To 2
-        TicStart
-        Set tRes = JoinTable(tL, tR, "K", "K", jtInner, "R_")
-        ms11(R) = TicMs
-    Next R
-    LogShim.AssertEq "bench_join_11_rows", CLng(5001), tRes.RowCount
+    Set tL11 = BuildJoinTable(5000, 5000, 0): Set tR11 = BuildJoinTable(5000, 5000, 0) ' 1:1 고유 키
+    Set tL1N = BuildJoinTable(1000, 1000, 0): Set tR1N = BuildJoinTable(5000, 1000, 0) ' 1:N
+    Set tLNN = BuildJoinTable(5000, 500, 0): Set tRNN = BuildJoinTable(5000, 500, 0)   ' N:N 키당 100쌍
+    Set tLNo = BuildJoinTable(5000, 5000, 0): Set tRNo = BuildJoinTable(5000, 5000, 100000) ' 도메인 분리
 
-    ' 1:N - 왼쪽 고유 1k, 오른쪽 키 1k종 x 5회 반복 5k
-    Set tL = BuildJoinTable(1000, 1000, 0)
-    Set tR = BuildJoinTable(5000, 1000, 0)
-    Set tRes = JoinTable(tL, tR, "K", "K", jtInner, "R_")
-    For R = 0 To 2
-        TicStart
-        Set tRes = JoinTable(tL, tR, "K", "K", jtInner, "R_")
-        ms1N(R) = TicMs
-    Next R
-    LogShim.AssertEq "bench_join_1n_rows", CLng(5001), tRes.RowCount
+    For b = dbBackendDict To dbBackendCore
+        tL11.IndexBackend = b: tR11.IndexBackend = b
+        tL1N.IndexBackend = b: tR1N.IndexBackend = b
+        tLNN.IndexBackend = b: tRNN.IndexBackend = b
+        tLNo.IndexBackend = b: tRNo.IndexBackend = b
 
-    ' N:N - 양쪽 키 500종 x 10회 = 키당 100쌍, 결과 50k
-    Set tL = BuildJoinTable(5000, 500, 0)
-    Set tR = BuildJoinTable(5000, 500, 0)
-    Set tRes = JoinTable(tL, tR, "K", "K", jtInner, "R_")
-    For R = 0 To 2
-        TicStart
-        Set tRes = JoinTable(tL, tR, "K", "K", jtInner, "R_")
-        msNN(R) = TicMs
-    Next R
-    LogShim.AssertEq "bench_join_nn_rows", CLng(50001), tRes.RowCount
+        ' 1:1 - warm-up이 인덱스 빌드 흡수, 측정은 조인 본체
+        Set tRes = JoinTable(tL11, tR11, "K", "K", jtInner, "R_")
+        For R = 0 To 2
+            TicStart
+            Set tRes = JoinTable(tL11, tR11, "K", "K", jtInner, "R_")
+            ms11(R) = TicMs
+        Next R
+        LogShim.AssertEq "bench_join_11_rows_" & BackendName(b), CLng(5001), tRes.RowCount
 
-    ' no-match-heavy left join - 키 도메인 분리
-    Set tL = BuildJoinTable(5000, 5000, 0)
-    Set tR = BuildJoinTable(5000, 5000, 100000)
-    Set tRes = JoinTable(tL, tR, "K", "K", jtLeft, "R_")
-    For R = 0 To 2
-        TicStart
-        Set tRes = JoinTable(tL, tR, "K", "K", jtLeft, "R_")
-        msNoMatch(R) = TicMs
-    Next R
-    LogShim.AssertEq "bench_join_nomatch_rows", CLng(5001), tRes.RowCount
+        ' 1:N
+        Set tRes = JoinTable(tL1N, tR1N, "K", "K", jtInner, "R_")
+        For R = 0 To 2
+            TicStart
+            Set tRes = JoinTable(tL1N, tR1N, "K", "K", jtInner, "R_")
+            ms1N(R) = TicMs
+        Next R
+        LogShim.AssertEq "bench_join_1n_rows_" & BackendName(b), CLng(5001), tRes.RowCount
 
-    LogShim.LogEvent "bench_db_join", _
-        Array("left_rows", "right_rows", "j11_ms", "j1n_ms", "jnn_ms", "nomatch_left_ms"), _
-        Array(5000, 5000, CLng(Median3(ms11(0), ms11(1), ms11(2))), _
-              CLng(Median3(ms1N(0), ms1N(1), ms1N(2))), _
-              CLng(Median3(msNN(0), msNN(1), msNN(2))), _
-              CLng(Median3(msNoMatch(0), msNoMatch(1), msNoMatch(2))))
+        ' N:N (결과 50k)
+        Set tRes = JoinTable(tLNN, tRNN, "K", "K", jtInner, "R_")
+        For R = 0 To 2
+            TicStart
+            Set tRes = JoinTable(tLNN, tRNN, "K", "K", jtInner, "R_")
+            msNN(R) = TicMs
+        Next R
+        LogShim.AssertEq "bench_join_nn_rows_" & BackendName(b), CLng(50001), tRes.RowCount
+
+        ' no-match-heavy left join
+        Set tRes = JoinTable(tLNo, tRNo, "K", "K", jtLeft, "R_")
+        For R = 0 To 2
+            TicStart
+            Set tRes = JoinTable(tLNo, tRNo, "K", "K", jtLeft, "R_")
+            msNoMatch(R) = TicMs
+        Next R
+        LogShim.AssertEq "bench_join_nomatch_rows_" & BackendName(b), CLng(5001), tRes.RowCount
+
+        LogShim.LogEvent "bench_db_join", _
+            Array("backend", "left_rows", "right_rows", "j11_ms", "j1n_ms", "jnn_ms", "nomatch_left_ms"), _
+            Array(BackendName(b), 5000, 5000, CLng(Median3(ms11(0), ms11(1), ms11(2))), _
+                  CLng(Median3(ms1N(0), ms1N(1), ms1N(2))), _
+                  CLng(Median3(msNN(0), msNN(1), msNN(2))), _
+                  CLng(Median3(msNoMatch(0), msNoMatch(1), msNoMatch(2))))
+    Next b
 End Sub
 
 ' ==============================================================================

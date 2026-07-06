@@ -21,7 +21,8 @@ Option Explicit
 ' [저장소]
 Private m_vData As Variant          ' 전체 데이터 (2D Array, 1-based or 0-based)
 Private m_dicHeaders As Object      ' 컬럼명 -> 열 번호 매핑 (Key: String, Value: Long)
-Private m_dicHashIndices As Object  ' 인덱스 캐시 (Key: ColName/Index, Value: DictHashIndex) - 유일한 인덱스 진실
+Private m_dicHashIndices As Object  ' 인덱스 캐시 (Key: ColName/Index, Value: DbHashIndex) - 유일한 인덱스 진실
+Private m_lIndexBackend As DbIndexBackend ' 인덱스 백엔드 선택 (기본 dbBackendDict, 자동 선택 없음)
 
 ' [메타 데이터]
 Private m_lRowCount As Long
@@ -280,22 +281,21 @@ Public Function GetHashIndex(ByVal sColName As String) As DbHashIndex
 End Function
 
 ' 3-1b. 인덱스 생성 및 획득 (By 숫자 인덱스)
-' 빌드는 구체 백엔드(DictHashIndex)로, 반환은 인터페이스로
+' 빌드는 IndexBackend가 고른 구체 백엔드로, 반환은 인터페이스로
 Public Function GetHashIndexByIndex(ByVal lCol As Long) As DbHashIndex
     Dim i As Long
-    Dim idx As DictHashIndex
-    
+    Dim idx As DbHashIndex
+
     If m_dicHashIndices.exists(lCol) Then
         Set idx = m_dicHashIndices(lCol)
         idx.EnsureCurrent Me ' 불변식 방어: 캐시된 인덱스는 항상 현재 세대여야 함
         Set GetHashIndexByIndex = idx
         Exit Function
     End If
-    
+
     If lCol < 1 Or lCol > m_lColCount Then Exit Function
 
-    Set idx = New DictHashIndex
-    idx.BindTo Me
+    Set idx = NewBoundIndex()
 
     ' Phase 6.8 밀봉 - 컬럼 접근은 CopyColumn1D 경유
     Dim vCol As Variant
@@ -306,6 +306,21 @@ Public Function GetHashIndexByIndex(ByVal lCol As Long) As DbHashIndex
 
     Set m_dicHashIndices(lCol) = idx
     Set GetHashIndexByIndex = idx
+End Function
+
+' [Internal] IndexBackend 선택에 따라 현재 세대에 결속된 빈 인덱스 생성
+Private Function NewBoundIndex() As DbHashIndex
+    If m_lIndexBackend = dbBackendCore Then
+        Dim idxCore As CoreHashIndex
+        Set idxCore = New CoreHashIndex
+        idxCore.BindTo Me
+        Set NewBoundIndex = idxCore
+    Else
+        Dim idxDict As DictHashIndex
+        Set idxDict = New DictHashIndex
+        idxDict.BindTo Me
+        Set NewBoundIndex = idxDict
+    End If
 End Function
 
 
@@ -430,6 +445,19 @@ End Function
 ' @desc 구조 변경마다 증가하는 현재 세대 번호 반환
 Public Property Get Generation() As Long
     Generation = m_lGeneration
+End Property
+
+' @desc 현재 인덱스 백엔드 선택값 반환
+Public Property Get IndexBackend() As DbIndexBackend
+    IndexBackend = m_lIndexBackend
+End Property
+
+' @desc 인덱스 백엔드를 지정함, 변경 시 기존 인덱스 캐시 전체 실효
+Public Property Let IndexBackend(ByVal vBackend As DbIndexBackend)
+    If vBackend <> m_lIndexBackend Then
+        m_lIndexBackend = vBackend
+        InvalidateAllIndices ' 백엔드 혼합 캐시 방지
+    End If
 End Property
 
 Public Property Get RowCount() As Long

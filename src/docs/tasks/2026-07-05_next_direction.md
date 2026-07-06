@@ -17,7 +17,7 @@
 | 5. rowID 중심, 파사드 경계 물질화 | **완료** | 쿼리 경로 중간 물질화 없음. SelectTable/ToArray 경계 확립 |
 | 6. 폐기 아닌 엔진화 | **진행 중** | Phase 0~6 커밋 완료 (78bfb54 ~ cad338c) |
 | 7. 작은 검증 단위 커밋 | **준수 중** | vh run / vh check 루프 유지 |
-| 8. CoreHashIndex는 후속 선택지 | **미착수** | 병목 측정(벤치)조차 아직 없음 — 선행 조건부터 |
+| 8. CoreHashIndex는 후속 선택지 | **완료** | Phase 7 구현 및 Phase 8 벤치 완료. 기본은 DictHashIndex 유지, CoreHashIndex는 명시적 실험 옵션 |
 
 ---
 
@@ -133,6 +133,11 @@ CoreHashIndex (Implements DbHashIndex)
 - 향상 < 30% → DictHashIndex 기본 유지
 - 특정 핫패스 2배 이상 → 해당 경로/키 프로파일에 한해 CoreHashIndex 검토
 - 자동 선택은 도입하지 않음 — 명시적 옵션 + 벤치 기반 수동 판단
+
+결정(2026-07-06 벤치):
+- 기본 백엔드는 `DictHashIndex`로 유지한다.
+- `CoreHashIndex`는 `clsTable.IndexBackend = dbBackendCore` 명시 옵션으로만 사용한다.
+- 근거: 20k행 기준 Core는 index build에서만 개선(low-dup 58→38ms, high-dup 91→82ms)이고, Where/Join 주요 핫패스는 Dict와 동등하거나 더 느리다(Where hit 96→98ms, miss 95→101ms, Join 1:1 29→37ms, no-match left 43→63ms). 30% 개선/2배 핫패스 조건을 충족하지 못했다.
 
 커밋: `perf: evaluate hash index backends and set default policy`
 
