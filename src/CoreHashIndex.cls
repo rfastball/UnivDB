@@ -94,20 +94,13 @@ Public Sub Clear()
     mRowsCap = 0
 End Sub
 
-' @desc 키-RowList 순회용 커서 반환 (경계 물질화 - 삽입 순서 보존)
+' @desc 키-RowList 순회용 커서 반환 (Core 배열 경로 - 삽입 순서 보존)
 Public Function Cursor() As DbIndexCursor
-    Dim d As Object
     Dim vKeys As Variant
-    Dim i As Long
     Dim cur As New DbIndexCursor
 
-    Set d = CreateObject("Scripting.Dictionary")
-    d.CompareMode = vbTextCompare
     vKeys = mEngine.KeysArray
-    For i = 0 To mEngine.Count - 1
-        d.Add vKeys(i), mRows(i + 1) ' build-only라 slot = 삽입 순서 (밀집)
-    Next i
-    Set Cursor = cur.Init(d)
+    Set Cursor = cur.InitArrays(vKeys, mRows, mEngine.Count)
 End Function
 
 Friend Property Get OwnerPtr() As LongPtr
