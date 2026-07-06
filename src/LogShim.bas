@@ -13,21 +13,21 @@ Private dbgEnabled As Variant
 Public Sub LogD(level As String, msg As String)
     If Not EnsureEnabled() Then Exit Sub
     On Error Resume Next
-    Application.Run ADDIN_PREFIX & "LogD", level, msg
+    Application.Run ADDIN_PREFIX & "LogDForWorkbook", ThisWorkbook.FullName, level, msg
 End Sub
 
 ' @desc eventName과 dataJson 받아 애드인 LogJ에 위임함, 애드인 부재 시 무해 무시
 Public Sub LogJ(eventName As String, dataJson As String)
     If Not EnsureEnabled() Then Exit Sub
     On Error Resume Next
-    Application.Run ADDIN_PREFIX & "LogJ", eventName, dataJson
+    Application.Run ADDIN_PREFIX & "LogJForWorkbook", ThisWorkbook.FullName, eventName, dataJson
 End Sub
 
 ' @desc 애드인 Reset에 위임하여 jsonl 파일을 초기화함, 애드인 부재 시 무해 무시
 Public Sub Reset()
     If Not EnsureEnabled() Then Exit Sub
     On Error Resume Next
-    Application.Run ADDIN_PREFIX & "Reset"
+    Application.Run ADDIN_PREFIX & "ResetForWorkbook", ThisWorkbook.FullName
 End Sub
 
 ' @desc 이벤트명 + 키/값 쌍들을 JSON object로 조립해 LogJ로 위임.
@@ -49,7 +49,7 @@ End Sub
 ' @desc 테스트 단언을 애드인 UnivDbg.AssertEq에 위임함.
 Public Sub AssertEq(name As String, expected As Variant, actual As Variant)
     If Not EnsureEnabled() Then Exit Sub
-    Application.Run ADDIN_PREFIX & "AssertEq", name, expected, actual
+    Application.Run ADDIN_PREFIX & "AssertEqForWorkbook", ThisWorkbook.FullName, name, expected, actual
 End Sub
 
 ' @desc 값 타입에 따라 JSON 표현 생성 (문자열만 escape+따옴표, 숫자/불린은 raw)
