@@ -292,12 +292,16 @@ Public Function GetHashIndexByIndex(ByVal lCol As Long) As DbHashIndex
         Exit Function
     End If
     
-    If lCol < LBound(m_vData, 2) Or lCol > UBound(m_vData, 2) Then Exit Function
-    
+    If lCol < 1 Or lCol > m_lColCount Then Exit Function
+
     Set idx = New DictHashIndex
     idx.BindTo Me
+
+    ' Phase 6.8 밀봉 - 컬럼 접근은 CopyColumn1D 경유
+    Dim vCol As Variant
+    vCol = CopyColumn1D(lCol)
     For i = (m_lHeaderRowIndex + 1) To m_lRowCount
-        idx.AddRow m_vData(i, lCol), i
+        idx.AddRow vCol(i), i
     Next i
 
     Set m_dicHashIndices(lCol) = idx
@@ -382,6 +386,43 @@ Private Function KeysFromIndex(ByVal idx As DbHashIndex) As Variant
     KeysFromIndex = vKeys
 End Function
 
+
+' 3-4a. 컬럼 접근 표면 획득 (By 컬럼명)
+' @desc 컬럼명 받아 세대 결속 컬럼 reader 반환, 미존재 컬럼 시 Nothing
+Public Function GetColumnReader(ByVal sColName As String) As DbColumnReader
+    sColName = UCase(Trim(sColName))
+    If Not m_dicHeaders.exists(sColName) Then Exit Function
+    Set GetColumnReader = GetColumnReaderByIndex(m_dicHeaders(sColName))
+End Function
+
+' 3-4b. 컬럼 접근 표면 획득 (By 숫자 인덱스)
+' @desc 컬럼 인덱스 받아 세대 결속 컬럼 reader 반환, 범위 밖 시 Nothing
+Public Function GetColumnReaderByIndex(ByVal lCol As Long) As DbColumnReader
+    Dim rdr As DbColumnReader
+
+    If lCol < 1 Or lCol > m_lColCount Then Exit Function
+
+    Set rdr = New DbColumnReader
+    rdr.BindData CopyColumn1D(lCol), ObjPtr(Me), m_lGeneration
+    Set GetColumnReaderByIndex = rdr
+End Function
+
+' [Internal] 컬럼 단위 m_vData 접근의 유일한 지점 (레이아웃 밀봉 접점)
+' 데이터 행 없으면 Empty 반환. 인덱스 빌드/GroupBy도 이 헬퍼를 경유한다.
+Private Function CopyColumn1D(ByVal lCol As Long) As Variant
+    Dim v() As Variant
+    Dim i As Long
+
+    If m_lRowCount < m_lHeaderRowIndex + 1 Then Exit Function
+
+    ReDim v(m_lHeaderRowIndex + 1 To m_lRowCount)
+    For i = m_lHeaderRowIndex + 1 To m_lRowCount
+        v(i) = m_vData(i, lCol)
+    Next i
+
+    CopyColumn1D = v
+End Function
+
 ' ==============================================================================
 ' [4] 속성 (Properties)
 ' ==============================================================================
@@ -463,7 +504,6 @@ Public Function GroupBy(ByVal sGroupCols As String, ByVal sAggList As String) As
     Dim lGroupCount As Long, lAggCount As Long
     
     Dim i As Long, j As Long, R As Long
-    Dim lColIdx As Long
     Dim vCell As Variant
     
     ' 초기화
@@ -507,15 +547,27 @@ Public Function GroupBy(ByVal sGroupCols As String, ByVal sAggList As String) As
         End If
     Next i
     
+    ' 2-0. [Hoisting] 컬럼 접근 밀봉 (Phase 6.8) - 대상 컬럼만 1D 사본으로 물질화
+    Dim vGroupCols() As Variant
+    Dim vAggCols() As Variant
+    ReDim vGroupCols(0 To lGroupCount - 1)
+    ReDim vAggCols(0 To lAggCount - 1)
+    For i = 0 To lGroupCount - 1
+        vGroupCols(i) = CopyColumn1D(arrGroupIndices(i))
+    Next i
+    For i = 0 To lAggCount - 1
+        vAggCols(i) = CopyColumn1D(arrAggIndices(i))
+    Next i
+
     ' 2. [Aggregation] 데이터 순회 및 집계 (Main Loop)
     ' Value 배열 구조: [Agg1_Val, Agg1_Count, Agg2_Val, Agg2_Count ...]
     ' AVG 계산을 위해 모든 항목에 대해 Count를 별도로 관리합니다.
-    
+
     For R = (m_lHeaderRowIndex + 1) To m_lRowCount
         ' 2-1. 복합 키(Composite Key) 생성 (Separator: |)
         sKey = ""
         For i = 0 To lGroupCount - 1
-            sKey = sKey & CStr(m_vData(R, arrGroupIndices(i))) & "|"
+            sKey = sKey & CStr(vGroupCols(i)(R)) & "|"
         Next i
         
         ' 2-2. 누적기 초기화 (첫 발견 시)
@@ -533,8 +585,7 @@ Public Function GroupBy(ByVal sGroupCols As String, ByVal sAggList As String) As
         vStats = dicAccumulator(sKey)
         
         For j = 0 To lAggCount - 1
-            lColIdx = arrAggIndices(j)
-            vCell = m_vData(R, lColIdx)
+            vCell = vAggCols(j)(R)
             
             ' 빈 값 제외 (COUNT 등에서 중요)
             If Not IsEmpty(vCell) Then

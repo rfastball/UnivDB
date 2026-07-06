@@ -114,18 +114,16 @@ Public Function Filter(ByVal sColName As String, ByVal sOp As String, ByVal vVal
     setSurvivors.BindTo m_SourceTable
     
     ' 1. [Hoisting] 루프 외부에서 모든 전처리 완료
-    Dim lColIdx As Long
-    Dim vSource As Variant
+    Dim rdr As DbColumnReader
+    Dim vCol As Variant
     Dim vCandidates As Variant
-    
-    ' 1-1. 컬럼 인덱스 1회 조회
-    On Error Resume Next
-    lColIdx = m_SourceTable.Headers(UCase(sColName))
-    If Err.Number <> 0 Then Err.Raise 9999, "clsQuery.Filter", "Column not found: " & sColName
-    On Error GoTo 0
-    
-    ' 1-2. 소스 배열 로컬 변수에 할당 (클래스 인터페이스 호출 오버헤드 제거)
-    vSource = m_SourceTable.RawArray
+
+    ' 1-1. 컬럼 접근 표면 획득 (Phase 6.8 밀봉 - 레이아웃 비의존)
+    Set rdr = m_SourceTable.GetColumnReader(sColName)
+    If rdr Is Nothing Then Err.Raise 9999, "clsQuery.Filter", "Column not found: " & sColName
+
+    ' 1-2. 컬럼 1D 배열 로컬 변수에 할당 (루프 내부는 직접 인덱싱 유지)
+    vCol = rdr.Values
     vCandidates = m_setCandidates.ToArray
     
     ' 2. [Dual Path] 연산자 종류에 따라 실행 경로 분기
@@ -148,7 +146,7 @@ Public Function Filter(ByVal sColName As String, ByVal sOp As String, ByVal vVal
             
             ' 최적화된 루프
             For i = LBound(vCandidates) To UBound(vCandidates)
-                vCell = vSource(vCandidates(i), lColIdx)
+                vCell = vCol(vCandidates(i))
                 If IsNumeric(vCell) Then
                     Select Case UCase(Trim(sOp))
                         Case "=": If CDbl(vCell) = dTarget Then setSurvivors.AddRow vCandidates(i)
@@ -171,27 +169,27 @@ Public Function Filter(ByVal sColName As String, ByVal sOp As String, ByVal vVal
             Select Case UCase(Trim(sOp))
                 Case "IS" ' StrComp 기반의 대소문자 무시 비교 (=)
                     For i = LBound(vCandidates) To UBound(vCandidates)
-                        If StrComp(CStr(vSource(vCandidates(i), lColIdx)), sTarget, vbTextCompare) = 0 Then
+                        If StrComp(CStr(vCol(vCandidates(i))), sTarget, vbTextCompare) = 0 Then
                             setSurvivors.AddRow vCandidates(i)
                         End If
                     Next i
                 Case "IS NOT" ' StrComp 기반의 대소문자 무시 비교 (<>)
                     For i = LBound(vCandidates) To UBound(vCandidates)
-                        If StrComp(CStr(vSource(vCandidates(i), lColIdx)), sTarget, vbTextCompare) <> 0 Then
+                        If StrComp(CStr(vCol(vCandidates(i))), sTarget, vbTextCompare) <> 0 Then
                             setSurvivors.AddRow vCandidates(i)
                         End If
                     Next i
                 Case "LIKE" ' VBA Like 연산자
                     sTarget = UCase(sTarget) ' Like는 vbTextCompare를 지원 안하므로 UCase 필요
                     For i = LBound(vCandidates) To UBound(vCandidates)
-                        If UCase(CStr(vSource(vCandidates(i), lColIdx))) Like sTarget Then
+                        If UCase(CStr(vCol(vCandidates(i)))) Like sTarget Then
                             setSurvivors.AddRow vCandidates(i)
                         End If
                     Next i
                 Case "NOT LIKE"
                      sTarget = UCase(sTarget)
                      For i = LBound(vCandidates) To UBound(vCandidates)
-                        If Not (UCase(CStr(vSource(vCandidates(i), lColIdx))) Like sTarget) Then
+                        If Not (UCase(CStr(vCol(vCandidates(i)))) Like sTarget) Then
                             setSurvivors.AddRow vCandidates(i)
                         End If
                     Next i
