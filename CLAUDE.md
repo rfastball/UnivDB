@@ -1,6 +1,8 @@
 # AGENTS.md / CLAUDE.md - UnivDB
 
-(하네스 루프 계약은 상위 Project/AGENTS.md 3장 참조)
+(하네스 루프 계약은 상위 Project/AGENTS.md 3장 참조. 이 파일과 AGENTS.md는 동일 내용으로 유지)
+
+## 개발 루프
 
 최초 1회: ..\..\_VbaHarness\vh install (사용자 PATH 등록 - 이후 어디서든 bare vh)
 일상 루프(src\ 기준, 설치 후):
@@ -10,7 +12,57 @@
 
 하네스 대상 워크북: dev_UnivDB.xlsb
 
-공용 패키지 의존성: UnivCore (deps.lock으로 버전 고정)
+테스트는 `Public Sub Test_*()`가 전량 자동 수집·실행된다(개별 선택 실행 없음).
+벤치마크는 `TestBenchDb.bas` - 결과는 `LogShim.LogJ`로 jsonl에 baseline 보존.
+
+## 의존성: UnivCore (deps.lock으로 버전 고정)
+
 - src\Core_* 는 설치 산출물 (gitignore, 직접 수정 금지 - 수정은 UnivCore에서)
 - 드리프트/구버전 검사: vh deps check, 재설치: vh deps install, 최신 재고정: vh deps update
 - vh run이 lock 기준 자동 hydrate하므로 평소엔 신경 쓸 필요 없음
+
+## 무엇을 만드는가
+
+Excel 배치 워크로드(1만~10만 행, 적재→변환→보고)용 인메모리 DB 라이브러리.
+지향점은 배포용 라이브러리: API 안정성, 명시적 계약, fail-fast 우선.
+"조용히 틀린 결과"가 최악의 실패 양식이다.
+
+## 아키텍처 3층
+
+1. **공개 파사드** - `UnivDB.bas` (InitDB / RegisterTable / Query / Report / Join / Builder)
+   + 메서드 체이닝 객체 `clsQuery`(CRUD), `clsReportBuilder`(ETL), `clsTableBuilder`(행 조립).
+   정본 스토리지는 `clsTable`의 row-major 2D Variant (`m_vData`). 공개 API 문서: `UnivDB_Reference.md`
+2. **내부 실행 언어** - 쿼리 실행은 rowID 중심으로 흐르고 파사드 경계에서만 물질화한다.
+   - `DbHashIndex.cls` = 백엔드 교체용 인터페이스. 기본 구현 `DictHashIndex`,
+     실험 백엔드 `CoreHashIndex`(FastHash 기반, `clsTable.IndexBackend = dbBackendCore` 명시 옵션 전용)
+   - 보조 구조: `DbRowList` / `DbRowSet` / `DbIndexCursor` / `DbColumnReader`(컬럼 접근 밀봉 표면)
+   - 키 정규화는 `modIndexKey.NormalizeIndexKey` 단일 계약: Empty→"", Error 키 skip, CStr, vbTextCompare(대소문자 무시)
+3. **Core 커널** - `Core_*` (UnivCore 공급). 해시/배열 저수준 프리미티브만. DB 의미론 없음.
+
+## 세대(Generation) 계약 - 최상위 불변식
+
+rowID는 특정 테이블의 특정 세대 안에서만 유효한 물리 행 번호다 (surrogate ID 아님).
+
+- 모든 구조 변경(Insert/Delete/OrderBy/Upsert/컬럼 추가·삭제)은 `clsTable.Generation`을 증가시킨다
+- 모든 파생 구조(HashIndex, RowSet, RowList, ColumnReader)는 생성 시점 (테이블, 세대)에 결속된다
+  (`modDbContract`가 검증, 불일치 시 Err.Raise 9998 fail-fast)
+- 새 파생 구조를 추가할 때의 질문은 하나다: "세대를 기억하는가, 불일치 시 실패하는가"
+
+## 금지 사항 (설계 결정으로 확정됨)
+
+- Core에 DB 의미론 주입 금지 (`Core_JoinTables`, `Core_GroupBy` 류)
+- 쿼리 실행 경로에 `someDict.Keys` / `New Collection` / `clsSet` 재도입 금지
+- raw `Dictionary(key -> Collection)` 인덱스 경로 재도입 금지 (인덱스 진실은 `DbHashIndex` 하나)
+- public 호환 shim(`SelectRows` 등) 시그니처 변경 금지
+- 백엔드 자동 선택 도입 금지 - 기본은 DictHashIndex, Core는 명시 옵션 + 벤치 기반 수동 판단
+
+## 알려진 미결 사항
+
+- GroupBy는 아직 구 스타일(로컬 Dictionary 누적기, binary compare)이라 인덱스 계약(대소문자 무시)과
+  키 의미론이 다르다 - `"IT"` vs `"it"`가 Where에선 같고 GroupBy에선 다른 그룹. 1.0 전 확정 필요 (D2)
+
+## 설계 문서 (읽는 순서)
+
+- `src/docs/tasks/2026-07-05_next_direction.md` - 현재 상태·실행 계획 (Phase R0~R5). 작업 착수 전 필독
+- `src/docs/UnivDB_design_decisions_202607.md` - 세대 계약·스토리지 레이아웃 결정과 근거
+- `src/docs/UnivDB_refactor_plan.md` - 내부 실행 표현 전환 원 설계 (Phase 0~8, 완료된 이력)

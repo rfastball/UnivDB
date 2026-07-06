@@ -1,4 +1,4 @@
-# UnivDB 향후 방향 구체화: Phase 6.5 ~ 8 실행 계획
+# UnivDB 향후 방향 구체화: Phase 6.5 ~ R5 실행 계획
 
 작성일: 2026-07-05
 상위 문서: `../UnivDB_refactor_plan.md` (Phase 0~8 원 설계), `../UnivDB_design_decisions_202607.md` (설계 결정 v2: 세대 계약 / 컬럼 접근 밀봉)
@@ -10,50 +10,49 @@
 
 | 결정 | 상태 | 비고 |
 |---|---|---|
-| 1. 내부 언어를 HashIndex/RowList/RowSet/IndexCursor로 | **~80% 완료** | Where/Filter/Join 신경로 완료. 레거시 raw Dictionary 인덱스 경로 잔존 |
-| 2. Dictionary 밀봉 (폐기 아님) | **부분 완료** | DictHashIndex 밀봉 완료. clsTable 이중 인덱스 캐시가 남은 누수원 |
-| 3. Core는 저수준 커널 유지 | **준수 중** | Core에 DB 의미론 침범 없음. 단 LongList/LongSet 공개 프리미티브 미비 |
+| 1. 내부 언어를 HashIndex/RowList/RowSet/IndexCursor로 | **~90% 완료** | Where/Filter/Join 신경로 완료. GroupBy만 구 스타일 누적기 잔존 |
+| 2. Dictionary 밀봉 (폐기 아님) | **완료** | raw Dictionary 인덱스 경로 제거, public shim은 HashIndex 어댑터로 유지 |
+| 3. Core는 저수준 커널 유지 | **준수 중** | Core에 DB 의미론 침범 없음. CoreHashIndex는 DB layer adapter |
 | 4. Join/Where/GroupBy/OrderBy는 DB 레이어 | **준수 중** | 모두 UnivDB 레이어에 있음. GroupBy는 아직 구 스타일(로컬 Dictionary 누적기) |
 | 5. rowID 중심, 파사드 경계 물질화 | **완료** | 쿼리 경로 중간 물질화 없음. SelectTable/ToArray 경계 확립 |
-| 6. 폐기 아닌 엔진화 | **진행 중** | Phase 0~6 커밋 완료 (78bfb54 ~ cad338c) |
+| 6. 폐기 아닌 엔진화 | **진행 중** | Phase 0~8 완료, 다음 병목은 GroupBy/컬럼 캐시 |
 | 7. 작은 검증 단위 커밋 | **준수 중** | vh run / vh check 루프 유지 |
-| 8. CoreHashIndex는 후속 선택지 | **완료** | Phase 7 구현 및 Phase 8 벤치 완료. 기본은 DictHashIndex 유지, CoreHashIndex는 명시적 실험 옵션 |
+| 8. CoreHashIndex는 후속 선택지 | **완료** | 기본은 DictHashIndex 유지. CoreHashIndex는 build/join/cursor-heavy 명시 옵션 |
 
 ---
 
-## 2. 탐색으로 확인된 잔여 갭
+## 2. 현재 갭 재분류
 
-### G1. 레거시 raw Dictionary 인덱스 경로 (최우선)
-`clsTable`이 인덱스 캐시를 **이중으로** 유지한다.
+### G1. 레거시 raw Dictionary 인덱스 경로 — 해소됨
+`clsTable`의 인덱스 진실은 `m_dicHashIndices` / `DbHashIndex`로 단일화되었다.
 
-- 구경로: `GetIndex` / `GetIndexByIndex` (clsTable.cls:269, 298) → raw `Dictionary(key -> Collection)` + `m_dicIndices` 캐시
-- 신경로: `GetHashIndex` / `GetHashIndexByIndex` (clsTable.cls:342, 365) → `DictHashIndex` + `m_dicHashIndices` 캐시
+- `SelectRows` / `SelectRowsByIndex`는 `DbRowList.ToCollection` 기반 호환 shim이다.
+- `GetUniqueKeys` / `GetUniqueKeysByIndex`는 `DbIndexCursor` 순회 기반 호환 shim이다.
+- `UpsertFrom`도 `GetHashIndex` + `TryGetRows` 경로를 사용한다.
 
-구경로 소비자 (전환 대상):
-- `SelectRows` (clsTable.cls:391) / `SelectRowsByIndex` (:409) — 호환 shim, Collection 반환 유지 필요
-- `GetUniqueKeys` (:425) / `GetUniqueKeysByIndex` (:437) — 호환 shim
-- `UpsertFrom` (:758) — **내부 실행 경로인데 구경로 사용 중** (shim 아님)
+현재 action 없음. 이후 금지사항은 raw `Dictionary(key -> Collection)` 인덱스 경로 재도입 금지다.
 
-같은 컬럼 인덱스가 두 번 빌드·캐시될 수 있고, 무효화 정책도 두 캐시를 모두 관리해야 하는 부담이 있다.
-
-### G2. 백엔드 교체 불가능한 타입 시그니처
-`GetHashIndex(...) As DictHashIndex` — 반환 타입이 **구체 클래스**다. Phase 7에서 CoreHashIndex를 같은 표면 아래 넣으려면 `DbHashIndex` 인터페이스(VBA `Implements`) 도입이 선행돼야 한다. 소비자는 clsQuery.cls:67, modEngine.bas:67-68 두 곳뿐이라 전환 비용이 작은 지금이 적기다.
+### G2. 백엔드 교체 불가능한 타입 시그니처 — 해소됨
+`DbHashIndex` 인터페이스가 도입되었고, `DictHashIndex` / `CoreHashIndex`가 같은 표면 뒤에 있다.
+`clsTable.GetHashIndex(ByIndex)`, `clsQuery`, `modEngine.JoinTable`은 `DbHashIndex`를 소비한다.
 
 ### G3. GroupBy 키 의미론 불일치
 `clsTable.GroupBy` (clsTable.cls:509~676)는 로컬 Dictionary 누적기 + `CStr & "|"` 복합 키를 쓴다. 노출 누수는 없으나(로컬 변수), `CompareMode` 미설정으로 **대소문자 구분(binary)** — 인덱스 계약(vbTextCompare, 대소문자 무시)과 다르다. `"IT"`와 `"it"`가 Where에서는 같은 키, GroupBy에서는 다른 그룹이 된다. 의도된 동작인지 결정 필요 (아래 D2).
 
-### G4. Core 측 프리미티브 미비
-- `Core_clsLongList` / `Core_clsLongSet` 공개 프리미티브 없음 (결정 3항에서 Core 책임으로 명시)
-- `Core_clsFastHash`는 키 전용 — slot→payload(DbRowList) 연결은 DB 레이어가 slot index 기반 병렬 배열로 해결 가능 (Core 변경 불필요, 단 build-only 사용 전제. FastHash의 swap-last delete는 slot index를 불안정하게 하므로 인덱스 용도에서는 delete 미사용)
+### G4. Core 측 프리미티브 — 부분 해소
+- `Core_clsFastHash`와 `Core_clsLongList`는 UnivCore lock 기준으로 공급된다.
+- `CoreHashIndex`는 slot→payload(`DbRowList`) 연결을 DB layer 병렬 배열로 해결한다.
+- `Core_clsLongSet` 또는 rowset 전용 Core primitive는 아직 보류다. 현재 병목상 우선순위는 GroupBy/컬럼 캐시 쪽이다.
 
-### G5. UnivDB ↔ UnivCore 통합 메커니즘 부재
-현재 UnivDB에서 `Core_*` 참조 0건. VBA는 패키지 시스템이 없으므로:
-- **권장: 모듈 복사 동기화** — `Core_*.bas/cls`를 UnivDB src로 복사 (LogShim과 같은 방식). 하네스가 프로젝트별 src를 import하는 구조와 일치
-- 대안(비권장): xlam 애드인 참조 — 클래스 인스턴스화에 PublicNotCreatable + 팩토리 필요, 배포·버전 결합 부담
+### G5. UnivDB ↔ UnivCore 통합 메커니즘 — 해소됨
+`deps.lock` + `vh deps` hydrate 방식으로 전환했다.
+`src/Core_*`는 설치 산출물(gitignore)이고, UnivDB는 lock 파일로 UnivCore 버전과 SHA-256을 고정한다.
 
 ---
 
 ## 3. 실행 계획
+
+아래 Phase 6.3~8은 완료된 이력이다. 다음 실제 진행 순서는 `Phase R0`부터 따른다.
 
 ### Phase 6.3 — 세대(Generation) 계약 도입 (설계 결정 v2-A, 선행 축)
 
@@ -134,16 +133,115 @@ CoreHashIndex (Implements DbHashIndex)
 - 특정 핫패스 2배 이상 → 해당 경로/키 프로파일에 한해 CoreHashIndex 검토
 - 자동 선택은 도입하지 않음 — 명시적 옵션 + 벤치 기반 수동 판단
 
-결정(2026-07-06 벤치):
+결정(2026-07-06 1차 벤치):
 - 기본 백엔드는 `DictHashIndex`로 유지한다.
 - `CoreHashIndex`는 `clsTable.IndexBackend = dbBackendCore` 명시 옵션으로만 사용한다.
 - 근거: 20k행 기준 Core는 index build에서만 개선(low-dup 58→38ms, high-dup 91→82ms)이고, Where/Join 주요 핫패스는 Dict와 동등하거나 더 느리다(Where hit 96→98ms, miss 95→101ms, Join 1:1 29→37ms, no-match left 43→63ms). 30% 개선/2배 핫패스 조건을 충족하지 못했다.
 
-커밋: `perf: evaluate hash index backends and set default policy`
+보정(2026-07-06 cursor 최적화 후):
+- `CoreHashIndex.Cursor`에서 임시 `Scripting.Dictionary` 재물질화를 제거한 뒤, Core는 join/cursor-heavy 경로에서 유의미한 이득을 보였다.
+- 최신 관측: join 1:1 약 19% 개선, no-match-heavy left join 약 18% 개선, low-dup index build 약 36% 개선.
+- Where 단독 조회는 여전히 Dict와 동등하거나 소폭 불리하다.
+- 따라서 정책은 다음으로 보정한다:
+  - 전역 기본은 `DictHashIndex` 유지.
+  - `CoreHashIndex`는 폐기하지 않고 build-heavy / join-heavy / cursor-heavy 워크로드의 명시 옵션으로 유지.
+  - 자동 선택은 아직 금지. GroupBy 엔진화 후 backend policy v2에서 재평가한다.
 
-### Phase 9 (후속 선택지) — GroupBy 엔진화
+커밋: `perf: evaluate hash index backends and set default policy`
+후속 커밋: `perf: avoid dictionary materialization for core index cursor`
+
+---
+
+## 3.1 재정렬된 다음 Phase
+
+### Phase R0 — 문서/상태 정렬
+
+목표:
+- 완료된 Phase 6.3~8과 실제 코드 상태를 문서에 반영한다.
+- CoreHashIndex 정책을 cursor 최적화 이후의 벤치 기준으로 보정한다.
+- 다음 작업을 GroupBy / 컬럼 캐시 / backend policy v2 축으로 재배치한다.
+
+범위:
+- 구현 변경 없음.
+- `tasks/2026-07-05_next_direction.md` 상태/갭/phase 정리.
+
+검증:
+- 문서 diff만 확인.
+
+### Phase R1 — GroupBy 의미론 결정 테스트
+
+목표:
+- GroupBy key 의미론을 배포 전 API 계약으로 확정한다.
+
+결정 후보:
+- A. 현행 유지: GroupBy는 대소문자 구분(binary), Where/index는 대소문자 무시.
+- B. 인덱스 계약으로 통일: GroupBy도 `NormalizeIndexKey` / case-insensitive / Empty→"" / Error skip 의미론을 따른다.
+
+권장:
+- B. Where / Join / GroupBy의 key 의미론을 같은 DB 계약으로 통일한다.
+
+작업:
+- 현재 동작을 드러내는 회귀 테스트를 먼저 추가한다.
+- 결정 후 기대값을 바꾸는 별도 커밋으로 처리한다.
+- 복합 key는 별도 helper로 분리하기 전까지 string concat 정책의 충돌 가능성을 문서화한다.
+
+### Phase R2 — 단일 컬럼 GroupBy 엔진화
+
+목표:
+- 단일 컬럼 GroupBy를 `DbHashIndex.Cursor` 기반으로 재작성한다.
+- `key -> RowList`가 이미 group partition이므로, 전체 행 재스캔과 로컬 Dictionary 누적기를 줄인다.
+
+작업:
+- 단일 group column + 단순 aggregate 경로부터 분기한다.
+- `idx.Cursor` 순회로 그룹 key와 row list를 얻고, row list 안에서 aggregate column만 읽는다.
+- Dict/Core 양쪽 벤치 비교를 기록한다.
+
+검증:
+- 기존 GroupBy 테스트 green.
+- GroupBy short/long key 벤치 비교.
+- Core cursor 최적화가 GroupBy에도 이득을 주는지 확인.
+
+### Phase R3 — 복합 GroupBy key 설계
+
+목표:
+- 복합 key를 단순 `CStr & "|"` concatenation에서 분리한다.
+
+작업 후보:
+- `DbCompositeKey` helper 또는 `modIndexKey` 내 복합 key encode helper 도입.
+- delimiter collision, Empty, Error, case-insensitive 비교 정책을 명시한다.
+- 단일 컬럼 엔진화 결과를 보고 복합 컬럼까지 HashIndex화할지 결정한다.
+
+### Phase R4 — ColumnReader / hot column cache 재평가
+
+목표:
+- 현재 `CopyColumn1D` 기반 컬럼 접근 밀봉 위에 실제 캐시를 둘 가치가 있는지 측정한다.
+
+작업:
+- 같은 컬럼을 반복 읽는 Filter / GroupBy / index build 케이스를 분리 벤치한다.
+- 세대 계약에 묶인 hot column cache 후보를 설계한다.
+- CoreHashIndex보다 큰 지렛대인지 비교한다.
+
+### Phase R5 — Backend policy v2
+
+목표:
+- GroupBy 엔진화와 hot column cache 벤치 이후 백엔드 정책을 재평가한다.
+
+현재 기본값:
+- `DictHashIndex` 기본 유지.
+- `CoreHashIndex`는 명시 옵션 유지.
+
+재평가 기준:
+- Where / Join / GroupBy 전체에서 Core가 안정적으로 30% 이상 이기면 기본 전환 검토.
+- 특정 경로만 이기면 자동 선택 대신 public/내부 명시 옵션 유지.
+- 자동 backend 선택은 cost model 없이 도입하지 않는다.
+
+---
+
+### 과거 Phase 9 후보 — GroupBy 엔진화
 
 Phase 8까지의 결과를 보고 판단. 그룹 키가 단일 컬럼이면 기존 `DbHashIndex`(키→RowList)가 이미 그룹핑 그 자체이므로, `idx.Cursor` 순회 + 집계로 재작성 가능(인덱스 재사용 시 재스캔 제거). 복합 키는 별도 결정 필요. **지금 단계의 스코프가 아님** — 문서화만 해둔다.
+
+이 항목은 `Phase R1~R3`으로 분해되었다.
 
 ---
 

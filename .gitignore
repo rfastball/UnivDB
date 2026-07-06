@@ -11,6 +11,9 @@
 *.xlsm
 *.xlsx
 
+# CodeManager 내보내기 스냅샷 (워크북에서 재생성 가능한 산출물)
+dev_UnivDB.md
+
 # test templates
 test_*/
 archive/
