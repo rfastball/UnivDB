@@ -144,7 +144,14 @@ Phase 8까지의 결과를 보고 판단. 그룹 키가 단일 컬럼이면 기�
 
 ## 4. 미결 결정 (착수 전 확인)
 
-- **D1. Core 통합 방식**: 모듈 복사 동기화(권장) vs xlam 참조. 복사 시 동기 스크립트/절차를 어디에 둘지 (UnivCore releases → UnivDB src).
+- **D1. Core 통합 방식**: ~~모듈 복사 동기화(권장) vs xlam 참조~~ → **결정됨 (2026-07-06)**:
+  릴리스 패키지 + `vh deps` 잠금 배포 채택. 문제의식은 UnivDB와 UnivFilter가 UnivCore를
+  공유해야 하는가였고, 답은 "소스 복사가 아니라 버전 잠금 채널로 공유"다.
+  - 생산자: UnivCore가 `Core 패키지 내보내기`(core.manifest 기준)로 `releases/UnivCore_latest.txt` 발행
+  - 소비자: `vh deps install`로 `src/Core_*` 전개(gitignore) + `deps.lock`(버전+SHA-256) 커밋,
+    `vh run`이 lock 기준 자동 hydrate. UnivDB는 UnivCore@20260706_1746(FastHash 포함) 채택 완료
+  - UnivFilter는 현재 구 릴리스(20260705_1005)와 일치하는 수동 사본 - 같은 채널로 후속 전환 (보류 중)
+  - xlam 참조 방식은 원안대로 비채택
 - **D2. GroupBy 키 의미론**: 대소문자 구분(현행) 유지 vs 인덱스 계약(무시)과 통일. 통일 시 동작 변경이므로 별도 커밋 + 테스트 명시 필요. Phase 9 전까지는 현행 유지. (설계 결정 v2 4장의 "비결정 D: NULL/타입 의미론"의 하위 항목 — 라이브러리 1.0 공개 전 확정 필수)
 
 ---
