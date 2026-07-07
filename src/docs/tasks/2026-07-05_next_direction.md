@@ -297,7 +297,7 @@ Phase 8까지의 결과를 보고 판단. 그룹 키가 단일 컬럼이면 기�
   - 생산자: UnivCore가 `Core 패키지 내보내기`(core.manifest 기준)로 `releases/UnivCore_latest.txt` 발행
   - 소비자: `vh deps install`로 `src/Core_*` 전개(gitignore) + `deps.lock`(버전+SHA-256) 커밋,
     `vh run`이 lock 기준 자동 hydrate. UnivDB는 UnivCore@20260706_1746(FastHash 포함) 채택 완료
-  - UnivFilter는 현재 구 릴리스(20260705_1005)와 일치하는 수동 사본 - 같은 채널로 후속 전환 (보류 중)
+  - UnivFilter의 deps 채널 전환은 별도 Filter 프로젝트에서 결정한다 (UnivDB 스코프 종료, 2026-07-07)
   - xlam 참조 방식은 원안대로 비채택
 - **D2. GroupBy 키 의미론**: ~~대소문자 구분(현행) 유지 vs 인덱스 계약(무시)과 통일~~ → **결정됨 (2026-07-07)**:
   B(인덱스 계약과 통일) 채택. Where / Join / GroupBy가 같은 키 의미론(vbTextCompare, Empty→"", Error skip)을 공유한다.
