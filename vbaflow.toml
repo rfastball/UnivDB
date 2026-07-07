@@ -1,0 +1,9 @@
+[project]
+name = "UnivDB"
+
+[excel]
+workbook = "UnivDB.xlsm"
+visible = true
+
+[src]
+root = "src"
