@@ -522,6 +522,8 @@ End Sub
 Public Function GroupBy(ByVal sGroupCols As String, ByVal sAggList As String) As clsTable
     
     Dim dicAccumulator As Object ' Key -> Array(Running Stats)
+    Dim dicGroupParts As Object  ' Key -> 정규화된 그룹 값 파트 (첫 등장 표기, 렌더용)
+    Dim arrParts() As String
     Dim vRow As Variant
     Dim vStats As Variant
     Dim sKey As String, sVal As String
@@ -538,6 +540,8 @@ Public Function GroupBy(ByVal sGroupCols As String, ByVal sAggList As String) As
     ' 초기화 - 키 의미론은 인덱스 계약(modIndexKey)과 동일: 대소문자 무시
     Set dicAccumulator = CreateObject("Scripting.Dictionary")
     dicAccumulator.CompareMode = vbTextCompare
+    Set dicGroupParts = CreateObject("Scripting.Dictionary")
+    dicGroupParts.CompareMode = vbTextCompare
     arrGroupCols = Split(sGroupCols, ",")
     arrAggItems = Split(sAggList, ",")
     lGroupCount = UBound(arrGroupCols) + 1
@@ -683,7 +687,7 @@ Public Function GroupBy(ByVal sGroupCols As String, ByVal sAggList As String) As
     ' AVG 계산을 위해 모든 항목에 대해 Count를 별도로 관리합니다.
 
     For R = (m_lHeaderRowIndex + 1) To m_lRowCount
-        ' 2-1. 복합 키(Composite Key) 생성 (Separator: |)
+        ' 2-1. 복합 키(Composite Key) 생성 - 길이 접두 인코딩(modIndexKey, R3)으로 구분자 충돌 차단
         ' 인덱스 계약 준수: Empty->"", Error 키 행은 그룹핑에서 제외 (인덱스 AddRow skip과 동치)
         sKey = ""
         bSkipRow = False
@@ -692,11 +696,11 @@ Public Function GroupBy(ByVal sGroupCols As String, ByVal sAggList As String) As
                 bSkipRow = True
                 Exit For
             End If
-            sKey = sKey & modIndexKey.NormalizeIndexKey(vGroupCols(i)(R)) & "|"
+            sKey = sKey & modIndexKey.EncodeCompositeKeyPart(vGroupCols(i)(R)) & "|"
         Next i
 
         If Not bSkipRow Then
-            ' 2-2. 누적기 초기화 (첫 발견 시)
+            ' 2-2. 누적기 초기화 (첫 발견 시) - 렌더용 그룹 값 파트도 첫 등장 표기로 보존
             If Not dicAccumulator.exists(sKey) Then
                 ReDim vStats(0 To (lAggCount * 2) - 1) ' [Val, Cnt, Val, Cnt...]
                 ' MIN/MAX 초기화 로직 필요시 추가 (여기선 간단히 0/Empty 처리)
@@ -705,6 +709,12 @@ Public Function GroupBy(ByVal sGroupCols As String, ByVal sAggList As String) As
                     If arrAggFuncs(j) = "MAX" Then vStats(j * 2) = Empty
                 Next j
                 dicAccumulator(sKey) = vStats
+
+                ReDim arrParts(0 To lGroupCount - 1)
+                For i = 0 To lGroupCount - 1
+                    arrParts(i) = modIndexKey.NormalizeIndexKey(vGroupCols(i)(R))
+                Next i
+                dicGroupParts(sKey) = arrParts
             End If
 
             ' 2-3. 상태 업데이트 (Accumulate)
@@ -763,8 +773,8 @@ Public Function GroupBy(ByVal sGroupCols As String, ByVal sAggList As String) As
         sKey = vKeys(R)
         vStats = dicAccumulator(sKey)
         
-        ' 그룹 컬럼 복원
-        arrTemp = Split(sKey, "|")
+        ' 그룹 컬럼 복원 - 키 재분해(Split) 대신 첫 등장 시 보존한 파트 사용 (인코딩 무관)
+        arrTemp = dicGroupParts(sKey)
         For i = 0 To lGroupCount - 1
             vResultData(R + 2, i + 1) = arrTemp(i)
         Next i

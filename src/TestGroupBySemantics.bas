@@ -63,8 +63,8 @@ Public Sub Test_GroupBySem_EmptyKey()
     LogShim.AssertEq "gbsem_empty_sum", 20, tG.Value(3, "Score_SUM")
 End Sub
 
-' 문서화된 한계(R3 대상): 복합 키는 정규화 문자열의 "|" 연결이라 구분자 포함 값이 충돌한다
-' ("X|Y","Z")와 ("X","Y|Z")가 같은 키 "X|Y|Z|"로 병합됨
+' R3: 복합 키는 길이 접두 인코딩(modIndexKey.EncodeCompositeKeyPart)이라
+' 구분자 포함 값도 충돌하지 않는다 - ("X|Y","Z")와 ("X","Y|Z")는 다른 그룹
 Public Sub Test_GroupBySem_CompositeDelimiterCollision()
     Dim T As clsTable
     Dim tG As clsTable
@@ -78,8 +78,33 @@ Public Sub Test_GroupBySem_CompositeDelimiterCollision()
     T.LoadFromArray vData
 
     Set tG = T.GroupBy("A, B", "Score:SUM")
-    LogShim.AssertEq "gbsem_collision_groups", 2, tG.RowCount ' 헤더 + 병합된 1그룹
-    LogShim.AssertEq "gbsem_collision_sum", 30, tG.Value(2, "Score_SUM")
+    LogShim.AssertEq "gbsem_collision_groups", 3, tG.RowCount ' 헤더 + 구분된 2그룹
+    LogShim.AssertEq "gbsem_collision_first_a", "X|Y", tG.Value(2, "A")
+    LogShim.AssertEq "gbsem_collision_first_sum", 10, tG.Value(2, "Score_SUM")
+    LogShim.AssertEq "gbsem_collision_second_b", "Y|Z", tG.Value(3, "B")
+    LogShim.AssertEq "gbsem_collision_second_sum", 20, tG.Value(3, "Score_SUM")
+End Sub
+
+' 복합 키 경로(누적기)도 단일 컬럼 엔진 경로와 같은 키 계약을 따른다:
+' 대소문자 무시 병합(라벨은 첫 등장 표기) + Error 키 행 skip
+Public Sub Test_GroupBySem_CompositeContractParity()
+    Dim T As clsTable
+    Dim tG As clsTable
+    Dim vData(1 To 4, 1 To 3) As Variant
+
+    vData(1, 1) = "Dept": vData(1, 2) = "Tag": vData(1, 3) = "Score"
+    vData(2, 1) = "IT": vData(2, 2) = "x": vData(2, 3) = 10
+    vData(3, 1) = "it": vData(3, 2) = "X": vData(3, 3) = 20
+    vData(4, 1) = CVErr(xlErrNA): vData(4, 2) = "x": vData(4, 3) = 99
+
+    Set T = UnivDB.CreateTable()
+    T.LoadFromArray vData
+
+    Set tG = T.GroupBy("Dept, Tag", "Score:SUM")
+    LogShim.AssertEq "gbsem_comp_groups", 2, tG.RowCount ' 헤더 + 통합 1그룹 (Error 행 제외)
+    LogShim.AssertEq "gbsem_comp_label_dept", "IT", tG.Value(2, "Dept")
+    LogShim.AssertEq "gbsem_comp_label_tag", "x", tG.Value(2, "Tag")
+    LogShim.AssertEq "gbsem_comp_sum", 30, tG.Value(2, "Score_SUM")
 End Sub
 
 ' 현행 유지: 그룹 컬럼 값은 키 문자열 재분해(Split)로 복원되므로 숫자도 String으로 나온다

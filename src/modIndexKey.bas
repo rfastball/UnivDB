@@ -22,3 +22,15 @@ Public Function NormalizeIndexKey(ByVal key As Variant) As String
         NormalizeIndexKey = CStr(key)
     End If
 End Function
+
+' 복합 키 인코딩 (R3): 길이 접두 "len:value" 조각을 "|"로 연결한다.
+' 길이가 파싱 권위이므로 값에 "|"나 ":"가 있어도 충돌 불가 (이스케이프 불필요).
+' 접두 숫자와 구분 문자는 대소문자가 없어 vbTextCompare 아래서도 단사성이 유지된다.
+' Empty는 NormalizeIndexKey 계약대로 "0:" 조각이 되고, Error 값은 호출부가 행 skip.
+
+' @desc 키 파트 받아 길이 접두 인코딩 조각 반환, 복합 키 조립용
+Public Function EncodeCompositeKeyPart(ByVal v As Variant) As String
+    Dim s As String
+    s = NormalizeIndexKey(v)
+    EncodeCompositeKeyPart = CStr(Len(s)) & ":" & s
+End Function

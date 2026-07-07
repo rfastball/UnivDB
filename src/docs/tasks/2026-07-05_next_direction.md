@@ -227,6 +227,16 @@ CoreHashIndex (Implements DbHashIndex)
 - delimiter collision, Empty, Error, case-insensitive 비교 정책을 명시한다.
 - 단일 컬럼 엔진화 결과를 보고 복합 컬럼까지 HashIndex화할지 결정한다.
 
+완료 (2026-07-07):
+- `modIndexKey.EncodeCompositeKeyPart` 도입: 길이 접두 "len:value" 조각을 "|"로 연결.
+  길이가 파싱 권위이므로 값에 구분자/콜론이 있어도 충돌 불가 (이스케이프 불요).
+  접두 숫자와 구분 문자는 대소문자가 없어 vbTextCompare 아래서도 단사성이 유지된다.
+- 그룹 값 복원을 키 Split 재분해에서 첫 등장 시 보존한 정규화 파트(dicGroupParts)로 전환.
+- 정책 확정: Empty -> "0:" 조각(빈 문자열), Error 키 행 skip, 대소문자 무시 병합(라벨은 첫 등장 표기).
+  회귀: `Test_GroupBySem_CompositeDelimiterCollision`(충돌 구분), `Test_GroupBySem_CompositeContractParity`.
+- **복합 컬럼 HashIndex화는 보류**: clsTable 인덱스 표면이 단일 컬럼 전제이고 복합 조합의
+  캐시 키 폭발 우려 대비 이득이 미측정. 복합 GroupBy가 병목으로 관측되면 R5 policy v2와 함께 재평가.
+
 ### Phase R4 — ColumnReader / hot column cache 재평가
 
 목표:
