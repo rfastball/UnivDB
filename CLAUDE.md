@@ -54,13 +54,14 @@ rowID는 특정 테이블의 특정 세대 안에서만 유효한 물리 행 번
 - 쿼리 실행 경로에 `someDict.Keys` / `New Collection` / `clsSet` 재도입 금지
 - raw `Dictionary(key -> Collection)` 인덱스 경로 재도입 금지 (인덱스 진실은 `DbHashIndex` 하나)
 - public 호환 shim(`SelectRows` 등) 시그니처 변경 금지
-- 백엔드 자동 선택 도입 금지 - 기본은 DictHashIndex, Core는 명시 옵션 + 벤치 기반 수동 판단
+- 백엔드 자동 선택 도입 금지 - 기본은 DictHashIndex (policy v2, 2026-07-07 재확정),
+  Core는 build/join/cursor/GroupBy-heavy 명시 옵션 + 벤치 기반 수동 판단
 
 ## 알려진 미결 사항
 
 - GroupBy 키 의미론은 인덱스 계약과 통일됨 (R1/D2 결정, 2026-07-07). 단일 컬럼은 인덱스 커서
-  기반 엔진화 (R2), 복합 키는 길이 접두 인코딩으로 충돌-프리 (R3). 복합 경로의 누적기 엔진화
-  여부는 병목 관측 시 R5 policy v2와 함께 재평가
+  기반 엔진화 (R2), 복합 키는 길이 접두 인코딩으로 충돌-프리 (R3). 복합 경로의 누적기 엔진화와
+  hot column cache(R4 보류)는 병목 관측 시 재평가
 - NULL/타입 의미론(비결정 D)은 1.0 전 확정 필요 - GroupBy 그룹 컬럼 값의 String화도 이 소관
 
 ## 설계 문서 (읽는 순서)

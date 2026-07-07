@@ -271,6 +271,14 @@ CoreHashIndex (Implements DbHashIndex)
 - 특정 경로만 이기면 자동 선택 대신 public/내부 명시 옵션 유지.
 - 자동 backend 선택은 cost model 없이 도입하지 않는다.
 
+결정 (2026-07-07, policy v2):
+- **기본 백엔드는 `DictHashIndex` 유지.** 30% 전면 우위 조건 미충족:
+  Where 동등~소폭 열세 / Join ~19% / index build(low-dup) ~36% / GroupBy(R2 warm) 7→6ms(~14%).
+- `CoreHashIndex` 명시 옵션의 적용 범주에 GroupBy-heavy를 추가한다
+  (build / join / cursor / GroupBy-heavy 워크로드).
+- 자동 선택은 계속 금지. 컬럼 캐시(R4 보류)가 경쟁 지렛대에서 탈락했으므로,
+  다음 재평가 트리거는 새 핫패스 관측 또는 UnivCore 커널 개선이다.
+
 ---
 
 ### 과거 Phase 9 후보 — GroupBy 엔진화
