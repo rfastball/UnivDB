@@ -313,6 +313,61 @@ Public Sub Test_BenchDb_GroupBy()
 End Sub
 
 ' ==============================================================================
+' 6. 컬럼 접근 (R4: hot column cache 지렛대 측정)
+' copy_ms = 호출당 CopyColumn1D 순수 비용 (캐시가 절약 가능한 상한)
+' filter_ms / groupby_warm_ms = 그 복사를 포함한 소비자 전체 비용
+' 캐시 지렛대 = copy 비중. CoreHashIndex의 join ~19% 개선과 비교해 도입 여부 결정
+' ==============================================================================
+
+Public Sub Test_BenchDb_ColumnAccess()
+    Const ITER As Long = 50
+    Dim T As clsTable
+    Dim rdr As DbColumnReader
+    Dim q As clsQuery
+    Dim tRes As clsTable
+    Dim i As Long, R As Long
+    Dim msCopy(0 To 2) As Double, msFilter(0 To 2) As Double, msGroup(0 To 2) As Double
+
+    Set T = GetBench20k()
+    T.IndexBackend = dbBackendDict
+    T.GetHashIndex "Dept" ' GroupBy warm 경로용 인덱스 프리워밍
+
+    ' warm-up
+    Set rdr = T.GetColumnReader("Score")
+    Set q = UnivDB.Query(T).Filter("Score", ">", 500)
+    Set tRes = T.GroupBy("Dept", "Score:SUM")
+
+    For R = 0 To 2
+        TicStart
+        For i = 1 To ITER
+            Set rdr = T.GetColumnReader("Score") ' 호출당 CopyColumn1D 1회
+        Next i
+        msCopy(R) = TicMs
+
+        TicStart
+        For i = 1 To ITER
+            Set q = UnivDB.Query(T).Filter("Score", ">", 500) ' 복사 + 전 행 스캔
+        Next i
+        msFilter(R) = TicMs
+
+        TicStart
+        For i = 1 To ITER
+            Set tRes = T.GroupBy("Dept", "Score:SUM") ' warm 인덱스: agg 컬럼 복사 + 커서 집계
+        Next i
+        msGroup(R) = TicMs
+    Next R
+
+    LogShim.AssertEq "bench_colaccess_reader_alive", True, Not (rdr Is Nothing)
+    LogShim.AssertEq "bench_colaccess_group_rows", CLng(6), tRes.RowCount
+
+    LogShim.LogEvent "bench_db_column_access", _
+        Array("rows", "iter", "copy_ms", "filter_ms", "groupby_warm_ms"), _
+        Array(BENCH_ROWS, ITER, CLng(Median3(msCopy(0), msCopy(1), msCopy(2))), _
+              CLng(Median3(msFilter(0), msFilter(1), msFilter(2))), _
+              CLng(Median3(msGroup(0), msGroup(1), msGroup(2))))
+End Sub
+
+' ==============================================================================
 ' 데이터 생성 헬퍼
 ' ==============================================================================
 

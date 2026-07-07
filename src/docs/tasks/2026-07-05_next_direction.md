@@ -247,6 +247,16 @@ CoreHashIndex (Implements DbHashIndex)
 - 세대 계약에 묶인 hot column cache 후보를 설계한다.
 - CoreHashIndex보다 큰 지렛대인지 비교한다.
 
+완료 (2026-07-07, 결론: 캐시 도입 보류):
+- 분리 벤치 신설 (`Test_BenchDb_ColumnAccess`, 20k행 x 50회):
+  copy 1.1ms/호출, Filter 전체 8.3ms/호출(copy 비중 ~13%), warm GroupBy 7.0ms/호출(~16%).
+- 캐시가 절약 가능한 상한이 13~16%인 데다, VBA는 Variant 배열 대입이 전체 복사라
+  핸드아웃 시점 복사가 남는다. 실현 이득은 상한보다 더 낮다.
+- 설계 결정 v2 2.2의 열린 질문("핫 컬럼 캐시 vs CoreHashIndex")에 답:
+  **CoreHashIndex(join ~19%, build ~36%)가 더 큰 지렛대다.** 컬럼 캐시는 세대 계약
+  파생물 후보로만 남기고 도입하지 않는다. 같은 컬럼 재스캔이 훨씬 고빈도인 워크로드가
+  관측되면 재평가.
+
 ### Phase R5 — Backend policy v2
 
 목표:
