@@ -54,10 +54,12 @@ rowID는 특정 테이블의 특정 세대 안에서만 유효한 물리 행 번
 - GroupBy 키 의미론은 인덱스 계약과 통일됨 (R1/D2 결정, 2026-07-07). 단일 컬럼은 인덱스 커서
   기반 엔진화 (R2), 복합 키는 길이 접두 인코딩으로 충돌-프리 (R3). 복합 경로의 누적기 엔진화와
   hot column cache(R4 보류)는 병목 관측 시 재평가
-- NULL/타입 의미론(비결정 D)은 1.0 전 확정 필요 - GroupBy 그룹 컬럼 값의 String화도 이 소관
+- NULL/타입 의미론(비결정 D)은 1.0 전 확정 필요 - GroupBy 그룹 컬럼 값의 String화도 이 소관.
+  실행 계획(D0~D3)은 `src/docs/tasks/2026-07-08_null_type_semantics.md` (방향 승인됨)
 
 ## 설계 문서 (읽는 순서)
 
-- `src/docs/tasks/2026-07-05_next_direction.md` - 현재 상태·실행 계획 (Phase R0~R5). 작업 착수 전 필독
+- `src/docs/tasks/2026-07-08_null_type_semantics.md` - 다음 작업 축 (비결정 D 실행 계획 D0~D3)
+- `src/docs/tasks/2026-07-05_next_direction.md` - Phase R0~R5 기록 (완료된 이력 + 결정 로그)
 - `src/docs/UnivDB_design_decisions_202607.md` - 세대 계약·스토리지 레이아웃 결정과 근거
 - `src/docs/UnivDB_refactor_plan.md` - 내부 실행 표현 전환 원 설계 (Phase 0~8, 완료된 이력)
