@@ -78,9 +78,10 @@ Public Sub Test_Baseline_GroupBy()
     Set T = NewBaseTable()
     Set tResult = T.GroupBy("Dept", "Score:SUM,ID:COUNT")
 
-    LogShim.AssertEq "baseline_groupby_rowcount", 5, tResult.RowCount
+    ' R1 결정 B: GroupBy 키도 인덱스 계약(대소문자 무시)을 따름 - "IT"/"it"는 한 그룹
+    LogShim.AssertEq "baseline_groupby_rowcount", 4, tResult.RowCount
     LogShim.AssertEq "baseline_groupby_cols", 3, tResult.ColCount
-    LogShim.AssertEq "baseline_groupby_it_rows", 2, tResult.SelectRows("Dept", "IT").Count
+    LogShim.AssertEq "baseline_groupby_it_rows", 1, tResult.SelectRows("Dept", "IT").Count
 End Sub
 
 Private Function NewBaseTable() As clsTable

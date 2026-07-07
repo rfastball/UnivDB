@@ -36,8 +36,8 @@
 `DbHashIndex` 인터페이스가 도입되었고, `DictHashIndex` / `CoreHashIndex`가 같은 표면 뒤에 있다.
 `clsTable.GetHashIndex(ByIndex)`, `clsQuery`, `modEngine.JoinTable`은 `DbHashIndex`를 소비한다.
 
-### G3. GroupBy 키 의미론 불일치
-`clsTable.GroupBy` (clsTable.cls:509~676)는 로컬 Dictionary 누적기 + `CStr & "|"` 복합 키를 쓴다. 노출 누수는 없으나(로컬 변수), `CompareMode` 미설정으로 **대소문자 구분(binary)** — 인덱스 계약(vbTextCompare, 대소문자 무시)과 다르다. `"IT"`와 `"it"`가 Where에서는 같은 키, GroupBy에서는 다른 그룹이 된다. 의도된 동작인지 결정 필요 (아래 D2).
+### G3. GroupBy 키 의미론 불일치 — 해소됨 (2026-07-07, 결정 B)
+`clsTable.GroupBy`의 키 의미론을 인덱스 계약과 통일했다: 누적기 `CompareMode = vbTextCompare`, 키 정규화는 `modIndexKey.NormalizeIndexKey`(Empty→""), 그룹 키가 Error인 행은 skip(인덱스 AddRow와 동치). 회귀 스위트는 `TestGroupBySemantics.bas`. 남은 한계는 복합 키 `|` concat의 구분자 충돌 — R3에서 encode helper로 해소한다. GroupBy 엔진(로컬 Dictionary 누적기 자체)의 교체는 R2.
 
 ### G4. Core 측 프리미티브 — 부분 해소
 - `Core_clsFastHash`와 `Core_clsLongList`는 UnivCore lock 기준으로 공급된다.
@@ -185,6 +185,13 @@ CoreHashIndex (Implements DbHashIndex)
 - 결정 후 기대값을 바꾸는 별도 커밋으로 처리한다.
 - 복합 key는 별도 helper로 분리하기 전까지 string concat 정책의 충돌 가능성을 문서화한다.
 
+결정 및 완료 (2026-07-07):
+- **B 채택.** 커밋 1 `test: pin current groupby key semantics`로 현행 고정 후,
+  커밋 2에서 GroupBy를 vbTextCompare + `NormalizeIndexKey` + Error 행 skip으로 전환.
+- 동작 변경 기록: `"IT"`/`"it"` 통합(라벨은 첫 등장 표기), Error 키 행 그룹핑 제외,
+  `Test_Baseline_GroupBy` 기대 그룹 수 4→3 (헤더 포함 5→4).
+- 구분자 충돌은 `Test_GroupBySem_CompositeDelimiterCollision`으로 문서화 (R3 대상).
+
 ### Phase R2 — 단일 컬럼 GroupBy 엔진화
 
 목표:
@@ -255,7 +262,9 @@ Phase 8까지의 결과를 보고 판단. 그룹 키가 단일 컬럼이면 기�
     `vh run`이 lock 기준 자동 hydrate. UnivDB는 UnivCore@20260706_1746(FastHash 포함) 채택 완료
   - UnivFilter는 현재 구 릴리스(20260705_1005)와 일치하는 수동 사본 - 같은 채널로 후속 전환 (보류 중)
   - xlam 참조 방식은 원안대로 비채택
-- **D2. GroupBy 키 의미론**: 대소문자 구분(현행) 유지 vs 인덱스 계약(무시)과 통일. 통일 시 동작 변경이므로 별도 커밋 + 테스트 명시 필요. Phase 9 전까지는 현행 유지. (설계 결정 v2 4장의 "비결정 D: NULL/타입 의미론"의 하위 항목 — 라이브러리 1.0 공개 전 확정 필수)
+- **D2. GroupBy 키 의미론**: ~~대소문자 구분(현행) 유지 vs 인덱스 계약(무시)과 통일~~ → **결정됨 (2026-07-07)**:
+  B(인덱스 계약과 통일) 채택. Where / Join / GroupBy가 같은 키 의미론(vbTextCompare, Empty→"", Error skip)을 공유한다.
+  상세는 Phase R1 결정 기록 참조. 그룹 컬럼 값의 String화(타입 보존)는 여전히 비결정 D(NULL/타입 의미론) 소관.
 
 ---
 

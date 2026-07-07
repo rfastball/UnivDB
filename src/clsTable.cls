@@ -533,9 +533,11 @@ Public Function GroupBy(ByVal sGroupCols As String, ByVal sAggList As String) As
     
     Dim i As Long, j As Long, R As Long
     Dim vCell As Variant
-    
-    ' 초기화
+    Dim bSkipRow As Boolean
+
+    ' 초기화 - 키 의미론은 인덱스 계약(modIndexKey)과 동일: 대소문자 무시
     Set dicAccumulator = CreateObject("Scripting.Dictionary")
+    dicAccumulator.CompareMode = vbTextCompare
     arrGroupCols = Split(sGroupCols, ",")
     arrAggItems = Split(sAggList, ",")
     lGroupCount = UBound(arrGroupCols) + 1
@@ -593,56 +595,64 @@ Public Function GroupBy(ByVal sGroupCols As String, ByVal sAggList As String) As
 
     For R = (m_lHeaderRowIndex + 1) To m_lRowCount
         ' 2-1. 복합 키(Composite Key) 생성 (Separator: |)
+        ' 인덱스 계약 준수: Empty->"", Error 키 행은 그룹핑에서 제외 (인덱스 AddRow skip과 동치)
         sKey = ""
+        bSkipRow = False
         For i = 0 To lGroupCount - 1
-            sKey = sKey & CStr(vGroupCols(i)(R)) & "|"
-        Next i
-        
-        ' 2-2. 누적기 초기화 (첫 발견 시)
-        If Not dicAccumulator.exists(sKey) Then
-            ReDim vStats(0 To (lAggCount * 2) - 1) ' [Val, Cnt, Val, Cnt...]
-            ' MIN/MAX 초기화 로직 필요시 추가 (여기선 간단히 0/Empty 처리)
-            For j = 0 To lAggCount - 1
-                If arrAggFuncs(j) = "MIN" Then vStats(j * 2) = Empty
-                If arrAggFuncs(j) = "MAX" Then vStats(j * 2) = Empty
-            Next j
-            dicAccumulator(sKey) = vStats
-        End If
-        
-        ' 2-3. 상태 업데이트 (Accumulate)
-        vStats = dicAccumulator(sKey)
-        
-        For j = 0 To lAggCount - 1
-            vCell = vAggCols(j)(R)
-            
-            ' 빈 값 제외 (COUNT 등에서 중요)
-            If Not IsEmpty(vCell) Then
-                ' Count 증가 (홀수 인덱스)
-                vStats(j * 2 + 1) = vStats(j * 2 + 1) + 1
-                
-                ' Value 연산 (짝수 인덱스)
-                Select Case arrAggFuncs(j)
-                    Case "SUM", "AVG"
-                        If IsNumeric(vCell) Then vStats(j * 2) = vStats(j * 2) + vCell
-                    Case "COUNT"
-                        ' Count는 위에서 이미 처리함 (Value 칸은 사용 안 함)
-                    Case "MAX"
-                        If IsEmpty(vStats(j * 2)) Then
-                            vStats(j * 2) = vCell
-                        ElseIf vCell > vStats(j * 2) Then
-                            vStats(j * 2) = vCell
-                        End If
-                    Case "MIN"
-                        If IsEmpty(vStats(j * 2)) Then
-                            vStats(j * 2) = vCell
-                        ElseIf vCell < vStats(j * 2) Then
-                            vStats(j * 2) = vCell
-                        End If
-                End Select
+            If IsError(vGroupCols(i)(R)) Then
+                bSkipRow = True
+                Exit For
             End If
-        Next j
-        
-        dicAccumulator(sKey) = vStats ' Value타입이므로 다시 넣어줘야 함 (Variant Array 특성)
+            sKey = sKey & modIndexKey.NormalizeIndexKey(vGroupCols(i)(R)) & "|"
+        Next i
+
+        If Not bSkipRow Then
+            ' 2-2. 누적기 초기화 (첫 발견 시)
+            If Not dicAccumulator.exists(sKey) Then
+                ReDim vStats(0 To (lAggCount * 2) - 1) ' [Val, Cnt, Val, Cnt...]
+                ' MIN/MAX 초기화 로직 필요시 추가 (여기선 간단히 0/Empty 처리)
+                For j = 0 To lAggCount - 1
+                    If arrAggFuncs(j) = "MIN" Then vStats(j * 2) = Empty
+                    If arrAggFuncs(j) = "MAX" Then vStats(j * 2) = Empty
+                Next j
+                dicAccumulator(sKey) = vStats
+            End If
+
+            ' 2-3. 상태 업데이트 (Accumulate)
+            vStats = dicAccumulator(sKey)
+
+            For j = 0 To lAggCount - 1
+                vCell = vAggCols(j)(R)
+
+                ' 빈 값 제외 (COUNT 등에서 중요)
+                If Not IsEmpty(vCell) Then
+                    ' Count 증가 (홀수 인덱스)
+                    vStats(j * 2 + 1) = vStats(j * 2 + 1) + 1
+
+                    ' Value 연산 (짝수 인덱스)
+                    Select Case arrAggFuncs(j)
+                        Case "SUM", "AVG"
+                            If IsNumeric(vCell) Then vStats(j * 2) = vStats(j * 2) + vCell
+                        Case "COUNT"
+                            ' Count는 위에서 이미 처리함 (Value 칸은 사용 안 함)
+                        Case "MAX"
+                            If IsEmpty(vStats(j * 2)) Then
+                                vStats(j * 2) = vCell
+                            ElseIf vCell > vStats(j * 2) Then
+                                vStats(j * 2) = vCell
+                            End If
+                        Case "MIN"
+                            If IsEmpty(vStats(j * 2)) Then
+                                vStats(j * 2) = vCell
+                            ElseIf vCell < vStats(j * 2) Then
+                                vStats(j * 2) = vCell
+                            End If
+                    End Select
+                End If
+            Next j
+
+            dicAccumulator(sKey) = vStats ' Value타입이므로 다시 넣어줘야 함 (Variant Array 특성)
+        End If
     Next R
     
     ' 3. [Render] 결과 테이블 생성
