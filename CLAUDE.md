@@ -2,7 +2,7 @@
 
 (시그니처 스키마·src 편집 주의는 상위 `VBA_Projects/CLAUDE.md` 참조. 이 파일과 AGENTS.md는 동일 내용으로 유지)
 
-대상 워크북: dev_UnivDB.xlsb
+대상 워크북: UnivDB.xlsm (구 dev_UnivDB.xlsb에서 이름 변경 및 xlsm 마이그레이션됨)
 
 테스트는 `Public Sub Test_*()`가 전량 자동 수집·실행된다(개별 선택 실행 없음).
 벤치마크는 `TestBenchDb.bas` - 결과는 `LogShim.LogJ`로 jsonl에 baseline 보존.
