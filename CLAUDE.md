@@ -1,16 +1,8 @@
 # AGENTS.md / CLAUDE.md - UnivDB
 
-(하네스 루프 계약은 상위 Project/AGENTS.md 3장 참조. 이 파일과 AGENTS.md는 동일 내용으로 유지)
+(시그니처 스키마·src 편집 주의는 상위 `VBA_Projects/CLAUDE.md` 참조. 이 파일과 AGENTS.md는 동일 내용으로 유지)
 
-## 개발 루프
-
-최초 1회: ..\..\_VbaHarness\vh install (사용자 PATH 등록 - 이후 어디서든 bare vh)
-일상 루프(src\ 기준, 설치 후):
-- 실행: vh run  (설치 전엔 ..\..\_VbaHarness\vh run)
-- 실패 로그: vh log -FailedOnly
-- 커밋 전 검사: vh check
-
-하네스 대상 워크북: dev_UnivDB.xlsb
+대상 워크북: dev_UnivDB.xlsb
 
 테스트는 `Public Sub Test_*()`가 전량 자동 수집·실행된다(개별 선택 실행 없음).
 벤치마크는 `TestBenchDb.bas` - 결과는 `LogShim.LogJ`로 jsonl에 baseline 보존.
@@ -18,8 +10,8 @@
 ## 의존성: UnivCore (deps.lock으로 버전 고정)
 
 - src\Core_* 는 설치 산출물 (gitignore, 직접 수정 금지 - 수정은 UnivCore에서)
-- 드리프트/구버전 검사: vh deps check, 재설치: vh deps install, 최신 재고정: vh deps update
-- vh run이 lock 기준 자동 hydrate하므로 평소엔 신경 쓸 필요 없음
+- `vh deps check/install/update` 자동 hydrate는 하네스 기능이라 현재 미사용 — 당분간
+  UnivCore → UnivDB Core_* 동기화는 수동으로 파일 복사해서 처리
 
 ## 무엇을 만드는가
 
