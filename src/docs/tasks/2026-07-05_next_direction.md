@@ -208,6 +208,15 @@ CoreHashIndex (Implements DbHashIndex)
 - GroupBy short/long key 벤치 비교.
 - Core cursor 최적화가 GroupBy에도 이득을 주는지 확인.
 
+완료 (2026-07-07):
+- `clsTable.GroupBy`에 단일 그룹 컬럼 분기 신설: `GetHashIndexByIndex` + `idx.Cursor` 순회,
+  그룹별 `DbRowList`에서 aggregate 컬럼만 읽음. 복합 키 경로는 기존 누적기 유지 (R3 대상).
+- 벤치(20k행, 인덱스 프리워밍 후): R1 직후 short 46ms / long 90ms -> dict 7/7ms, core 6/6ms.
+  긴 키 페널티 소멸 (키 비교가 호출당 재스캔이 아니라 인덱스 빌드 시 1회로 이동).
+  cold 첫 호출은 인덱스 빌드 비용(1번 벤치 참조)을 지불하고 이후 캐시 재사용.
+- 참고: R1의 vbTextCompare 전환은 구 풀스캔 경로 기준 회귀였음(33/49 -> 46/90ms).
+  R2 엔진화가 이를 흡수하고도 큰 폭 개선. Dict/Core 차이는 GroupBy에서 미미(7 vs 6ms).
+
 ### Phase R3 — 복합 GroupBy key 설계
 
 목표:

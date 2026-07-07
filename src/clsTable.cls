@@ -580,13 +580,102 @@ Public Function GroupBy(ByVal sGroupCols As String, ByVal sAggList As String) As
     ' 2-0. [Hoisting] 컬럼 접근 밀봉 (Phase 6.8) - 대상 컬럼만 1D 사본으로 물질화
     Dim vGroupCols() As Variant
     Dim vAggCols() As Variant
-    ReDim vGroupCols(0 To lGroupCount - 1)
     ReDim vAggCols(0 To lAggCount - 1)
-    For i = 0 To lGroupCount - 1
-        vGroupCols(i) = CopyColumn1D(arrGroupIndices(i))
-    Next i
     For i = 0 To lAggCount - 1
         vAggCols(i) = CopyColumn1D(arrAggIndices(i))
+    Next i
+
+    Dim tResult As New clsTable
+    Dim vResultData As Variant
+    Dim lResultRows As Long, lResultCols As Long
+    Dim vKeys As Variant
+
+    lResultCols = lGroupCount + lAggCount
+
+    ' 2-S. [R2 엔진 경로] 단일 그룹 컬럼: 해시 인덱스(키->RowList)가 이미 그룹 파티션.
+    ' 커서 순회로 그룹별 RowList만 읽어 전체 행 재스캔과 로컬 누적기를 제거한다.
+    ' 키 의미론(vbTextCompare/Empty->""/Error skip)은 인덱스 계약이 그대로 보장한다.
+    If lGroupCount = 1 Then
+        Dim idx As DbHashIndex
+        Dim cur As DbIndexCursor
+        Dim rowsInGroup As DbRowList
+        Dim lRowId As Long, k As Long
+
+        Set idx = GetHashIndexByIndex(arrGroupIndices(0))
+        lResultRows = idx.CountKeys
+        ReDim vResultData(1 To lResultRows + 1, 1 To lResultCols)
+
+        vResultData(1, 1) = arrGroupCols(0)
+        For i = 0 To lAggCount - 1
+            vResultData(1, lGroupCount + i + 1) = Trim(Split(arrAggItems(i), ":")(0)) & "_" & arrAggFuncs(i)
+        Next i
+
+        Set cur = idx.Cursor
+        R = 1
+        Do While cur.MoveNext
+            R = R + 1
+            vResultData(R, 1) = cur.Key
+            Set rowsInGroup = cur.Rows
+
+            ReDim vStats(0 To (lAggCount * 2) - 1)
+            For j = 0 To lAggCount - 1
+                If arrAggFuncs(j) = "MIN" Then vStats(j * 2) = Empty
+                If arrAggFuncs(j) = "MAX" Then vStats(j * 2) = Empty
+            Next j
+
+            For k = 1 To rowsInGroup.Count
+                lRowId = rowsInGroup.RowAt(k)
+                For j = 0 To lAggCount - 1
+                    vCell = vAggCols(j)(lRowId)
+                    ' 집계 본체는 복합 키 경로(2-3)와 동일 계약 - R3에서 공용화 예정
+                    If Not IsEmpty(vCell) Then
+                        vStats(j * 2 + 1) = vStats(j * 2 + 1) + 1
+                        Select Case arrAggFuncs(j)
+                            Case "SUM", "AVG"
+                                If IsNumeric(vCell) Then vStats(j * 2) = vStats(j * 2) + vCell
+                            Case "COUNT"
+                            Case "MAX"
+                                If IsEmpty(vStats(j * 2)) Then
+                                    vStats(j * 2) = vCell
+                                ElseIf vCell > vStats(j * 2) Then
+                                    vStats(j * 2) = vCell
+                                End If
+                            Case "MIN"
+                                If IsEmpty(vStats(j * 2)) Then
+                                    vStats(j * 2) = vCell
+                                ElseIf vCell < vStats(j * 2) Then
+                                    vStats(j * 2) = vCell
+                                End If
+                        End Select
+                    End If
+                Next j
+            Next k
+
+            For j = 0 To lAggCount - 1
+                Select Case arrAggFuncs(j)
+                    Case "AVG"
+                        If vStats(j * 2 + 1) > 0 Then
+                            vResultData(R, lGroupCount + j + 1) = vStats(j * 2) / vStats(j * 2 + 1)
+                        Else
+                            vResultData(R, lGroupCount + j + 1) = 0
+                        End If
+                    Case "COUNT"
+                        vResultData(R, lGroupCount + j + 1) = vStats(j * 2 + 1)
+                    Case Else ' SUM, MAX, MIN
+                        vResultData(R, lGroupCount + j + 1) = vStats(j * 2)
+                End Select
+            Next j
+        Loop
+
+        tResult.LoadFromArray vResultData
+        Set GroupBy = tResult
+        Exit Function
+    End If
+
+    ' 복합 키 경로 (R3에서 encode helper 도입과 엔진화 여부 결정 예정)
+    ReDim vGroupCols(0 To lGroupCount - 1)
+    For i = 0 To lGroupCount - 1
+        vGroupCols(i) = CopyColumn1D(arrGroupIndices(i))
     Next i
 
     ' 2. [Aggregation] 데이터 순회 및 집계 (Main Loop)
@@ -656,13 +745,7 @@ Public Function GroupBy(ByVal sGroupCols As String, ByVal sAggList As String) As
     Next R
     
     ' 3. [Render] 결과 테이블 생성
-    Dim tResult As New clsTable
-    Dim vResultData As Variant
-    Dim lResultRows As Long, lResultCols As Long
-    Dim vKeys As Variant
-    
     lResultRows = dicAccumulator.Count
-    lResultCols = lGroupCount + lAggCount
     ReDim vResultData(1 To lResultRows + 1, 1 To lResultCols)
     
     ' 3-1. 헤더 작성

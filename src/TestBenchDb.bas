@@ -273,32 +273,43 @@ Public Sub Test_BenchDb_GroupBy()
     Dim T As clsTable
     Dim tRes As clsTable
     Dim R As Long
+    Dim b As Long
     Dim msShort(0 To 2) As Double, msLong(0 To 2) As Double
 
     Set T = GetBench20k()
 
-    ' warm-up
-    Set tRes = T.GroupBy("Dept", "Score:SUM")
+    ' R2 이후 단일 컬럼 GroupBy는 해시 인덱스를 소비하므로 백엔드별 비교 (인덱스 프리워밍,
+    ' 빌드 비용은 1번 벤치가 담당 - 여기 수치는 커서 순회 + 집계만)
+    For b = dbBackendDict To dbBackendCore
+        T.IndexBackend = b
+        T.GetHashIndex "Dept"
+        T.GetHashIndex "LongKey"
 
-    For R = 0 To 2
-        TicStart
+        ' warm-up
         Set tRes = T.GroupBy("Dept", "Score:SUM")
-        msShort(R) = TicMs
 
-        TicStart
+        For R = 0 To 2
+            TicStart
+            Set tRes = T.GroupBy("Dept", "Score:SUM")
+            msShort(R) = TicMs
+
+            TicStart
+            Set tRes = T.GroupBy("LongKey", "Score:SUM")
+            msLong(R) = TicMs
+        Next R
+
+        Set tRes = T.GroupBy("Dept", "Score:SUM")
+        LogShim.AssertEq "bench_groupby_short_rows_" & BackendName(b), CLng(6), tRes.RowCount
         Set tRes = T.GroupBy("LongKey", "Score:SUM")
-        msLong(R) = TicMs
-    Next R
+        LogShim.AssertEq "bench_groupby_long_rows_" & BackendName(b), CLng(51), tRes.RowCount
 
-    Set tRes = T.GroupBy("Dept", "Score:SUM")
-    LogShim.AssertEq "bench_groupby_short_rows", CLng(6), tRes.RowCount
-    Set tRes = T.GroupBy("LongKey", "Score:SUM")
-    LogShim.AssertEq "bench_groupby_long_rows", CLng(51), tRes.RowCount
+        LogShim.LogEvent "bench_db_groupby", _
+            Array("backend", "rows", "shortkey_ms", "longkey_ms"), _
+            Array(BackendName(b), BENCH_ROWS, CLng(Median3(msShort(0), msShort(1), msShort(2))), _
+                  CLng(Median3(msLong(0), msLong(1), msLong(2))))
+    Next b
 
-    LogShim.LogEvent "bench_db_groupby", _
-        Array("rows", "shortkey_ms", "longkey_ms"), _
-        Array(BENCH_ROWS, CLng(Median3(msShort(0), msShort(1), msShort(2))), _
-              CLng(Median3(msLong(0), msLong(1), msLong(2))))
+    T.IndexBackend = dbBackendDict ' 공유 벤치 테이블 기본 백엔드 복원
 End Sub
 
 ' ==============================================================================
