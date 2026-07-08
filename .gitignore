@@ -5,6 +5,9 @@
 *.tmp
 ~$*
 
+# 에이전트/도구 인프라 (vbaflow 스킬, 워크트리 스냅샷 등). 추적 대상 아님.
+.claude/
+
 # Binary Excel workbooks are human-managed runtime artifacts (churn every
 # harness run) — the src\ beside them is the tracked source of truth.
 *.xlsb
