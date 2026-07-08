@@ -40,6 +40,16 @@ rowID는 특정 테이블의 특정 세대 안에서만 유효한 물리 행 번
   (`modDbContract`가 검증, 불일치 시 Err.Raise 9998 fail-fast)
 - 새 파생 구조를 추가할 때의 질문은 하나다: "세대를 기억하는가, 불일치 시 실패하는가"
 
+## 하류 벤더링 (UnivFilter)
+
+- `src/clsSet.cls`와 `src/modIndexKey.bas`는 **UnivFilter가 스냅샷 벤더링하는 공유 요소**다
+  (편집 본가 = 여기 UnivDB, 라이브 싱크 없음, 드리프트 허용, 출처는 UnivFilter의
+  `src/vendor.manifest`에 UnivDB HEAD 해시로 기록).
+- clsSet은 dictHash 계보의 "집합연산 표면"으로 공식화한다. 단, **쿼리 실행 경로에서의
+  clsSet 사용 금지는 그대로 유지**된다 (아래 금지 사항 참조).
+- 두 파일의 공개 API/키 의미론(Variant 키: 숫자 1과 문자 "1" 구분, vbTextCompare)을
+  바꿀 때는 UnivFilter 쪽 재스냅샷 필요 여부를 함께 판단할 것.
+
 ## 금지 사항 (설계 결정으로 확정됨)
 
 - Core에 DB 의미론 주입 금지 (`Core_JoinTables`, `Core_GroupBy` 류)
@@ -50,6 +60,13 @@ rowID는 특정 테이블의 특정 세대 안에서만 유효한 물리 행 번
   Core는 build/join/cursor/GroupBy-heavy 명시 옵션 + 벤치 기반 수동 판단
 
 ## 알려진 미결 사항
+
+- **Core 백엔드 컴파일 결함 (2026-07-08 확인)**: Core 백엔드 최초 컴파일 그래프
+  (CoreHashIndex / Core_clsFastHash / Core_clsLongList / Core_modMemCore 중 하나)에
+  구문 오류가 있어, Core 경로를 건드리는 테스트(TestBenchDb, *_Parametric,
+  *_CoreBackend_*)가 VBE 컴파일 오류 모달을 띄우고 vbaflow 세션을 죽인다.
+  dict 경로 테스트는 전부 green. clsSet과는 무관(가드 보강 전에도 동일 재현).
+  수정은 UnivCore 동기화 소관.
 
 - GroupBy 키 의미론은 인덱스 계약과 통일됨 (R1/D2 결정, 2026-07-07). 단일 컬럼은 인덱스 커서
   기반 엔진화 (R2), 복합 키는 길이 접두 인코딩으로 충돌-프리 (R3). 복합 경로의 누적기 엔진화와

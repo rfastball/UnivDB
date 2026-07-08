@@ -7,6 +7,7 @@ Attribute VB_GlobalNameSpace = False
 Attribute VB_Creatable = False
 Attribute VB_PredeclaredId = False
 Attribute VB_Exposed = True
+' @desc 대소문자 무시 dict 기반 고속 집합 연산 담당
 Option Explicit
 
 ' ========================================================
@@ -43,20 +44,22 @@ Public Sub Clear()
     mDict.RemoveAll
 End Sub
 
-' 개별 추가
+' 개별 추가 (Null/Error 키 가드 - UnivFilter 계약 역이식)
 Public Sub Add(ByVal vItem As Variant)
-    If Not IsEmpty(vItem) Then
+    If Not IsEmpty(vItem) And Not IsNull(vItem) And Not IsError(vItem) Then
         If Not mDict.exists(vItem) Then mDict(vItem) = Empty
     End If
 End Sub
 
 ' 개별 삭제
 Public Sub Remove(ByVal vItem As Variant)
+    If IsNull(vItem) Or IsError(vItem) Then Exit Sub
     If mDict.exists(vItem) Then mDict.Remove vItem
 End Sub
 
 ' 존재 여부 확인
 Public Function Contains(ByVal vItem As Variant) As Boolean
+    If IsNull(vItem) Or IsError(vItem) Then Exit Function
     Contains = mDict.exists(vItem)
 End Function
 
@@ -75,8 +78,8 @@ Public Sub LoadFromArray(ByVal vArr As Variant)
     
     For i = LBound(vArr) To UBound(vArr)
         vVal = vArr(i)
-        ' 빈 값 및 에러 값 방어
-        If Not IsEmpty(vVal) And Not IsError(vVal) Then
+        ' 빈 값, Null, 에러 값 방어 (UnivFilter 계약 역이식)
+        If Not IsEmpty(vVal) And Not IsNull(vVal) And Not IsError(vVal) Then
             mDict(vVal) = Empty
         End If
     Next i
