@@ -55,6 +55,12 @@ Empty 하나가 경로에 따라 세 얼굴(NULL / 0 / 빈 문자열)을 가진�
 
 ## 5. 실행 계획 (R1 검증된 2단 커밋 패턴)
 
+검증 도구는 `vbaflow`다 (2026-07-08 `_VbaHarness`/`vh`에서 전환). 각 Phase 루프:
+`vbaflow session start` → src 편집 → `vbaflow push` → `vbaflow test` (green =
+`payload.summary.fail == 0`) → `git commit`. 커밋 전 규약 점검은 `vbaflow lint`
+(구 `vh check`). 실패 어서션은 `vbaflow test --json`의 `payload.tests[].detail`에 인라인.
+모든 명령 `--json` 필수. 상세 절차는 `.claude/skills/vbaflow/SKILL.md`.
+
 ### Phase D0 - 현행 고정 회귀 + 크래시 실증
 - 매트릭스의 각 칸을 드러내는 회귀 테스트 추가 (TestNullTypeSemantics.bas 신설).
 - Error 셀 크래시 의심 2곳(위 3-3)의 실동작을 여기서 확인 - 크래시면 즉시 fail-fast 또는
@@ -73,7 +79,12 @@ Empty 하나가 경로에 따라 세 얼굴(NULL / 0 / 빈 문자열)을 가진�
 - `UnivDB_Reference.md`에 키 의미론 장 신설. 날짜 canonical 포맷 결정 포함.
 - 커밋: `docs: publish key semantics contract`
 
-우선순위: D0(크래시 실증) > D1 > D2 > D3. 각 단계 green + vh check 후 커밋.
+우선순위: D0(크래시 실증) > D1 > D2 > D3. 각 단계 green(`vbaflow test`) + `vbaflow lint` 후 커밋.
+
+주의: D0 크래시 실증 대상(Filter 문자 경로, OrderBy 비교기)은 전부 dict 경로라 현재
+green이지만, Core 백엔드 컴파일 결함(CLAUDE.md 알려진 미결)이 있어 Core 경로 테스트는
+모달을 띄운다. D 작업의 신규 테스트는 dict 경로만 다루므로 영향권 밖 - 단, 새 테스트가
+실수로 `IndexBackend = dbBackendCore`를 건드리지 않도록 주의.
 
 ## 6. 스코프 밖 (명시)
 

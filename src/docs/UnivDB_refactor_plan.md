@@ -453,6 +453,7 @@ CoreHashIndex
 - 현재 대표 벤치마크 수집.
 - 특히 Join, Where chain, Filter, SelectTable, Update 후 재조회 테스트 추가.
 - 하네스 루프 기준을 고정한다. 일상 검증은 `src\` 기준 `vh run`, 실패 분석은 `vh log -FailedOnly`, 커밋 전 검사는 `vh check`로 수행한다.
+  (2026-07-08 이후 검증 도구는 `vbaflow`로 전환됨: `vbaflow push` + `vbaflow test` / `vbaflow test --json` detail / `vbaflow lint`. 아래 `vh ...`는 당시 이력 표기. 현행은 CLAUDE.md 참조)
 
 검증:
 

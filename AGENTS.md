@@ -100,4 +100,5 @@ rowID는 특정 테이블의 특정 세대 안에서만 유효한 물리 행 번
 - src\LogShim.bas는 벤더링 사본 - 직접 수정 금지, 갱신은 vbaflow init
 - pull은 src의 미푸시 편집을 덮어쓴다 - 워크북 쪽이 진실일 때만
 - src 규약: UTF-8 BOM 없음 + CRLF + 끝 개행 1개. CP949 밖 문자(em dash U+2014, 이모지)는 push가 거부
+- 심화 절차/실패 플레이북: .claude\skills\vbaflow\SKILL.md (vbaflow init이 관리 - 직접 수정 금지)
 <!-- vbaflow:managed:end -->

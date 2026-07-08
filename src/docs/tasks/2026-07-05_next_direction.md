@@ -4,6 +4,12 @@
 상위 문서: `../UnivDB_refactor_plan.md` (Phase 0~8 원 설계), `../UnivDB_design_decisions_202607.md` (설계 결정 v2: 세대 계약 / 컬럼 접근 밀봉)
 근거: 설계 결정 메모 9항 (내부 언어 전환 / Dictionary 밀봉 / Core 커널 유지 / rowID 중심 실행)
 
+> 도구 주석 (2026-07-08): 이 문서의 R0~R5는 당시 `_VbaHarness`/`vh` 루프로 검증되었다.
+> 이후 검증 도구가 `vbaflow`로 전환되었고 (`vh run` -> `vbaflow push` + `vbaflow test`,
+> `vh check` -> `vbaflow lint`, 대상 워크북 `dev_UnivDB.xlsb` -> `UnivDB.xlsm`), `vh deps`
+> 자동 hydrate는 미사용이 되어 UnivCore Core_* 동기화는 수동 복사로 처리한다.
+> 아래 본문의 `vh ...` 표기는 당시 이력 그대로 보존한다. 현행 절차는 CLAUDE.md 참조.
+
 ---
 
 ## 1. 설계 결정 대비 현재 상태
