@@ -1,4 +1,4 @@
-﻿VERSION 1.0 CLASS
+VERSION 1.0 CLASS
 BEGIN
   MultiUse = -1  'True
 END
@@ -212,5 +212,3 @@ End Property
 Public Property Get KeysArray() As Variant
     If mDict.Count = 0 Then KeysArray = Array() Else KeysArray = mDict.Keys
 End Property
-
-
