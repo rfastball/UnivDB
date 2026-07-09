@@ -1365,8 +1365,18 @@ Private Function CompareValues(ByVal v1 As Variant, ByVal v2 As Variant) As Inte
         Exit Function
     End If
 
+    ' Date=numeric 계약(D3): Date 두 값은 직렬값(CDbl) 수치 비교로 시간순을 보장한다.
+    ' (CStr 텍스트 fallback은 locale 의존이라 시간순이 조용히 깨진다. 문자 혼합은 현행 텍스트 규칙 유지)
+    If VarType(v1) = vbDate And VarType(v2) = vbDate Then
+        If CDbl(v1) < CDbl(v2) Then
+            CompareValues = -1
+        ElseIf CDbl(v1) > CDbl(v2) Then
+            CompareValues = 1
+        Else
+            CompareValues = 0
+        End If
     ' If one value is a native string, force string comparison for consistency.
-    If VarType(v1) = vbString Or VarType(v2) = vbString Then
+    ElseIf VarType(v1) = vbString Or VarType(v2) = vbString Then
         CompareValues = StrComp(CStr(v1), CStr(v2), vbTextCompare)
     ElseIf IsNumeric(v1) And IsNumeric(v2) Then
         ' Both are numeric types (but not native strings)

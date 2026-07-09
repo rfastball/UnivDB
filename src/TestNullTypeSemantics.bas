@@ -342,6 +342,30 @@ Public Sub Test_NullSem_DateNumericExcludedButCounted()
     LogShim.AssertEq "nullsem_date_agg_avg", 10, tG.Value(2, "Amount_AVG")
 End Sub
 
+' D3 계약 (Date=numeric): OrderBy에서 Date 두 값은 직렬값 수치 비교로 시간순 정렬된다.
+' (D3 이전엔 CStr 텍스트 fallback - "9:00" vs "10:00", 연도 교차 등에서 locale 무관하게
+'  텍스트 순서가 시간순과 갈렸다. 이 데이터셋은 텍스트 정렬이면 실패하도록 구성됨)
+Public Sub Test_NullSem_DateOrderByChronological()
+    Dim T As clsTable
+    Dim vData(1 To 5, 1 To 1) As Variant
+
+    vData(1, 1) = "D"
+    vData(2, 1) = DateSerial(2026, 1, 9)
+    vData(3, 1) = DateSerial(2025, 10, 1)
+    vData(4, 1) = DateSerial(2025, 2, 3) + TimeSerial(10, 0, 0)
+    vData(5, 1) = DateSerial(2025, 2, 3) + TimeSerial(9, 0, 0)
+
+    Set T = UnivDB.CreateTable()
+    T.LoadFromArray vData
+
+    T.OrderBy "D"
+    ' 시간순 오름차순: 02-03 09:00 < 02-03 10:00 < 10-01 < 2026-01-09
+    LogShim.AssertEq "nullsem_date_orderby_r2", DateSerial(2025, 2, 3) + TimeSerial(9, 0, 0), T.Value(2, "D")
+    LogShim.AssertEq "nullsem_date_orderby_r3", DateSerial(2025, 2, 3) + TimeSerial(10, 0, 0), T.Value(3, "D")
+    LogShim.AssertEq "nullsem_date_orderby_r4", DateSerial(2025, 10, 1), T.Value(4, "D")
+    LogShim.AssertEq "nullsem_date_orderby_r5", DateSerial(2026, 1, 9), T.Value(5, "D")
+End Sub
+
 ' 매트릭스: 날짜 인덱스 키는 CStr(date) - locale 의존이지만 같은 세션 안에서는
 ' 같은 Date 값으로 항상 재조회 가능해야 한다 (self-consistency 고정)
 Public Sub Test_NullSem_DateIndexKeySelfConsistent()
