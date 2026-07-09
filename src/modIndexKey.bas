@@ -4,6 +4,7 @@ Option Explicit
 
 ' 백엔드 독립 키 계약 (모든 DbHashIndex 구현이 공유):
 ' - Empty -> "" (빈 문자열 키)
+' - Date -> canonical ISO: "yyyy-mm-dd" (시간 성분 0) / "yyyy-mm-dd hh:nn:ss" - locale 무관 (D3)
 ' - 그 외 CStr 문자열화
 ' - IsError 값은 정규화 대상 아님 - 호출부(AddRow/TryGetRows)가 사전에 skip
 ' - 비교는 대소문자 무시 (vbTextCompare) - 백엔드의 저장소 설정이 보장
@@ -18,6 +19,14 @@ End Enum
 Public Function NormalizeIndexKey(ByVal key As Variant) As String
     If IsEmpty(key) Then
         NormalizeIndexKey = ""
+    ElseIf VarType(key) = vbDate Then
+        ' 날짜 canonical 키 (D3): CStr(date)는 locale 의존이라 세션 밖 키 재현성이 없다.
+        ' 시간 성분 0이면 날짜만 - GroupBy 렌더 표기의 00:00:00 노이즈 방지 (단사성 유지).
+        If CDbl(key) = Int(CDbl(key)) Then
+            NormalizeIndexKey = Format$(key, "yyyy-mm-dd")
+        Else
+            NormalizeIndexKey = Format$(key, "yyyy-mm-dd hh:nn:ss")
+        End If
     Else
         NormalizeIndexKey = CStr(key)
     End If

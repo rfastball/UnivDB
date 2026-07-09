@@ -366,8 +366,8 @@ Public Sub Test_NullSem_DateOrderByChronological()
     LogShim.AssertEq "nullsem_date_orderby_r5", DateSerial(2026, 1, 9), T.Value(5, "D")
 End Sub
 
-' 매트릭스: 날짜 인덱스 키는 CStr(date) - locale 의존이지만 같은 세션 안에서는
-' 같은 Date 값으로 항상 재조회 가능해야 한다 (self-consistency 고정)
+' D3 계약 (Date key=ISO): 날짜 인덱스 키는 canonical ISO - locale 무관, 같은 Date 값으로
+' 항상 재조회 가능 (roundtrip 불변식은 CStr 시절부터 유지)
 Public Sub Test_NullSem_DateIndexKeySelfConsistent()
     Dim T As clsTable
     Dim vData(1 To 3, 1 To 1) As Variant
@@ -380,4 +380,37 @@ Public Sub Test_NullSem_DateIndexKeySelfConsistent()
     T.LoadFromArray vData
 
     LogShim.AssertEq "nullsem_date_indexkey_roundtrip", 1, T.SelectRows("D", DateSerial(2026, 7, 8)).Count
+End Sub
+
+' D3 계약 (Date key=ISO canonical): 인덱스/GroupBy 날짜 키는 locale 무관 ISO 문자열.
+' 시간 성분 0이면 "yyyy-mm-dd", 있으면 "yyyy-mm-dd hh:nn:ss". GroupBy 렌더 표기도 동일
+' (단일 컬럼 경로=cur.Key, 복합 키 경로=NormalizeIndexKey 렌더 파트 - 양 경로 검증).
+Public Sub Test_NullSem_DateIndexKeyIsoCanonical()
+    Dim T As clsTable
+    Dim tG As clsTable
+    Dim vData(1 To 4, 1 To 3) As Variant
+
+    vData(1, 1) = "Dept": vData(1, 2) = "D": vData(1, 3) = "Amount"
+    vData(2, 1) = "IT": vData(2, 2) = DateSerial(2026, 7, 8): vData(2, 3) = 10
+    vData(3, 1) = "IT": vData(3, 2) = DateSerial(2026, 7, 8): vData(3, 3) = 20
+    vData(4, 1) = "IT": vData(4, 2) = DateSerial(2026, 7, 8) + TimeSerial(9, 5, 0): vData(4, 3) = 30
+
+    Set T = UnivDB.CreateTable()
+    T.LoadFromArray vData
+
+    ' 단일 컬럼 경로 (인덱스 커서): 날짜-only와 datetime은 다른 키, 렌더는 ISO
+    Set tG = T.GroupBy("D", "Amount:SUM")
+    LogShim.AssertEq "nullsem_date_iso_groupby_rows", 2, tG.RowCount - 1
+    LogShim.AssertEq "nullsem_date_iso_render_dateonly", "2026-07-08", tG.Value(2, "D")
+    LogShim.AssertEq "nullsem_date_iso_render_datetime", "2026-07-08 09:05:00", tG.Value(3, "D")
+    LogShim.AssertEq "nullsem_date_iso_sum_dateonly", 30, tG.Value(2, "Amount_SUM")
+
+    ' 복합 키 경로 (EncodeCompositeKeyPart -> NormalizeIndexKey): 동일 canonical 경유
+    Set tG = T.GroupBy("Dept, D", "Amount:SUM")
+    LogShim.AssertEq "nullsem_date_iso_composite_rows", 2, tG.RowCount - 1
+    LogShim.AssertEq "nullsem_date_iso_composite_render", "2026-07-08", tG.Value(2, "D")
+
+    ' 인덱스 라운드트립: datetime 값도 같은 Date로 재조회 가능
+    LogShim.AssertEq "nullsem_date_iso_roundtrip_dt", 1, _
+        T.SelectRows("D", DateSerial(2026, 7, 8) + TimeSerial(9, 5, 0)).Count
 End Sub
