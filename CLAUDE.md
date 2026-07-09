@@ -7,11 +7,13 @@
 테스트는 `Public Sub Test_*()`가 전량 자동 수집·실행된다(개별 선택 실행 없음).
 벤치마크는 `TestBenchDb.bas` - 결과는 `LogShim.LogJ`로 jsonl에 baseline 보존.
 
-## 의존성: UnivCore (deps.lock으로 버전 고정)
+## Core 커널 (구 UnivCore, 동결 — UnivDB가 정본)
 
-- src\Core_* 는 설치 산출물 (gitignore, 직접 수정 금지 - 수정은 UnivCore에서)
-- `vh deps check/install/update` 자동 hydrate는 하네스 기능이라 현재 미사용 — 당분간
-  UnivCore → UnivDB Core_* 동기화는 수동으로 파일 복사해서 처리
+- `src\Core_*` 는 해시/배열 저수준 프리미티브(구 UnivCore 공급분).
+- **UnivCore 프로젝트는 동결**되었다. UnivFilter가 UnivDB 스냅샷 기잔이 되면서 분리 명분이
+  사라졌고, 이제 **UnivDB가 Core_*의 정본**이다. 상류 전파 대상 없음 — 수정은 여기서 직접 한다.
+- 따라서 Core_* 는 더 이상 설치 산출물이 아니라 UnivDB의 1급 소스로 git 추적한다(gitignore 해제됨).
+- DB 의미론 주입 금지(Core에 Join/GroupBy 류 금지)는 그대로 유지(아래 금지 사항).
 
 ## 무엇을 만드는가
 
@@ -29,7 +31,7 @@ Excel 배치 워크로드(1만~10만 행, 적재→변환→보고)용 인메모
      실험 백엔드 `CoreHashIndex`(FastHash 기반, `clsTable.IndexBackend = dbBackendCore` 명시 옵션 전용)
    - 보조 구조: `DbRowList` / `DbRowSet` / `DbIndexCursor` / `DbColumnReader`(컬럼 접근 밀봉 표면)
    - 키 정규화는 `modIndexKey.NormalizeIndexKey` 단일 계약: Empty→"", Error 키 skip, CStr, vbTextCompare(대소문자 무시)
-3. **Core 커널** - `Core_*` (UnivCore 공급). 해시/배열 저수준 프리미티브만. DB 의미론 없음.
+3. **Core 커널** - `Core_*` (구 UnivCore, 현재 UnivDB 정본). 해시/배열 저수준 프리미티브만. DB 의미론 없음.
 
 ## 세대(Generation) 계약 - 최상위 불변식
 
@@ -61,12 +63,13 @@ rowID는 특정 테이블의 특정 세대 안에서만 유효한 물리 행 번
 
 ## 알려진 미결 사항
 
-- **Core 백엔드 컴파일 결함 (2026-07-08 확인)**: Core 백엔드 최초 컴파일 그래프
-  (CoreHashIndex / Core_clsFastHash / Core_clsLongList / Core_modMemCore 중 하나)에
-  구문 오류가 있어, Core 경로를 건드리는 테스트(TestBenchDb, *_Parametric,
-  *_CoreBackend_*)가 VBE 컴파일 오류 모달을 띄우고 vbaflow 세션을 죽인다.
-  dict 경로 테스트는 전부 green. clsSet과는 무관(가드 보강 전에도 동일 재현).
-  수정은 UnivCore 동기화 소관.
+- **Core 백엔드 컴파일 결함 (2026-07-08 발견 → 2026-07-10 해결)**: Core 경로 테스트(TestBenchDb,
+  *_Parametric, *_CoreBackend_*)가 VBE 컴파일 오류 모달로 세션을 죽이던 결함. 원인은 UnivCore
+  구문 오류가 아니라 vbaflow push의 AddFromString이 `_` 컨티뉴에이션 Declare 문을 오파싱해
+  모듈 끝에 팬텀 `()` 라인을 주입한 것(Core_modMemCore의 RtlMoveMemory Declare에서 발현).
+  최소 재현·근본원인·수정 후보는 `..\_VbaFlow\docs\bugreports\` 2026-07-10 리포트 참조.
+  수정: `Core_modMemCore.bas`의 Declare 2개를 한 줄로 폄(컨티뉴에이션 제거). UnivDB가 Core_*의
+  정본이므로 이 수정이 정본(상류 전파 대상 없음). 해결 후 Core 경로 테스트 전량 green(sessionDied=False).
 
 - GroupBy 키 의미론은 인덱스 계약과 통일됨 (R1/D2 결정, 2026-07-07). 단일 컬럼은 인덱스 커서
   기반 엔진화 (R2), 복합 키는 길이 접두 인코딩으로 충돌-프리 (R3). 복합 경로의 누적기 엔진화와
@@ -99,6 +102,8 @@ rowID는 특정 테이블의 특정 세대 안에서만 유효한 물리 행 번
 - exit code: 성공 0 / 환경 오류 3 (세션/Excel/COM - session start 후 재시도) / 그 외 2
 - 테스트는 Public Sub Test_*() (인자 없음), 단언은 LogShim.AssertEq (Debug.Assert 금지)
 - src\LogShim.bas는 벤더링 사본 - 직접 수정 금지, 갱신은 vbaflow init
+- 배포 아티팩트: vbaflow dist --out <경로> (클린 사본 빌드 - 필터/스탬프/무해화/선택 부트스트랩).
+  push 선행 필수(마지막 push == src 미동기 시 거부). 절차/실패 플레이북은 SKILL.md
 - pull은 동기화 안 된 src 편집이 있으면 차단된다 - 기본은 push로 먼저 반영,
   워크북 쪽이 진실일 때만 pull --force로 덮어쓰기
 - 세션 Excel에 직접 COM 접근 금지(GetActiveObject, New-Object -ComObject 등 - 조회/진단 포함).

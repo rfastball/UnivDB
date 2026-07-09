@@ -22,7 +22,5 @@ test_*/
 archive/
 releases/
 
-# Shared package install artifacts (node_modules 모델): UnivCore 등 공용 패키지의
-# Core_* 모듈은 deps.lock에서 hydrate되는 설치 산출물이므로 추적하지 않는다.
-# deps.lock(선언/핀)은 커밋한다.
-src/Core_*
+# (구) UnivCore Core_* 설치 산출물 gitignore 규칙은 폐기됨: UnivCore 동결 + UnivDB 원본화로
+# src/Core_* 는 이제 UnivDB의 1급 소스로 추적한다. (2026-07-10, CLAUDE.md "Core 커널" 참조)
