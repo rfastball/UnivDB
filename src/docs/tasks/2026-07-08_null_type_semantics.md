@@ -109,6 +109,30 @@ locale 문자열(`"오류 2042"`)을 반환한다 (errno=0). 실제 귀결:
     배선하는 안이 유력 - 단 날짜 정렬을 locale 텍스트→숫자로 바꾸므로 그 변경은 별도 판단(D2/D3).
 - 회귀 펜스: `nullsem_err_strfilter_isnot_a`(2→1), OrderBy 행 보존/정렬 위치.
 
+## 5.6. D1 실행 결과 (2026-07-10 완료)
+
+인덱스를 안 거치는 직접 비교 표면 3곳을 정합화. 커밋 3개:
+- `4ef7ba7` **MIN/MAX pin** (신규 표면, Explore 발견): GroupBy MIN/MAX는 셀에 raw Variant `>`/`<`.
+  Error 셀은 미가드라 compare에 닿으면 **Type Mismatch(13) 크래시**로 실증됨(fix는 D2).
+- `67b7900` **feat: Empty=NULL** (숫자 필터): `Not IsEmpty` 가드로 Empty의 0 참여 차단.
+  핀 flip: `numfilter_lt100` 3→2, `eq0` 1→0, `filter_vs_count` 3→2 (필터-COUNT 정합).
+- `62870f9` **fix: Error=skip/safe** (문자 필터 + OrderBy): `clsQuery` 문자 경로 4연산에
+  `Not IsError` 가드(부정 연산 포함 skip), `clsTable.CompareValues`에 Error last 결정적 배치.
+  핀 flip: `strfilter_isnot_a` 2→1. OrderBy 핀은 불변(기계적 하드닝, locale-무관 보장).
+
+확정된 계약: **Empty=NULL(숫자 비교 불참, 문자/키의 ""는 유지) + Error=skip(비교/정렬 표면
+어디서도 값 참여 없음)**. 인덱스 경로는 이미 정합이라 무접촉. Core_CompareValues는 dead code라
+D1에서 배선 안 함(날짜 의미론까지 바꿔 범위 초과) - 통합 판단은 D2/D3.
+
+## 5.7. 남은 작업 (D2/D3)
+
+- **D2 (집계·필터 정합)**: MIN/MAX Error skip **fix**(pin `4ef7ba7`가 회귀 펜스, errno 13→0),
+  AVG 분모 교정(Error/Date가 SUM엔 불참하나 COUNT엔 참여해 평균 희석 - `nullsem_err_agg_avg`
+  40/3, `nullsem_date_agg_avg` 5가 현행 펜스), Filter 문자 경로 Trim 대칭화.
+- **D2/D3 (날짜 의미론)**: OrderBy 날짜 정렬 text→numeric, 인덱스 날짜 키 canonical(ISO),
+  `Core_CompareValues` 통합 여부.
+- **D3 (키 계약 명문화)**: `UnivDB_Reference.md`에 키 의미론 장 신설.
+
 ## 6. 스코프 밖 (명시)
 
 - 컬럼 타입 선언 시스템 (D-c) - 1.0 이후 재평가.
