@@ -209,6 +209,38 @@ Public Sub Test_NullSem_ErrorAggregateDenominator()
     LogShim.AssertEq "nullsem_err_agg_avg", 40 / 3, tG.Value(2, "Score_AVG")
 End Sub
 
+' 신규 표면 (2026-07-10 Explore 발견): GroupBy MIN/MAX는 셀 값에 raw Variant >/< 를 쓴다
+' (clsTable.cls MIN/MAX 분기). Empty는 IsEmpty 가드로 제외되나 Error는 미가드 - MIN/MAX 컬럼에
+' Error가 있으면 compare에 닿아 런타임 크래시. 현행 동작을 pin으로 실증한다 (fix는 D2 집계 단계).
+Public Sub Test_NullSem_MinMaxErrorProbe()
+    Dim T As clsTable
+    Dim tG As clsTable
+    Dim lErrNoMax As Long
+    Dim lErrNoMin As Long
+    Dim vData(1 To 4, 1 To 2) As Variant
+
+    vData(1, 1) = "Dept": vData(1, 2) = "Score"
+    vData(2, 1) = "IT": vData(2, 2) = 10
+    vData(3, 1) = "IT": vData(3, 2) = CVErr(xlErrNA)
+    vData(4, 1) = "IT": vData(4, 2) = 30
+
+    Set T = UnivDB.CreateTable()
+    T.LoadFromArray vData
+
+    On Error Resume Next
+    Set tG = T.GroupBy("Dept", "Score:MAX")
+    lErrNoMax = Err.Number
+    Err.Clear
+    Set tG = T.GroupBy("Dept", "Score:MIN")
+    lErrNoMin = Err.Number
+    On Error GoTo 0
+
+    ' 현행 고정: MIN/MAX 컬럼의 Error 셀이 raw Variant 비교에 닿아 Type Mismatch(13) 크래시.
+    ' D2에서 Error skip 가드로 fix되면 이 pin은 errno=0으로 flip된다.
+    LogShim.AssertEq "nullsem_minmax_error_max_errno", 13, lErrNoMax
+    LogShim.AssertEq "nullsem_minmax_error_min_errno", 13, lErrNoMin
+End Sub
+
 ' ==============================================================================
 ' [3] 숫자 42 vs 문자 "42"
 ' ==============================================================================
