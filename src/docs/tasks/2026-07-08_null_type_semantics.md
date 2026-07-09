@@ -144,6 +144,29 @@ COUNT 포함·SUM 불참·AVG 분모 제외**. Empty=NULL과 Error=skip이 비�
 - **키 계약 명문화 (D3)**: `UnivDB_Reference.md`에 키 의미론 장 신설(CStr 병합, Empty=="",
   Error skip, 대소문자 무시, 길이 접두 복합 키, + 위 NULL/타입 집계 계약).
 
+## 5.9. D3 실행 결과 (2026-07-10 완료 - 비결정 D 종결)
+
+미결 3축을 사용자 결정으로 확정 후 실행. 커밋 4개:
+- `6f46920` **fix: OrderBy 날짜 수치 비교**: `clsTable.CompareValues`에 Date-Date 직렬값(CDbl)
+  분기 추가 (Error 가드 뒤, 문자 분기 앞). CStr 텍스트 fallback은 "9:00" vs "10:00", 연도 교차
+  등에서 locale 무관하게 시간순이 깨졌다. Date vs 문자 혼합은 현행 텍스트 규칙 유지(범위 최소화).
+  신규 핀 `nullsem_date_orderby_r2~r5` (텍스트 정렬이면 실패하는 데이터셋).
+- `87a9cc0` **chore: dead code 삭제**: `Core_modCompare` 모듈 제거(프로덕션 호출자 0).
+  Error 의미론이 D1 계약과 상충(SafeText 비교 참여 vs Error 맨 뒤)해 배선 대신 이식 후 삭제 -
+  비교기 진실을 clsTable 한 곳으로 수렴.
+- `fb8dd02` **feat: 날짜 키 ISO canonical**: `NormalizeIndexKey`에 Date 분기 - 시간 성분 0이면
+  `yyyy-mm-dd`, 아니면 `yyyy-mm-dd hh:nn:ss` (locale 무관). 단일 진입점이라 해시 인덱스(양 백엔드)
+  + GroupBy 그룹 키/렌더 표기(단일/복합 경로)가 동시 정합. 기존 라운드트립 핀은 불변식이라 유지 통과.
+  신규 핀 `nullsem_date_iso_*` (양 경로 렌더 + datetime 라운드트립).
+  **하류 영향: `modIndexKey.bas`는 UnivFilter 벤더링 파일 - 키 의미론 변경이므로 UnivFilter
+  재스냅샷 필요** (vendor.manifest 갱신은 UnivFilter 프로젝트 몫).
+- **docs: 키 계약 명문화**: `UnivDB_Reference.md` v2.6.0에 "6. Value & Key Semantics" 장 신설
+  (키 정규화 표 + Empty=NULL/Error=skip + 집계 규칙 표 + OrderBy 비교 우선순위). 기존
+  "Key Conventions"는 "Coding Conventions"로 개명(이름 충돌 해소).
+
+이로써 비결정 D의 1.0 관문 항목은 전부 종결: D-a(Empty=NULL) + Error=skip 통일(D1/D2),
+D-d(키 계약 명문화 + 날짜 canonical, D3). D-b(3치 논리)/D-c(컬럼 타입 선언)는 비도입/이월 확정.
+
 ## 6. 스코프 밖 (명시)
 
 - 컬럼 타입 선언 시스템 (D-c) - 1.0 이후 재평가.

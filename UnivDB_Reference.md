@@ -1,7 +1,7 @@
 # UnivDB Library Reference (Consolidated)
 
 > **For**: Claude Code agent context. Single-file reference replacing CheatSheet, Docs, Guide, Template.
-> **Version**: v2.5.1
+> **Version**: v2.6.0
 
 ---
 
@@ -156,7 +156,58 @@ UnivDB.Report("SalesData") _
 
 ---
 
-## 6. clsTableBuilder (Dynamic Row Assembly)
+## 6. Value & Key Semantics (확정 계약)
+
+> "조용히 틀린 결과"를 막기 위한 값/키 의미론 계약 (비결정 D, 2026-07-10 확정).
+> 인덱스/필터/정렬/집계 전 표면에서 동일하게 적용된다. 회귀 핀: `TestNullTypeSemantics.bas`
+
+### 6.1 인덱스 키 정규화 (`modIndexKey.NormalizeIndexKey`)
+
+Where/Join/GroupBy 키는 전부 단일 정규화 계약을 탄다:
+
+| 값 | 키 |
+|---|---|
+| Empty (빈 셀) | `""` (빈 문자열 키) |
+| Date | ISO canonical: `yyyy-mm-dd` (시간 성분 0) / `yyyy-mm-dd hh:nn:ss` — locale 무관 |
+| Error (#N/A 등) | 키 없음 — 해당 행이 인덱스/그룹핑에서 skip |
+| 그 외 | `CStr` 문자열화 — 숫자 `42`와 문자 `"42"`는 **같은 키로 병합** |
+
+- 키 비교는 대소문자 무시 (`vbTextCompare`)
+- 복합 키(GroupBy 다중 컬럼)는 길이 접두 인코딩 `len:value|len:value|...` — 길이가 파싱 권위라 값에 구분자(`|`, `:`)가 있어도 충돌 없음
+- GroupBy 결과의 그룹 컬럼 값은 정규화 키 문자열 그대로 렌더된다 (Date면 ISO 표기)
+
+### 6.2 NULL/타입 계약 (Empty / Error)
+
+- **Empty = NULL**: 숫자 비교(`Filter` `>`, `<`, `=` 등) 불참, 모든 집계 불참. 문자 경로(IS/LIKE)와 인덱스 키에서만 `""`로 참여.
+- **Error = skip**: 비교/정렬/집계/필터 어디서도 값으로 참여하지 않는다.
+  - Filter(숫자/문자): Error 행 제외 — `IS NOT`/`NOT LIKE` 등 부정 연산 결과에도 안 들어온다
+  - OrderBy: 크래시 없이 결정적으로 맨 뒤 배치 (행은 보존)
+  - GroupBy: 그룹 키면 행 skip, 집계 컬럼이면 해당 셀 불참
+
+### 6.3 집계 규칙 (GroupBy)
+
+| 값 | COUNT | SUM | AVG 분모 | MIN/MAX |
+|---|---|---|---|---|
+| Empty | 불참 | 불참 | 불참 | 불참 |
+| Error | 불참 | 불참 | 불참 | 불참 |
+| 숫자 (문자 `"42"` 포함, IsNumeric) | 포함 | 가산 | 포함 | 참여 |
+| 비숫자 실값 (Date, 일반 문자) | 포함 | 불참 | 불참 | 참여 (Variant 비교) |
+
+`AVG = SUM / (숫자로 가산된 셀 수)` — 비숫자 실값이 섞여도 평균이 희석되지 않는다.
+
+### 6.4 OrderBy 비교 규칙 (`clsTable.CompareValues`)
+
+우선순위 순서대로:
+
+1. **Error** → 맨 뒤 (결정적, locale 무관)
+2. **Date + Date** → 직렬값(CDbl) 수치 비교 — 시간순 보장, locale 무관
+3. **한쪽이 String** → 텍스트 비교(`vbTextCompare`) — 숫자 `9` vs 문자 `"10"`이면 `"10"`이 앞선다
+4. **둘 다 IsNumeric** → CDbl 수치 비교 — Empty는 0 취급
+5. **그 외** → 텍스트 fallback
+
+---
+
+## 7. clsTableBuilder (Dynamic Row Assembly)
 
 ```vb
 Dim B As clsTableBuilder
@@ -172,7 +223,7 @@ Set tNew = B.ToTable()
 
 ---
 
-## 7. JoinType Enum
+## 8. JoinType Enum
 
 | Enum | Value | Description |
 |------|-------|-------------|
@@ -187,11 +238,11 @@ Set tNew = B.ToTable()
 
 ---
 
-## 8. Code Templates (Standard Patterns)
+## 9. Code Templates (Standard Patterns)
 
 > **에이전트는 새 모듈 작성 시 아래 패턴을 기준으로 삼아야 합니다.**
 
-### 8.1 clsTable 생성 — 3가지 경로
+### 9.1 clsTable 생성 — 3가지 경로
 
 ```vb
 ' ── (A) 시트에서 직접 생성 (RegisterTable 불필요, 일회성 사용) ──
@@ -209,7 +260,7 @@ Set tFiltered = UnivDB.Query("Employees") _
                       .SelectTable()
 ```
 
-### 8.2 Cascade Join (★ 핵심 패턴)
+### 9.2 Cascade Join (★ 핵심 패턴)
 
 ```vb
 ' tMain 객체를 덮어쓰며 연쇄적으로 참조 테이블을 확장합니다.
@@ -228,7 +279,7 @@ Set tMain = UnivDB.Join(tMain, "tbl_Client",  "Ref_ClientID",  jtLeft, "Client_"
 ' → tMain.headers에 "Proj_Name", "Client_Name" 등 접두사 컬럼이 추가됨
 ```
 
-### 8.3 Factory Function 패턴 (modPresetFactory 기준)
+### 9.3 Factory Function 패턴 (modPresetFactory 기준)
 
 ```vb
 ' ── 팩토리 함수: clsTable을 받아 프리셋별 조인을 적용하고 반환 ──
@@ -248,7 +299,7 @@ Public Function Build_Master_Table(ByVal presetName As String, _
 End Function
 ```
 
-### 8.4 End-to-End Pipeline (Broker → Factory → Report)
+### 9.4 End-to-End Pipeline (Broker → Factory → Report)
 
 ```vb
 ' ── modDashboardBroker.Action_Refresh_Dashboard 내부 흐름 ──
@@ -282,9 +333,9 @@ End Sub
 
 ---
 
-## 9. Key Conventions
+## 10. Coding Conventions
 
-- **DB Lifecycle**: `InitDB`를 호출하는 서브루틴은 반드시 `Finally` 블록에서 `ClearDB`를 호출해야 합니다. 서브루틴 밖에서 clsTable이 살아있으면 안 됩니다. (8.4 패턴 참조)
+- **DB Lifecycle**: `InitDB`를 호출하는 서브루틴은 반드시 `Finally` 블록에서 `ClearDB`를 호출해야 합니다. 서브루틴 밖에서 clsTable이 살아있으면 안 됩니다. (9.4 패턴 참조)
 - **변수 접두사**: `t` = clsTable, `o` = Object, `s` = String, `b` = Boolean, `v` = Variant
 - **함수명**: PascalCase (`Build_Master_Table`)
 - **에러 핸들링**: `On Error GoTo ErrHandler` + `modLogger.LogError` + `Resume Finally` 패턴 사용
