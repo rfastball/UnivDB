@@ -1,4 +1,4 @@
-﻿Attribute VB_Name = "TestQuery"
+Attribute VB_Name = "TestQuery"
 Option Explicit
 
 ' ==============================================================================

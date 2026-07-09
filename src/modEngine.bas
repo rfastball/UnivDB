@@ -1,4 +1,4 @@
-﻿Attribute VB_Name = "modEngine"
+Attribute VB_Name = "modEngine"
 Option Explicit
 
 

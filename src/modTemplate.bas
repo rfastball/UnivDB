@@ -1,4 +1,4 @@
-﻿Attribute VB_Name = "modTemplate"
+Attribute VB_Name = "modTemplate"
 Option Explicit
 
 ' ==============================================================================

@@ -1,4 +1,4 @@
-﻿Attribute VB_Name = "TestTableBuilder"
+Attribute VB_Name = "TestTableBuilder"
 Option Explicit
 
 ' ==============================================================================

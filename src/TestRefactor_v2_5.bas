@@ -1,4 +1,4 @@
-﻿Attribute VB_Name = "TestRefactor_v2_5"
+Attribute VB_Name = "TestRefactor_v2_5"
 Option Explicit
 
 ' ==============================================================================

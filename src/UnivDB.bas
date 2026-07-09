@@ -1,4 +1,4 @@
-﻿Attribute VB_Name = "UnivDB"
+Attribute VB_Name = "UnivDB"
 Option Explicit
 
 ' [Internal] 테이블 저장소 (Key: 테이블명, Value: clsTable 객체)

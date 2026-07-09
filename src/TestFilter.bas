@@ -1,4 +1,4 @@
-﻿Attribute VB_Name = "TestFilter"
+Attribute VB_Name = "TestFilter"
 Option Explicit
 
 ' ==============================================================================

@@ -1,4 +1,4 @@
-﻿Attribute VB_Name = "Docs"
+Attribute VB_Name = "Docs"
 Option Explicit
 
 ' ==============================================================================

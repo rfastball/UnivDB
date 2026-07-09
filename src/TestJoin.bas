@@ -1,4 +1,4 @@
-﻿Attribute VB_Name = "TestJoin"
+Attribute VB_Name = "TestJoin"
 Option Explicit
 
 ' ==============================================================================
