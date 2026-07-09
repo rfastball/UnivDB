@@ -13,8 +13,8 @@ Option Explicit
 ' [1] Empty (빈 셀)
 ' ==============================================================================
 
-' 매트릭스: Filter 숫자 경로에서 Empty는 0으로 참여 (IsNumeric(Empty)=True)
-Public Sub Test_NullSem_EmptyNumericFilterAsZero()
+' D1 계약 (Empty=NULL): Filter 숫자 경로에서 Empty는 불참 (0으로 참여하지 않음)
+Public Sub Test_NullSem_EmptyNumericFilterExcluded()
     Dim T As clsTable
     Dim tR As clsTable
     Dim vData(1 To 4, 1 To 1) As Variant
@@ -27,13 +27,13 @@ Public Sub Test_NullSem_EmptyNumericFilterAsZero()
     Set T = UnivDB.CreateTable()
     T.LoadFromArray vData
 
-    ' Empty가 0으로 비교에 참여: 10 < 100, 0 < 100, -5 < 100 => 3행 전부
+    ' Empty 불참: 10 < 100, -5 < 100 => 2행 (Empty 제외)
     Set tR = UnivDB.Query(T).Filter("Score", "<", 100).SelectTable()
-    LogShim.AssertEq "nullsem_empty_numfilter_lt100", 3, tR.RowCount - 1
+    LogShim.AssertEq "nullsem_empty_numfilter_lt100", 2, tR.RowCount - 1
 
-    ' Empty == 0 매칭: Empty 행만
+    ' Empty는 0으로 매칭되지 않음 => 0행
     Set tR = UnivDB.Query(T).Filter("Score", "=", 0).SelectTable()
-    LogShim.AssertEq "nullsem_empty_numfilter_eq0", 1, tR.RowCount - 1
+    LogShim.AssertEq "nullsem_empty_numfilter_eq0", 0, tR.RowCount - 1
 End Sub
 
 ' 매트릭스: Filter 문자 경로(IS)에서 Empty는 ""로 참여, 인덱스 키도 ""
@@ -57,9 +57,9 @@ Public Sub Test_NullSem_EmptyStringFilterAsBlank()
     LogShim.AssertEq "nullsem_empty_indexkey_blank", 1, T.SelectRows("Name", "").Count
 End Sub
 
-' 매트릭스: 집계에서 Empty는 제외 (NULL처럼) - COUNT/SUM/AVG 모두 불참
-' 위험 지점 1: 같은 컬럼에서 숫자 필터(<100)는 Empty를 0으로 세므로 행수와 COUNT가 어긋난다
-Public Sub Test_NullSem_EmptyAggregateExcluded_FilterCountMismatch()
+' D1 계약: 집계에서 Empty는 제외 (NULL처럼) - COUNT/SUM/AVG 모두 불참.
+' 위험 지점 1 해소: 숫자 필터도 Empty 불참으로 통일돼 필터 행수와 COUNT가 정합한다.
+Public Sub Test_NullSem_EmptyAggregateAndFilterConsistent()
     Dim T As clsTable
     Dim tG As clsTable
     Dim tR As clsTable
@@ -78,9 +78,9 @@ Public Sub Test_NullSem_EmptyAggregateExcluded_FilterCountMismatch()
     LogShim.AssertEq "nullsem_empty_agg_sum", 40, tG.Value(2, "Score_SUM")
     LogShim.AssertEq "nullsem_empty_agg_avg", 20, tG.Value(2, "Score_AVG")
 
-    ' 불일치 고정: 필터는 3행(Empty=0 참여), COUNT는 2 (Empty 제외)
+    ' 정합 고정: 필터도 2행(Empty 제외) = COUNT 2
     Set tR = UnivDB.Query(T).Filter("Score", "<", 100).SelectTable()
-    LogShim.AssertEq "nullsem_empty_filter_vs_count", 3, tR.RowCount - 1
+    LogShim.AssertEq "nullsem_empty_filter_vs_count", 2, tR.RowCount - 1
 End Sub
 
 ' 매트릭스: OrderBy 숫자열에서 Empty는 0 취급 (CDbl(Empty)=0으로 숫자 비교)

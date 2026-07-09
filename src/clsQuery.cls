@@ -147,7 +147,9 @@ Public Function Filter(ByVal sColName As String, ByVal sOp As String, ByVal vVal
             ' 최적화된 루프
             For i = LBound(vCandidates) To UBound(vCandidates)
                 vCell = vCol(vCandidates(i))
-                If IsNumeric(vCell) Then
+                ' Empty=NULL 계약(D1): IsNumeric(Empty)=True라 0으로 참여하던 것을 차단.
+                ' Error/Date는 이미 IsNumeric=False로 제외 - 인덱스 계약과 정합.
+                If Not IsEmpty(vCell) And IsNumeric(vCell) Then
                     Select Case UCase(Trim(sOp))
                         Case "=": If CDbl(vCell) = dTarget Then setSurvivors.AddRow vCandidates(i)
                         Case "<>": If CDbl(vCell) <> dTarget Then setSurvivors.AddRow vCandidates(i)
