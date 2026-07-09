@@ -1332,6 +1332,21 @@ End Sub
 ' [Internal] 값 비교 헬퍼 (숫자 vs 문자 처리)
 ' 결과: -1(v1 < v2), 0(Same), 1(v1 > v2)
 Private Function CompareValues(ByVal v1 As Variant, ByVal v2 As Variant) As Integer
+    ' Error=safe 계약(D1): Error 셀은 raw CStr로 locale 문자열화돼 은밀히 정렬에 끼지 않도록
+    ' 결정적으로 맨 뒤에 배치한다. (아래 CStr fallback은 CStr(vbError) 예외 위험도 있었다)
+    Dim e1 As Boolean, e2 As Boolean
+    e1 = IsError(v1): e2 = IsError(v2)
+    If e1 Or e2 Then
+        If e1 And e2 Then
+            CompareValues = 0
+        ElseIf e1 Then
+            CompareValues = 1
+        Else
+            CompareValues = -1
+        End If
+        Exit Function
+    End If
+
     ' If one value is a native string, force string comparison for consistency.
     If VarType(v1) = vbString Or VarType(v2) = vbString Then
         CompareValues = StrComp(CStr(v1), CStr(v2), vbTextCompare)

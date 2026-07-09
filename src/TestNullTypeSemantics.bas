@@ -125,11 +125,9 @@ Public Sub Test_NullSem_ErrorNumericFilterExcluded()
     LogShim.AssertEq "nullsem_err_numfilter_gt0", 2, tR.RowCount - 1
 End Sub
 
-' 크래시 실증 1 (2026-07-10 반증됨): Filter 문자 경로(IS)는 셀에 raw CStr지만
-' 이 환경의 CStr(vbError)는 크래시 없이 locale 문자열("오류 2042")을 반환한다.
-' => 크래시가 아니라 "조용히 틀린 결과": Error 셀이 텍스트로 은밀히 비교에 참여.
-' locale 의존 문자열은 하드코딩하지 않고 참여 여부만 locale-무관 불변식으로 고정한다.
-Public Sub Test_NullSem_ErrorStringFilterNoCrashSilentParticipate()
+' D1 계약 (Error=skip): Filter 문자 경로에서 Error 셀은 어느 연산에도 참여하지 않는다.
+' (D0에서 raw CStr(vbError)가 크래시 대신 locale 문자열로 은밀히 참여함을 실증 -> D1에서 skip)
+Public Sub Test_NullSem_ErrorStringFilterSkipped()
     Dim T As clsTable
     Dim tR As clsTable
     Dim lErrNo As Long
@@ -148,20 +146,19 @@ Public Sub Test_NullSem_ErrorStringFilterNoCrashSilentParticipate()
     lErrNo = Err.Number
     On Error GoTo 0
 
-    ' 현행 고정: 크래시 없음 (CStr(vbError)가 문자열 반환)
+    ' 크래시 없음, "a"엔 Error 행 불매칭 => 1행 (A)
     LogShim.AssertEq "nullsem_err_strfilter_nocrash", 0, lErrNo
-    ' "a"엔 Error 행 불매칭 => 결과 1행 (A)
     LogShim.AssertEq "nullsem_err_strfilter_is_a", 1, tR.RowCount - 1
 
-    ' 조용한 참여 고정 (D1 fix의 회귀 펜스): "A"만 제외하면 Error 행은 여전히 남는다.
-    ' 현행 = 2행 (B + Error). Error-skip 통일(D1) 후 = 1행이 되어야 한다.
+    ' Error skip 고정: 부정 연산에서도 Error 행은 결과에 안 들어온다.
+    ' "A"만 제외 => B 1행만 (Error 제외). D1 전에는 2행(B+Error)이었다.
     Set tR = UnivDB.Query(T).Filter("Name", "IS NOT", "A").SelectTable()
-    LogShim.AssertEq "nullsem_err_strfilter_isnot_a", 2, tR.RowCount - 1
+    LogShim.AssertEq "nullsem_err_strfilter_isnot_a", 1, tR.RowCount - 1
 End Sub
 
-' 크래시 실증 2 (2026-07-10 반증됨): OrderBy 비교기 fallback도 raw CStr지만 크래시 없음.
-' Error 셀은 텍스트로 취급돼 숫자 뒤(맨 끝)로 정렬된다 (한글/영문 로캘 모두 숫자 뒤).
-Public Sub Test_NullSem_ErrorOrderByNoCrashSortsLast()
+' D1 계약 (Error=safe): OrderBy에서 Error 셀은 결정적으로 맨 뒤에 배치된다.
+' (D0 현행도 우연히 "Error last"였고 D1이 이를 locale-무관/크래시-무관으로 보장 - assertion 불변)
+Public Sub Test_NullSem_ErrorOrderBySortsLast()
     Dim T As clsTable
     Dim lErrNo As Long
     Dim vData(1 To 4, 1 To 1) As Variant
