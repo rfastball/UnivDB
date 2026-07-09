@@ -124,14 +124,25 @@ locale 문자열(`"오류 2042"`)을 반환한다 (errno=0). 실제 귀결:
 어디서도 값 참여 없음)**. 인덱스 경로는 이미 정합이라 무접촉. Core_CompareValues는 dead code라
 D1에서 배선 안 함(날짜 의미론까지 바꿔 범위 초과) - 통합 판단은 D2/D3.
 
-## 5.7. 남은 작업 (D2/D3)
+## 5.7. D2 실행 결과 (2026-07-10 완료)
 
-- **D2 (집계·필터 정합)**: MIN/MAX Error skip **fix**(pin `4ef7ba7`가 회귀 펜스, errno 13→0),
-  AVG 분모 교정(Error/Date가 SUM엔 불참하나 COUNT엔 참여해 평균 희석 - `nullsem_err_agg_avg`
-  40/3, `nullsem_date_agg_avg` 5가 현행 펜스), Filter 문자 경로 Trim 대칭화.
-- **D2/D3 (날짜 의미론)**: OrderBy 날짜 정렬 text→numeric, 인덱스 날짜 키 canonical(ISO),
-  `Core_CompareValues` 통합 여부.
-- **D3 (키 계약 명문화)**: `UnivDB_Reference.md`에 키 의미론 장 신설.
+집계·필터 정합. 커밋 2개 (MIN/MAX fix는 집계 계약에 합류):
+- `f384efe` **fix: 집계 Error=skip + AVG 희석 교정** (단일키/복합키 두 경로): COUNT는 Error
+  제외(D1 일관), AVG 분모를 "숫자로 가산된 셀 수"로 교정(함수별 count 정책 분리), MIN/MAX는
+  `Not IsError` 가드로 raw Variant 비교 크래시 차단. 핀 flip: `err_agg_count` 3→2,
+  `err_agg_avg` 40/3→20, `date_agg_avg` 5→10, `minmax` errno 13→0(+MAX 30/MIN 10).
+- `6bca416` **fix: 문자 필터 Trim 대칭화** (위험 지점 4): 셀 쪽 `CStr`→`FastNorm`으로 target과
+  대칭 정규화. 셀 앞뒤 공백 있어도 IS 매칭 성립. 신규 핀 `strfilter_trim_is_a`.
+
+집계 계약 확정: **Empty=NULL·Error=skip 둘 다 COUNT 포함 모든 집계 불참, 비숫자 실값(Date/문자)은
+COUNT 포함·SUM 불참·AVG 분모 제외**. Empty=NULL과 Error=skip이 비교/정렬/집계/필터 전 표면에서 통일됨.
+
+## 5.8. 남은 작업 (D3)
+
+- **날짜 의미론**: OrderBy 날짜 정렬 text→numeric, 인덱스 날짜 키 canonical(ISO) 포맷,
+  dead code `Core_CompareValues` 통합 여부. (미결 - 방향 미정)
+- **키 계약 명문화 (D3)**: `UnivDB_Reference.md`에 키 의미론 장 신설(CStr 병합, Empty=="",
+  Error skip, 대소문자 무시, 길이 접두 복합 키, + 위 NULL/타입 집계 계약).
 
 ## 6. 스코프 밖 (명시)
 
