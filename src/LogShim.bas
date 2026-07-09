@@ -11,8 +11,14 @@ Private Const DBG_FOLDER As String = "_dbg"
 ' 롤링 누적 상한. Reset 시에만 오래된 앞줄부터 트림한다.
 Private Const MAX_LINES As Long = 5000
 
+' 배포 무해화 스위치(설계 9.3). dist가 주입 텍스트에서만 True로 뒤집어 각 Public 싱크를
+' no-op으로 만든다. 정본과 src는 항상 False(아티팩트는 빌드 산출물) - 직접 True로 두지 말 것.
+' 호출부(LogShim.LogD ...)는 그대로 남아 컴파일 안전, 런타임 비용은 상수 분기 1회.
+Private Const IS_RELEASE As Boolean = False
+
 ' @desc level과 msg를 D 레코드로 기록함
 Public Sub LogD(level As String, msg As String)
+    If IS_RELEASE Then Exit Sub
     On Error GoTo Done
     AppendLine "{""ts"":""" & NowTimestamp() & """,""kind"":""D"",""level"":""" & _
                JsonEscape(level) & """,""msg"":""" & JsonEscape(msg) & """}"
@@ -21,6 +27,7 @@ End Sub
 
 ' @desc eventName과 dataJson을 J 레코드로 기록함
 Public Sub LogJ(eventName As String, dataJson As String)
+    If IS_RELEASE Then Exit Sub
     On Error GoTo Done
     Dim dataPart As String
     If LenB(dataJson) = 0 Then dataPart = "null" Else dataPart = dataJson
@@ -31,6 +38,7 @@ End Sub
 
 ' @desc 이벤트명과 키/값 배열을 JSON으로 조립해 LogJ로 기록함
 Public Sub LogEvent(eventName As String, keys As Variant, vals As Variant)
+    If IS_RELEASE Then Exit Sub
     On Error GoTo Done
     Dim json As String, i As Long
     json = "{"
@@ -45,6 +53,7 @@ End Sub
 
 ' @desc 단언 결과를 A 레코드로 기록함, 실패해도 raise하지 않음
 Public Sub AssertEq(name As String, expected As Variant, actual As Variant)
+    If IS_RELEASE Then Exit Sub
     On Error GoTo Done
     Dim okFlag As Boolean
     okFlag = (CStr(expected) = CStr(actual))
@@ -57,6 +66,7 @@ End Sub
 
 ' @desc jsonl을 상한까지 트림하고 reset 마커를 추가함
 Public Sub Reset()
+    If IS_RELEASE Then Exit Sub
     On Error GoTo Done
     Dim path As String
     path = LogPath()
