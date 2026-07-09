@@ -57,6 +57,26 @@ Public Sub Test_NullSem_EmptyStringFilterAsBlank()
     LogShim.AssertEq "nullsem_empty_indexkey_blank", 1, T.SelectRows("Name", "").Count
 End Sub
 
+' D2 계약: Filter 문자 경로의 Trim 대칭화. 비교값(target)은 FastNorm으로 Trim되므로 셀 쪽도
+' 대칭 정규화한다 - 셀 앞뒤 공백이 있어도 IS 매칭이 성립한다 (D2 이전엔 raw CStr라 불일치).
+Public Sub Test_NullSem_StringFilterTrimSymmetry()
+    Dim T As clsTable
+    Dim tR As clsTable
+    Dim vData(1 To 4, 1 To 1) As Variant
+
+    vData(1, 1) = "Name"
+    vData(2, 1) = "  A  "  ' 앞뒤 공백
+    vData(3, 1) = "B"
+    vData(4, 1) = "A"
+
+    Set T = UnivDB.CreateTable()
+    T.LoadFromArray vData
+
+    ' 셀 " A " 와 "A" 모두 IS "A" 에 매칭 => 2행
+    Set tR = UnivDB.Query(T).Filter("Name", "IS", "A").SelectTable()
+    LogShim.AssertEq "nullsem_strfilter_trim_is_a", 2, tR.RowCount - 1
+End Sub
+
 ' D1 계약: 집계에서 Empty는 제외 (NULL처럼) - COUNT/SUM/AVG 모두 불참.
 ' 위험 지점 1 해소: 숫자 필터도 Empty 불참으로 통일돼 필터 행수와 COUNT가 정합한다.
 Public Sub Test_NullSem_EmptyAggregateAndFilterConsistent()

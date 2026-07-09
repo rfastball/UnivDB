@@ -176,14 +176,14 @@ Public Function Filter(ByVal sColName As String, ByVal sOp As String, ByVal vVal
                     For i = LBound(vCandidates) To UBound(vCandidates)
                         vCell = vCol(vCandidates(i))
                         If Not IsError(vCell) Then
-                            If StrComp(CStr(vCell), sTarget, vbTextCompare) = 0 Then setSurvivors.AddRow vCandidates(i)
+                            If StrComp(FastNorm(vCell), sTarget, vbTextCompare) = 0 Then setSurvivors.AddRow vCandidates(i)
                         End If
                     Next i
                 Case "IS NOT" ' StrComp 기반의 대소문자 무시 비교 (<>)
                     For i = LBound(vCandidates) To UBound(vCandidates)
                         vCell = vCol(vCandidates(i))
                         If Not IsError(vCell) Then
-                            If StrComp(CStr(vCell), sTarget, vbTextCompare) <> 0 Then setSurvivors.AddRow vCandidates(i)
+                            If StrComp(FastNorm(vCell), sTarget, vbTextCompare) <> 0 Then setSurvivors.AddRow vCandidates(i)
                         End If
                     Next i
                 Case "LIKE" ' VBA Like 연산자
@@ -191,7 +191,7 @@ Public Function Filter(ByVal sColName As String, ByVal sOp As String, ByVal vVal
                     For i = LBound(vCandidates) To UBound(vCandidates)
                         vCell = vCol(vCandidates(i))
                         If Not IsError(vCell) Then
-                            If UCase(CStr(vCell)) Like sTarget Then setSurvivors.AddRow vCandidates(i)
+                            If UCase(FastNorm(vCell)) Like sTarget Then setSurvivors.AddRow vCandidates(i)
                         End If
                     Next i
                 Case "NOT LIKE"
@@ -199,7 +199,7 @@ Public Function Filter(ByVal sColName As String, ByVal sOp As String, ByVal vVal
                      For i = LBound(vCandidates) To UBound(vCandidates)
                         vCell = vCol(vCandidates(i))
                         If Not IsError(vCell) Then
-                            If Not (UCase(CStr(vCell)) Like sTarget) Then setSurvivors.AddRow vCandidates(i)
+                            If Not (UCase(FastNorm(vCell)) Like sTarget) Then setSurvivors.AddRow vCandidates(i)
                         End If
                     Next i
             End Select
