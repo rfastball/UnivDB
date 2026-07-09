@@ -1,0 +1,305 @@
+Attribute VB_Name = "TestNullTypeSemantics"
+' @desc NULL/타입 의미론 현행 동작 회귀 고정 담당
+' @depends UnivDB, LogShim
+Option Explicit
+
+' 비결정 D Phase D0 (docs/tasks/2026-07-08_null_type_semantics.md):
+' 2026-07-07 조사 매트릭스의 각 칸을 실행 테스트로 고정한다.
+' 여기의 기대값은 "현행 실동작"이지 "옳은 계약"이 아니다.
+' D1(Empty NULL 계약)/D2(집계 정합)에서 기대값 변경은 별도 커밋으로 갱신된다.
+' 전부 dict 경로만 사용 (IndexBackend 미지정 = 기본 DictHashIndex).
+
+' ==============================================================================
+' [1] Empty (빈 셀)
+' ==============================================================================
+
+' 매트릭스: Filter 숫자 경로에서 Empty는 0으로 참여 (IsNumeric(Empty)=True)
+Public Sub Test_NullSem_EmptyNumericFilterAsZero()
+    Dim T As clsTable
+    Dim tR As clsTable
+    Dim vData(1 To 4, 1 To 1) As Variant
+
+    vData(1, 1) = "Score"
+    vData(2, 1) = 10
+    ' vData(3, 1) 미할당 = Empty
+    vData(4, 1) = -5
+
+    Set T = UnivDB.CreateTable()
+    T.LoadFromArray vData
+
+    ' Empty가 0으로 비교에 참여: 10 < 100, 0 < 100, -5 < 100 => 3행 전부
+    Set tR = UnivDB.Query(T).Filter("Score", "<", 100).SelectTable()
+    LogShim.AssertEq "nullsem_empty_numfilter_lt100", 3, tR.RowCount - 1
+
+    ' Empty == 0 매칭: Empty 행만
+    Set tR = UnivDB.Query(T).Filter("Score", "=", 0).SelectTable()
+    LogShim.AssertEq "nullsem_empty_numfilter_eq0", 1, tR.RowCount - 1
+End Sub
+
+' 매트릭스: Filter 문자 경로(IS)에서 Empty는 ""로 참여, 인덱스 키도 ""
+Public Sub Test_NullSem_EmptyStringFilterAsBlank()
+    Dim T As clsTable
+    Dim tR As clsTable
+    Dim vData(1 To 4, 1 To 1) As Variant
+
+    vData(1, 1) = "Name"
+    vData(2, 1) = "A"
+    ' vData(3, 1) 미할당 = Empty
+    vData(4, 1) = "B"
+
+    Set T = UnivDB.CreateTable()
+    T.LoadFromArray vData
+
+    Set tR = UnivDB.Query(T).Filter("Name", "IS", "").SelectTable()
+    LogShim.AssertEq "nullsem_empty_strfilter_is_blank", 1, tR.RowCount - 1
+
+    ' 인덱스 키 경로도 동일: Empty -> "" 키
+    LogShim.AssertEq "nullsem_empty_indexkey_blank", 1, T.SelectRows("Name", "").Count
+End Sub
+
+' 매트릭스: 집계에서 Empty는 제외 (NULL처럼) - COUNT/SUM/AVG 모두 불참
+' 위험 지점 1: 같은 컬럼에서 숫자 필터(<100)는 Empty를 0으로 세므로 행수와 COUNT가 어긋난다
+Public Sub Test_NullSem_EmptyAggregateExcluded_FilterCountMismatch()
+    Dim T As clsTable
+    Dim tG As clsTable
+    Dim tR As clsTable
+    Dim vData(1 To 4, 1 To 2) As Variant
+
+    vData(1, 1) = "Dept": vData(1, 2) = "Score"
+    vData(2, 1) = "IT": vData(2, 2) = 10
+    vData(3, 1) = "IT" ' vData(3, 2) 미할당 = Empty
+    vData(4, 1) = "IT": vData(4, 2) = 30
+
+    Set T = UnivDB.CreateTable()
+    T.LoadFromArray vData
+
+    Set tG = T.GroupBy("Dept", "Score:COUNT, Score:SUM, Score:AVG")
+    LogShim.AssertEq "nullsem_empty_agg_count", 2, tG.Value(2, "Score_COUNT")
+    LogShim.AssertEq "nullsem_empty_agg_sum", 40, tG.Value(2, "Score_SUM")
+    LogShim.AssertEq "nullsem_empty_agg_avg", 20, tG.Value(2, "Score_AVG")
+
+    ' 불일치 고정: 필터는 3행(Empty=0 참여), COUNT는 2 (Empty 제외)
+    Set tR = UnivDB.Query(T).Filter("Score", "<", 100).SelectTable()
+    LogShim.AssertEq "nullsem_empty_filter_vs_count", 3, tR.RowCount - 1
+End Sub
+
+' 매트릭스: OrderBy 숫자열에서 Empty는 0 취급 (CDbl(Empty)=0으로 숫자 비교)
+Public Sub Test_NullSem_EmptyOrderByAsZero()
+    Dim T As clsTable
+    Dim vData(1 To 4, 1 To 1) As Variant
+
+    vData(1, 1) = "N"
+    vData(2, 1) = 5
+    ' vData(3, 1) 미할당 = Empty
+    vData(4, 1) = -3
+
+    Set T = UnivDB.CreateTable()
+    T.LoadFromArray vData
+
+    T.OrderBy "N"
+    ' 오름차순: -3, Empty(=0), 5
+    LogShim.AssertEq "nullsem_empty_orderby_first", -3, T.Value(2, "N")
+    LogShim.AssertEq "nullsem_empty_orderby_mid", "", T.Value(3, "N")
+    LogShim.AssertEq "nullsem_empty_orderby_last", 5, T.Value(4, "N")
+End Sub
+
+' ==============================================================================
+' [2] Error (#N/A 등)
+' ==============================================================================
+
+' 매트릭스: Filter 숫자 경로에서 Error는 제외 (IsNumeric(vbError)=False)
+Public Sub Test_NullSem_ErrorNumericFilterExcluded()
+    Dim T As clsTable
+    Dim tR As clsTable
+    Dim vData(1 To 4, 1 To 1) As Variant
+
+    vData(1, 1) = "Score"
+    vData(2, 1) = 10
+    vData(3, 1) = CVErr(xlErrNA)
+    vData(4, 1) = 30
+
+    Set T = UnivDB.CreateTable()
+    T.LoadFromArray vData
+
+    Set tR = UnivDB.Query(T).Filter("Score", ">", 0).SelectTable()
+    LogShim.AssertEq "nullsem_err_numfilter_gt0", 2, tR.RowCount - 1
+End Sub
+
+' 크래시 실증 1 (2026-07-10 반증됨): Filter 문자 경로(IS)는 셀에 raw CStr지만
+' 이 환경의 CStr(vbError)는 크래시 없이 locale 문자열("오류 2042")을 반환한다.
+' => 크래시가 아니라 "조용히 틀린 결과": Error 셀이 텍스트로 은밀히 비교에 참여.
+' locale 의존 문자열은 하드코딩하지 않고 참여 여부만 locale-무관 불변식으로 고정한다.
+Public Sub Test_NullSem_ErrorStringFilterNoCrashSilentParticipate()
+    Dim T As clsTable
+    Dim tR As clsTable
+    Dim lErrNo As Long
+    Dim vData(1 To 4, 1 To 1) As Variant
+
+    vData(1, 1) = "Name"
+    vData(2, 1) = "A"
+    vData(3, 1) = CVErr(xlErrNA)
+    vData(4, 1) = "B"
+
+    Set T = UnivDB.CreateTable()
+    T.LoadFromArray vData
+
+    On Error Resume Next
+    Set tR = UnivDB.Query(T).Filter("Name", "IS", "a").SelectTable()
+    lErrNo = Err.Number
+    On Error GoTo 0
+
+    ' 현행 고정: 크래시 없음 (CStr(vbError)가 문자열 반환)
+    LogShim.AssertEq "nullsem_err_strfilter_nocrash", 0, lErrNo
+    ' "a"엔 Error 행 불매칭 => 결과 1행 (A)
+    LogShim.AssertEq "nullsem_err_strfilter_is_a", 1, tR.RowCount - 1
+
+    ' 조용한 참여 고정 (D1 fix의 회귀 펜스): "A"만 제외하면 Error 행은 여전히 남는다.
+    ' 현행 = 2행 (B + Error). Error-skip 통일(D1) 후 = 1행이 되어야 한다.
+    Set tR = UnivDB.Query(T).Filter("Name", "IS NOT", "A").SelectTable()
+    LogShim.AssertEq "nullsem_err_strfilter_isnot_a", 2, tR.RowCount - 1
+End Sub
+
+' 크래시 실증 2 (2026-07-10 반증됨): OrderBy 비교기 fallback도 raw CStr지만 크래시 없음.
+' Error 셀은 텍스트로 취급돼 숫자 뒤(맨 끝)로 정렬된다 (한글/영문 로캘 모두 숫자 뒤).
+Public Sub Test_NullSem_ErrorOrderByNoCrashSortsLast()
+    Dim T As clsTable
+    Dim lErrNo As Long
+    Dim vData(1 To 4, 1 To 1) As Variant
+
+    vData(1, 1) = "N"
+    vData(2, 1) = 10
+    vData(3, 1) = CVErr(xlErrNA)
+    vData(4, 1) = 5
+
+    Set T = UnivDB.CreateTable()
+    T.LoadFromArray vData
+
+    On Error Resume Next
+    T.OrderBy "N"
+    lErrNo = Err.Number
+    On Error GoTo 0
+
+    ' 현행 고정: 크래시 없음, 행 보존(Error 미탈락), 숫자는 숫자끼리 정상 정렬
+    LogShim.AssertEq "nullsem_err_orderby_nocrash", 0, lErrNo
+    LogShim.AssertEq "nullsem_err_orderby_rowcount", 3, T.RowCount - 1
+    LogShim.AssertEq "nullsem_err_orderby_r2", 5, T.Value(2, "N")
+    LogShim.AssertEq "nullsem_err_orderby_r3", 10, T.Value(3, "N")
+    ' Error 행은 텍스트로 맨 뒤 (locale-무관: 숫자가 문자보다 앞서 정렬)
+    LogShim.AssertEq "nullsem_err_orderby_r4_iserr", True, IsError(T.Value(4, "N"))
+End Sub
+
+' 현행 고정: 집계 컬럼의 Error 셀은 Not IsEmpty 가드만 통과해 분모(COUNT)에 참여한다
+' (SUM에는 IsNumeric 가드로 불참) - AVG가 조용히 희석되는 두 번째 경로
+Public Sub Test_NullSem_ErrorAggregateDenominator()
+    Dim T As clsTable
+    Dim tG As clsTable
+    Dim vData(1 To 4, 1 To 2) As Variant
+
+    vData(1, 1) = "Dept": vData(1, 2) = "Score"
+    vData(2, 1) = "IT": vData(2, 2) = 10
+    vData(3, 1) = "IT": vData(3, 2) = CVErr(xlErrNA)
+    vData(4, 1) = "IT": vData(4, 2) = 30
+
+    Set T = UnivDB.CreateTable()
+    T.LoadFromArray vData
+
+    Set tG = T.GroupBy("Dept", "Score:COUNT, Score:SUM, Score:AVG")
+    LogShim.AssertEq "nullsem_err_agg_count", 3, tG.Value(2, "Score_COUNT")
+    LogShim.AssertEq "nullsem_err_agg_sum", 40, tG.Value(2, "Score_SUM")
+    LogShim.AssertEq "nullsem_err_agg_avg", 40 / 3, tG.Value(2, "Score_AVG")
+End Sub
+
+' ==============================================================================
+' [3] 숫자 42 vs 문자 "42"
+' ==============================================================================
+
+' 매트릭스: 인덱스 키는 CStr 병합(같은 키), 숫자 필터는 CDbl로 둘 다 참여, SUM도 합산
+Public Sub Test_NullSem_NumericStringMerge()
+    Dim T As clsTable
+    Dim tR As clsTable
+    Dim tG As clsTable
+    Dim vData(1 To 4, 1 To 2) As Variant
+
+    vData(1, 1) = "Dept": vData(1, 2) = "Score"
+    vData(2, 1) = "IT": vData(2, 2) = 42
+    vData(3, 1) = "IT": vData(3, 2) = "42"
+    vData(4, 1) = "IT": vData(4, 2) = 7
+
+    Set T = UnivDB.CreateTable()
+    T.LoadFromArray vData
+
+    ' 인덱스 키: 42와 "42"는 같은 키
+    LogShim.AssertEq "nullsem_numstr_indexkey_merge", 2, T.SelectRows("Score", 42).Count
+
+    ' 숫자 필터: 둘 다 CDbl로 참여
+    Set tR = UnivDB.Query(T).Filter("Score", "=", 42).SelectTable()
+    LogShim.AssertEq "nullsem_numstr_numfilter_eq", 2, tR.RowCount - 1
+
+    ' SUM: "42"도 IsNumeric이라 가산
+    Set tG = T.GroupBy("Dept", "Score:SUM")
+    LogShim.AssertEq "nullsem_numstr_agg_sum", 91, tG.Value(2, "Score_SUM")
+End Sub
+
+' 매트릭스: OrderBy는 문자 우선 규칙 - 한쪽이 String이면 문자 비교로 강제
+' 숫자 9와 문자 "10"의 문자 비교: "9" > "10" 이므로 오름차순에서 "10"이 앞선다
+Public Sub Test_NullSem_NumericStringOrderByStringWins()
+    Dim T As clsTable
+    Dim vData(1 To 3, 1 To 1) As Variant
+
+    vData(1, 1) = "N"
+    vData(2, 1) = 9
+    vData(3, 1) = "10"
+
+    Set T = UnivDB.CreateTable()
+    T.LoadFromArray vData
+
+    T.OrderBy "N"
+    LogShim.AssertEq "nullsem_numstr_orderby_first", "10", T.Value(2, "N")
+    LogShim.AssertEq "nullsem_numstr_orderby_last", 9, T.Value(3, "N")
+End Sub
+
+' ==============================================================================
+' [4] 날짜
+' ==============================================================================
+
+' 매트릭스: 숫자 필터에서 날짜는 제외 (IsNumeric(Date)=False),
+' SUM 불참이지만 분모(COUNT)에는 참여 - AVG 희석의 세 번째 경로
+Public Sub Test_NullSem_DateNumericExcludedButCounted()
+    Dim T As clsTable
+    Dim tR As clsTable
+    Dim tG As clsTable
+    Dim vData(1 To 3, 1 To 2) As Variant
+
+    vData(1, 1) = "Dept": vData(1, 2) = "Amount"
+    vData(2, 1) = "IT": vData(2, 2) = 10
+    vData(3, 1) = "IT": vData(3, 2) = DateSerial(2026, 7, 8)
+
+    Set T = UnivDB.CreateTable()
+    T.LoadFromArray vData
+
+    ' 숫자 필터: 날짜 셀 제외
+    Set tR = UnivDB.Query(T).Filter("Amount", ">", 0).SelectTable()
+    LogShim.AssertEq "nullsem_date_numfilter_gt0", 1, tR.RowCount - 1
+
+    ' 집계: SUM은 10만, COUNT는 날짜 포함 2 => AVG = 5
+    Set tG = T.GroupBy("Dept", "Amount:COUNT, Amount:SUM, Amount:AVG")
+    LogShim.AssertEq "nullsem_date_agg_count", 2, tG.Value(2, "Amount_COUNT")
+    LogShim.AssertEq "nullsem_date_agg_sum", 10, tG.Value(2, "Amount_SUM")
+    LogShim.AssertEq "nullsem_date_agg_avg", 5, tG.Value(2, "Amount_AVG")
+End Sub
+
+' 매트릭스: 날짜 인덱스 키는 CStr(date) - locale 의존이지만 같은 세션 안에서는
+' 같은 Date 값으로 항상 재조회 가능해야 한다 (self-consistency 고정)
+Public Sub Test_NullSem_DateIndexKeySelfConsistent()
+    Dim T As clsTable
+    Dim vData(1 To 3, 1 To 1) As Variant
+
+    vData(1, 1) = "D"
+    vData(2, 1) = DateSerial(2026, 7, 8)
+    vData(3, 1) = DateSerial(2026, 1, 1)
+
+    Set T = UnivDB.CreateTable()
+    T.LoadFromArray vData
+
+    LogShim.AssertEq "nullsem_date_indexkey_roundtrip", 1, T.SelectRows("D", DateSerial(2026, 7, 8)).Count
+End Sub

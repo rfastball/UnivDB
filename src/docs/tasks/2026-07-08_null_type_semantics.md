@@ -19,7 +19,7 @@
 | 값 | 인덱스 키 (Where/Join/GroupBy 키) | Filter 숫자 경로 | Filter 문자 경로 (IS/LIKE) | 집계 (SUM/AVG/COUNT...) | OrderBy |
 |---|---|---|---|---|---|
 | Empty (빈 셀) | `""` 키로 참여 | **0으로 참여** (IsNumeric(Empty)=True) | `""`로 참여 | **제외** (NULL처럼) | 숫자열에선 0 취급 |
-| Error (#N/A 등) | 행 skip | 제외 (IsNumeric=False) | **CStr 크래시 의심** | 행 skip (R1 이후) | fallback CStr **크래시 의심** |
+| Error (#N/A 등) | 행 skip | 제외 (IsNumeric=False) | **locale 문자열로 조용히 참여** (D0 반증) | 행 skip (R1 이후) | **텍스트로 맨 뒤 정렬** (D0 반증) |
 | 숫자 42 vs 문자 "42" | **같은 키** (CStr 병합) | 둘 다 참여 (CDbl) | CStr로 병합 | 둘 다 숫자로 합산 | 문자 우선 규칙으로 분리 비교 |
 | 날짜 | CStr = **locale 의존 키** | **제외** (IsNumeric(Date)=False) | CStr 비교 | SUM 불참 | 문자 비교로 fallback |
 
@@ -85,6 +85,29 @@ Empty 하나가 경로에 따라 세 얼굴(NULL / 0 / 빈 문자열)을 가진�
 green이지만, Core 백엔드 컴파일 결함(CLAUDE.md 알려진 미결)이 있어 Core 경로 테스트는
 모달을 띄운다. D 작업의 신규 테스트는 dict 경로만 다루므로 영향권 밖 - 단, 새 테스트가
 실수로 `IndexBackend = dbBackendCore`를 건드리지 않도록 주의.
+
+## 5.5. D0 실행 결과 (2026-07-10)
+
+`TestNullTypeSemantics.bas`로 매트릭스 13칸을 실행 고정. 11칸은 조사값 그대로 확정.
+**크래시 의심 2곳(3-3)은 반증됨** - 이 환경의 `CStr(CVErr(xlErrNA))`는 크래시 없이
+locale 문자열(`"오류 2042"`)을 반환한다 (errno=0). 실제 귀결:
+
+- **Filter 문자 경로(IS)**: Error 셀이 `"오류 2042"`로 문자열화돼 **조용히 비교에 참여**한다.
+  `IS "a"`엔 불매칭(1행), `IS NOT "A"`엔 Error 행이 남는다(2행).
+- **OrderBy**: 크래시 없이 Error 셀이 **텍스트로 맨 뒤 정렬**(숫자는 숫자끼리 정상, 한/영 로캘 공통).
+
+즉 실패 양식은 "크래시"가 아니라 **"조용히 틀린 결과"** - 프로젝트 철학상 더 나쁜 쪽.
+따라서 D0에 즉시 크래시 fix는 없고, **Error-skip 통일은 D1급 의도적 계약 변경**으로 이월한다
+(Empty NULL 계약과 같은 원칙: "Empty=NULL 불참", "Error=skip 어디서도 불참").
+핀은 locale 문자열을 하드코딩하지 않고 locale-무관 불변식(errno=0, 참여 여부, 정렬 보존)으로 고정.
+
+### D1 확장 (D0 결과 반영)
+- Empty NULL 계약(D-a: 숫자 필터 0 참여 제거)에 **Error-skip 통일**을 합류시킨다:
+  - Filter 문자 경로(`clsQuery` IS/IS NOT/LIKE/NOT LIKE): Error 셀 비교 제외.
+  - OrderBy 비교기(`clsTable.CompareValues`): Error 셀 안전 취급. 이미 존재하는
+    `Core_modCompare.Core_CompareValues`(Error/Date/Numeric 인지, `Core_SafeText` 경유)로
+    배선하는 안이 유력 - 단 날짜 정렬을 locale 텍스트→숫자로 바꾸므로 그 변경은 별도 판단(D2/D3).
+- 회귀 펜스: `nullsem_err_strfilter_isnot_a`(2→1), OrderBy 행 보존/정렬 위치.
 
 ## 6. 스코프 밖 (명시)
 
