@@ -185,9 +185,9 @@ Public Sub Test_NullSem_ErrorOrderBySortsLast()
     LogShim.AssertEq "nullsem_err_orderby_r4_iserr", True, IsError(T.Value(4, "N"))
 End Sub
 
-' 현행 고정: 집계 컬럼의 Error 셀은 Not IsEmpty 가드만 통과해 분모(COUNT)에 참여한다
-' (SUM에는 IsNumeric 가드로 불참) - AVG가 조용히 희석되는 두 번째 경로
-Public Sub Test_NullSem_ErrorAggregateDenominator()
+' D2 계약 (Error=skip): 집계 컬럼의 Error 셀은 COUNT 포함 어느 집계에도 불참한다.
+' COUNT=2(Error 제외), SUM=40, AVG=40/2=20(분모=숫자로 가산된 셀 수, 희석 없음)
+Public Sub Test_NullSem_ErrorAggregateExcluded()
     Dim T As clsTable
     Dim tG As clsTable
     Dim vData(1 To 4, 1 To 2) As Variant
@@ -201,19 +201,20 @@ Public Sub Test_NullSem_ErrorAggregateDenominator()
     T.LoadFromArray vData
 
     Set tG = T.GroupBy("Dept", "Score:COUNT, Score:SUM, Score:AVG")
-    LogShim.AssertEq "nullsem_err_agg_count", 3, tG.Value(2, "Score_COUNT")
+    LogShim.AssertEq "nullsem_err_agg_count", 2, tG.Value(2, "Score_COUNT")
     LogShim.AssertEq "nullsem_err_agg_sum", 40, tG.Value(2, "Score_SUM")
-    LogShim.AssertEq "nullsem_err_agg_avg", 40 / 3, tG.Value(2, "Score_AVG")
+    LogShim.AssertEq "nullsem_err_agg_avg", 20, tG.Value(2, "Score_AVG")
 End Sub
 
-' 신규 표면 (2026-07-10 Explore 발견): GroupBy MIN/MAX는 셀 값에 raw Variant >/< 를 쓴다
-' (clsTable.cls MIN/MAX 분기). Empty는 IsEmpty 가드로 제외되나 Error는 미가드 - MIN/MAX 컬럼에
-' Error가 있으면 compare에 닿아 런타임 크래시. 현행 동작을 pin으로 실증한다 (fix는 D2 집계 단계).
-Public Sub Test_NullSem_MinMaxErrorProbe()
+' D2 계약 (Error=skip): GroupBy MIN/MAX는 Error 셀을 제외한다(raw Variant 비교 크래시 차단).
+' D1(pin 4ef7ba7)에선 Error가 compare에 닿아 Type Mismatch(13) 크래시였다 - 이제 errno=0.
+Public Sub Test_NullSem_MinMaxErrorSkipped()
     Dim T As clsTable
     Dim tG As clsTable
     Dim lErrNoMax As Long
     Dim lErrNoMin As Long
+    Dim vMax As Variant
+    Dim vMin As Variant
     Dim vData(1 To 4, 1 To 2) As Variant
 
     vData(1, 1) = "Dept": vData(1, 2) = "Score"
@@ -227,15 +228,18 @@ Public Sub Test_NullSem_MinMaxErrorProbe()
     On Error Resume Next
     Set tG = T.GroupBy("Dept", "Score:MAX")
     lErrNoMax = Err.Number
+    vMax = tG.Value(2, "Score_MAX")
     Err.Clear
     Set tG = T.GroupBy("Dept", "Score:MIN")
     lErrNoMin = Err.Number
+    vMin = tG.Value(2, "Score_MIN")
     On Error GoTo 0
 
-    ' 현행 고정: MIN/MAX 컬럼의 Error 셀이 raw Variant 비교에 닿아 Type Mismatch(13) 크래시.
-    ' D2에서 Error skip 가드로 fix되면 이 pin은 errno=0으로 flip된다.
-    LogShim.AssertEq "nullsem_minmax_error_max_errno", 13, lErrNoMax
-    LogShim.AssertEq "nullsem_minmax_error_min_errno", 13, lErrNoMin
+    ' 크래시 없음 + Error 제외한 실값으로 MIN/MAX 산출
+    LogShim.AssertEq "nullsem_minmax_error_max_errno", 0, lErrNoMax
+    LogShim.AssertEq "nullsem_minmax_error_min_errno", 0, lErrNoMin
+    LogShim.AssertEq "nullsem_minmax_error_max_val", 30, vMax
+    LogShim.AssertEq "nullsem_minmax_error_min_val", 10, vMin
 End Sub
 
 ' ==============================================================================
@@ -291,8 +295,8 @@ End Sub
 ' [4] 날짜
 ' ==============================================================================
 
-' 매트릭스: 숫자 필터에서 날짜는 제외 (IsNumeric(Date)=False),
-' SUM 불참이지만 분모(COUNT)에는 참여 - AVG 희석의 세 번째 경로
+' D2 계약: 숫자 필터에서 날짜는 제외(IsNumeric(Date)=False), 집계에선 SUM 불참·COUNT 포함이나
+' AVG 분모는 숫자 셀 수라 희석되지 않는다 (D1 이전엔 AVG 희석의 세 번째 경로였음)
 Public Sub Test_NullSem_DateNumericExcludedButCounted()
     Dim T As clsTable
     Dim tR As clsTable
@@ -310,11 +314,12 @@ Public Sub Test_NullSem_DateNumericExcludedButCounted()
     Set tR = UnivDB.Query(T).Filter("Amount", ">", 0).SelectTable()
     LogShim.AssertEq "nullsem_date_numfilter_gt0", 1, tR.RowCount - 1
 
-    ' 집계: SUM은 10만, COUNT는 날짜 포함 2 => AVG = 5
+    ' 집계(D2): 날짜는 실값이라 COUNT엔 포함(2), SUM엔 불참(비숫자), AVG 분모=숫자 셀 수(1)
+    ' => AVG = 10/1 = 10 (날짜에 의한 희석 없음)
     Set tG = T.GroupBy("Dept", "Amount:COUNT, Amount:SUM, Amount:AVG")
     LogShim.AssertEq "nullsem_date_agg_count", 2, tG.Value(2, "Amount_COUNT")
     LogShim.AssertEq "nullsem_date_agg_sum", 10, tG.Value(2, "Amount_SUM")
-    LogShim.AssertEq "nullsem_date_agg_avg", 5, tG.Value(2, "Amount_AVG")
+    LogShim.AssertEq "nullsem_date_agg_avg", 10, tG.Value(2, "Amount_AVG")
 End Sub
 
 ' 매트릭스: 날짜 인덱스 키는 CStr(date) - locale 의존이지만 같은 세션 안에서는

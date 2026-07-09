@@ -633,22 +633,34 @@ Public Function GroupBy(ByVal sGroupCols As String, ByVal sAggList As String) As
                     vCell = vAggCols(j)(lRowId)
                     ' 집계 본체는 복합 키 경로(2-3)와 동일 계약 - R3에서 공용화 예정
                     If Not IsEmpty(vCell) Then
-                        vStats(j * 2 + 1) = vStats(j * 2 + 1) + 1
+                        ' 집계 계약(D2): Empty=NULL/Error=skip - 둘 다 불참(Empty는 위 가드).
+                        ' COUNT=Error 제외한 실값 수, AVG 분모=숫자로 가산된 셀 수(희석 방지),
+                        ' MIN/MAX=Error 제외(raw 비교 크래시 차단).
                         Select Case arrAggFuncs(j)
-                            Case "SUM", "AVG"
+                            Case "SUM"
                                 If IsNumeric(vCell) Then vStats(j * 2) = vStats(j * 2) + vCell
+                            Case "AVG"
+                                If IsNumeric(vCell) Then
+                                    vStats(j * 2) = vStats(j * 2) + vCell
+                                    vStats(j * 2 + 1) = vStats(j * 2 + 1) + 1
+                                End If
                             Case "COUNT"
+                                If Not IsError(vCell) Then vStats(j * 2 + 1) = vStats(j * 2 + 1) + 1
                             Case "MAX"
-                                If IsEmpty(vStats(j * 2)) Then
-                                    vStats(j * 2) = vCell
-                                ElseIf vCell > vStats(j * 2) Then
-                                    vStats(j * 2) = vCell
+                                If Not IsError(vCell) Then
+                                    If IsEmpty(vStats(j * 2)) Then
+                                        vStats(j * 2) = vCell
+                                    ElseIf vCell > vStats(j * 2) Then
+                                        vStats(j * 2) = vCell
+                                    End If
                                 End If
                             Case "MIN"
-                                If IsEmpty(vStats(j * 2)) Then
-                                    vStats(j * 2) = vCell
-                                ElseIf vCell < vStats(j * 2) Then
-                                    vStats(j * 2) = vCell
+                                If Not IsError(vCell) Then
+                                    If IsEmpty(vStats(j * 2)) Then
+                                        vStats(j * 2) = vCell
+                                    ElseIf vCell < vStats(j * 2) Then
+                                        vStats(j * 2) = vCell
+                                    End If
                                 End If
                         End Select
                     End If
@@ -723,28 +735,34 @@ Public Function GroupBy(ByVal sGroupCols As String, ByVal sAggList As String) As
             For j = 0 To lAggCount - 1
                 vCell = vAggCols(j)(R)
 
-                ' 빈 값 제외 (COUNT 등에서 중요)
+                ' 집계 계약(D2): Empty=NULL(제외), Error=skip(어느 집계에도 불참).
+                ' COUNT=Error 제외한 실값 수, AVG 분모=숫자로 가산된 셀 수, MIN/MAX=Error 제외.
                 If Not IsEmpty(vCell) Then
-                    ' Count 증가 (홀수 인덱스)
-                    vStats(j * 2 + 1) = vStats(j * 2 + 1) + 1
-
-                    ' Value 연산 (짝수 인덱스)
                     Select Case arrAggFuncs(j)
-                        Case "SUM", "AVG"
+                        Case "SUM"
                             If IsNumeric(vCell) Then vStats(j * 2) = vStats(j * 2) + vCell
+                        Case "AVG"
+                            If IsNumeric(vCell) Then
+                                vStats(j * 2) = vStats(j * 2) + vCell
+                                vStats(j * 2 + 1) = vStats(j * 2 + 1) + 1
+                            End If
                         Case "COUNT"
-                            ' Count는 위에서 이미 처리함 (Value 칸은 사용 안 함)
+                            If Not IsError(vCell) Then vStats(j * 2 + 1) = vStats(j * 2 + 1) + 1
                         Case "MAX"
-                            If IsEmpty(vStats(j * 2)) Then
-                                vStats(j * 2) = vCell
-                            ElseIf vCell > vStats(j * 2) Then
-                                vStats(j * 2) = vCell
+                            If Not IsError(vCell) Then
+                                If IsEmpty(vStats(j * 2)) Then
+                                    vStats(j * 2) = vCell
+                                ElseIf vCell > vStats(j * 2) Then
+                                    vStats(j * 2) = vCell
+                                End If
                             End If
                         Case "MIN"
-                            If IsEmpty(vStats(j * 2)) Then
-                                vStats(j * 2) = vCell
-                            ElseIf vCell < vStats(j * 2) Then
-                                vStats(j * 2) = vCell
+                            If Not IsError(vCell) Then
+                                If IsEmpty(vStats(j * 2)) Then
+                                    vStats(j * 2) = vCell
+                                ElseIf vCell < vStats(j * 2) Then
+                                    vStats(j * 2) = vCell
+                                End If
                             End If
                     End Select
                 End If
