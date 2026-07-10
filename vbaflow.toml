@@ -7,3 +7,7 @@ visible = true
 
 [src]
 root = "src"
+
+[dist]
+version = "2.8.0"                 # UnivDB_Reference.md 버전과 동기
+exclude = ["Test*", "SmokeTest"]  # 테스트 모듈 제외 (LogShim은 dist가 무해화 - 제외 금지)
