@@ -325,3 +325,19 @@ C3 구현 중 코드 재정독으로 전수조사 매트릭스의 오판정 2건
 
 이로써 audit 위반 F1~F25 중 코드 접촉 대상은 전부 종결. 잔여는 표현력 확장 축
 (C-1 교차 컬럼 OR, C-2 Compute 상수)과 F8/F9 의도적 보류(문서화 완화)뿐.
+
+### 7.7 후속 마무리 3건 (2026-07-10 오후)
+
+- **엔진/보조 모듈 오류 처리 스윕 (7.5절 후속 점검 후보 종결)**: 비테스트 전 모듈에
+  MsgBox/InputBox/On Error Resume Next/조용한 Exit를 전수 grep + 정독. 결과 잔존
+  위반 0 - 남은 Resume Next는 전부 계약된 데이터 수준 관용(Compute 행별 skip,
+  PatchIf 무매칭, ConvertDates 파싱 시도, Collection 중복 키 탐침)이고 조용한
+  Exit는 멱등/빈 입력 방어 계약. MsgBox는 modTemplate.bas에만 있었고 아래 처분으로
+  소멸. F25류 헤드리스 모달 위험 표면 없음 확인.
+- **벤치 회귀 확인**: 리팩토링 전(07-10 06시대) 대비 완료 후(10:59, 12:40 재확인)
+  bench_db_* 비교 - Where hit 100->95~101ms, GroupBy 7~8ms 동일, Filter는 실행 간
+  편차 범위 내(단발 46ms 샘플은 노이즈, 동일 실행 column_access filter 363ms가
+  baseline과 동일). **회귀 없음** - fail-fast 검증은 문장 수준 1회라 비용 비가시.
+- **레거시 문서 모듈 은퇴**: Docs.bas(v2.1)/modTemplate.bas(v2.0)를 삭제 +
+  워크북 prune (`d4a8fce`). Reference v2.7.2가 대체 선언한 구세대 사본으로
+  canonical 어휘 미반영 상태였음. 참조 0 확인, 전체 79 테스트 green.
