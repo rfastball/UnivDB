@@ -1,7 +1,7 @@
 # UnivDB Library Reference (Consolidated)
 
 > **For**: Claude Code agent context. Single-file reference replacing CheatSheet, Docs, Guide, Template.
-> **Version**: v2.7.0
+> **Version**: v2.7.1
 
 ---
 
@@ -48,6 +48,17 @@ UnivDB.EditTable(TableName, KeyCol) -> clsTableBuilder ' 기존 테이블 스키
 .Top(Count)                   ' 상위 N행
 .SelectColumns("Col1, Col2")  ' 컬럼 선택 (쉼표 구분 String)
 ```
+
+### Join (물질화 장벽)
+```vb
+.Join(Right, LeftKey, [JoinType=jtInner], [RightPrefix], [RightKey]) -> clsQuery
+```
+
+> **물질화 장벽**: `Join`은 그 시점까지 스테이징된 조건/투영/정렬/Top을 **실행해 좌측
+> 테이블을 확정**한 뒤, 조인 결과로 재소싱해 체인을 초기 상태에서 계속한다. Join 이전의
+> `SelectColumns`/`OrderBy`/`Top`은 좌측에 소진되고 이후로 이월되지 않는다.
+> `Right`는 테이블명(String) 또는 clsTable. 기본 JoinType은 **jtInner**(파사드 정합) —
+> `clsReportBuilder.JoinTable`의 기본(jtLeft)과 다르니 주의. 키 컬럼 오타는 즉시 raise.
 
 ### Execute (Read)
 ```vb

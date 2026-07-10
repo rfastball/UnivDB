@@ -291,5 +291,19 @@ C3 구현 중 코드 재정독으로 전수조사 매트릭스의 오판정 2건
   이름 분리는 이득 대비 표면 증식이 커서 보류.
 - F11~F13, F15, F20 (값 설정/행 제거/단복수/진입점/인자 규약의 전면 통일): canonical
   별칭 최소 세트(7.3)로 완화. 잔여 어휘 통일은 1.0 전 재평가.
-- F17 (파사드 Join 체인 단절), C-1 (교차 컬럼 OR), C-2 (Compute 상수): 표현력 확장
-  축 - 별도 task로 이월.
+- C-1 (교차 컬럼 OR), C-2 (Compute 상수): 표현력 확장 축 - 별도 task로 이월.
+- ~~F17 (파사드 Join 체인 단절)~~: **2026-07-10 해소** - 7.5절 참조.
+
+### 7.5 F17 해소 + 추보 F25 (2026-07-10)
+
+- `1ce5f27` **clsQuery.Join 신설** (F17): `Join(vRight, sLeftKey, [jType=jtInner],
+  [sRightPrefix], [sRightKey]) As clsQuery`. 의미론은 **물질화 장벽** - Join 시점까지
+  스테이징된 조건/투영/정렬/Top을 ToTable()로 실행해 좌측 확정 후 조인 결과로 재소싱
+  (From + ResetPipelineState). 지연 엔진이 단일 소스 전제라 지연 조인은 불가 - 장벽
+  의미론을 @desc/Reference에 명시해 V3(같은 표면 내 실행 시점 혼재)을 계약으로 완화.
+  기본 jType은 파사드 정합(jtInner), ReportBuilder.JoinTable(jtLeft)과의 차이 문서화.
+- `a128fa3` **추보 F25 [V1/V2 + 헤드리스]**: `modEngine.JoinTable` 키 컬럼 부재 처리가
+  MsgBox + Exit Function(Nothing 반환 -> 조용한 91 전이)이었다 - 헤드리스에서 모달 행
+  유발이라 **현행 핀 고정이 불가능**해 2단 커밋 패턴 예외(fix + 신규 계약 핀만).
+  Err.Raise 9999로 교정. 전수조사 매트릭스가 modEngine(비체이닝 엔진 모듈)을 스코프
+  밖에 둬 놓친 사례 - 엔진 모듈의 오류 처리도 후속 점검 후보.
