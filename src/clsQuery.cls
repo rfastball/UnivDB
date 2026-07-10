@@ -426,6 +426,12 @@ End Function
 ' ------------------------------------------------------------------------------
 ' [Step 3] 최종 실행 및 결과 반환 (Projection + Top/Limit + OrderBy 통합)
 ' ------------------------------------------------------------------------------
+' @desc 쿼리 결과를 clsTable로 물질화해 반환, canonical 종결자 (audit F10)
+Public Function ToTable() As clsTable
+    ' 종결자 어휘 수렴: LINQ To* 규약 정합 (survey 축 D). SelectTable은 호환 유지.
+    Set ToTable = SelectTable()
+End Function
+
 Public Function SelectTable() As clsTable
     Dim tResult As New clsTable
     Dim vResultData As Variant

@@ -152,6 +152,12 @@ Public Function Filter(ByVal sColName As String, ByVal sOp As String, ByVal vVal
     Set Filter = Me
 End Function
 
+' @desc 조건에 맞는 행만 즉시 유지, Filter 동의어 (즉시 실행 어휘 - audit F7)
+Public Function Keep(ByVal sColName As String, ByVal sOp As String, ByVal vValue As Variant) As clsReportBuilder
+    ' clsQuery.Filter(지연)와의 동명이의 완화: Keep/Exclude 대칭쌍이 canonical 어휘.
+    Set Keep = Me.Filter(sColName, sOp, vValue)
+End Function
+
 ' 조건에 맞는 행 삭제하기 (Remove)
 Public Function Exclude(ByVal sColName As String, ByVal sOp As String, ByVal vValue As Variant) As clsReportBuilder
     EnsureSafeCopy ' [중요] 원본 삭제 방지를 위해 복사본 생성 후 수행
@@ -210,6 +216,11 @@ Public Property Get Table() As clsTable
     Set Table = m_tWork
 End Property
 
+' @desc 작업 테이블을 clsTable로 반환, canonical 종결자 (audit F10, Table 동의어)
+Public Function ToTable() As clsTable
+    Set ToTable = m_tWork
+End Function
+
 ' [8] 최종 선택 (Select)
 ' ==============================================================================
 ' [신규] SelectColumns (Projection 설정) - ParamArray 적용
@@ -227,8 +238,9 @@ Public Function SelectColumns(ParamArray vCols() As Variant) As clsReportBuilder
 End Function
 
 ' ==============================================================================
-' [Legacy] SelectFinal (하위 호환성 유지)
+' [Legacy/Deprecated] SelectFinal (하위 호환성 유지 - 신규 코드는 SelectColumns 사용)
 ' 설명: 이전 버전과의 호환을 위해 유지하며, 내부적으로 SelectColumns를 호출합니다.
+'       audit F14: 같은 기능 두 이름 - canonical은 SelectColumns (제거 계획 없음).
 ' ------------------------------------------------------------------------------
 Public Function SelectFinal(ParamArray vCols() As Variant) As clsReportBuilder
     ' ParamArray로 전달받은 vCols를 그대로 넘겨 처리합니다.

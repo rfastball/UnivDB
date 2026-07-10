@@ -175,6 +175,21 @@ Public Function Val(ByVal ColName As String, Optional ByVal Value As Variant) As
     End If
 End Function
 
+' @desc 커서 행의 컬럼 값 설정 후 자기 자신 반환, 순수 setter (audit F19, Val 분리)
+Public Function SetVal(ByVal ColName As String, ByVal Value As Variant) As clsTableBuilder
+    ' 혼성 getter/setter Val의 canonical 분리. 반환 타입이 항상 빌더로 예측 가능.
+    Me.Val ColName, Value
+    Set SetVal = Me
+End Function
+
+' @desc 커서 행의 컬럼 값 반환, 미지 컬럼 시 Err.Raise 9999 (Val getter와 달리 fail-fast)
+Public Function GetVal(ByVal ColName As String) As Variant
+    If Not m_dicHeaders.exists(UCase(Trim(ColName))) Then
+        Err.Raise 9999, "clsTableBuilder.GetVal", "Column not found: " & ColName
+    End If
+    GetVal = Me.Val(ColName)
+End Function
+
 Public Function PatchIf(ByVal ColName As String, ByVal Operator As String, ByVal CondVal As Variant, ByVal TargetCol As String, ByVal NewVal As Variant) As clsTableBuilder
     Dim vCurrent As Variant
     Dim bMatched As Boolean

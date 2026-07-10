@@ -116,6 +116,53 @@ Public Sub Test_Chain_PatchIfUnknownOp()
     LogShim.AssertEq "chain_f4_patchif_nocol", False, T.Headers.exists("STATUS")
 End Sub
 
+' C2 계약: canonical 종결자 ToTable(clsQuery/clsReportBuilder) + 즉시 실행 어휘 Keep
+Public Sub Test_Chain_CanonicalAliases()
+    Dim T As clsTable
+    Dim tR As clsTable
+    Dim vData(1 To 4, 1 To 2) As Variant
+
+    vData(1, 1) = "Dept": vData(1, 2) = "Score"
+    vData(2, 1) = "IT": vData(2, 2) = 10
+    vData(3, 1) = "HR": vData(3, 2) = 20
+    vData(4, 1) = "IT": vData(4, 2) = 30
+
+    Set T = UnivDB.CreateTable()
+    T.LoadFromArray vData
+
+    ' clsQuery.ToTable == SelectTable
+    Set tR = UnivDB.Query(T).Filter("Score", ">", 5).ToTable()
+    LogShim.AssertEq "chain_c2_query_totable", 3, tR.RowCount - 1
+
+    ' clsReportBuilder.Keep == Filter(즉시 실행), ToTable == Table
+    Set tR = UnivDB.Report(T).Keep("Dept", "IS", "IT").ToTable()
+    LogShim.AssertEq "chain_c2_report_keep_totable", 2, tR.RowCount - 1
+End Sub
+
+' C2 계약: SetVal(순수 setter, 빌더 반환)/GetVal(fail-fast getter) - Val 혼성 분리
+Public Sub Test_Chain_BuilderSetGetVal()
+    Dim B As clsTableBuilder
+    Dim T As clsTable
+    Dim v As Variant
+    Dim lErrNo As Long
+
+    Set B = UnivDB.Builder("ID")
+    ' 체인 마지막 호출을 괄호 없이 쓰면 Call 불필요 (VBA 구문 계약 - 문서화는 C4)
+    B.Row("P1").SetVal("Name", "Mouse").SetVal "Qty", 10
+
+    LogShim.AssertEq "chain_c2_getval", 10, B.GetVal("Qty")
+
+    ' GetVal은 미지 컬럼에 fail-fast (Val getter의 조용한 Empty와 대비)
+    On Error Resume Next
+    v = B.GetVal("NOPE")
+    lErrNo = Err.Number
+    On Error GoTo 0
+    LogShim.AssertEq "chain_c2_getval_badcol_errno", 9999, lErrNo
+
+    Set T = B.ToTable()
+    LogShim.AssertEq "chain_c2_setval_roundtrip", "Mouse", T.Value(2, "Name")
+End Sub
+
 ' F6 (C1 계약): 수치 연산자에 비숫자 비교값은 즉시 Err.Raise 9999 (문장 수준 오류)
 ' C0 핀(에러 없이 0행)에서 flip - fail-fast fix와 같은 커밋
 Public Sub Test_Chain_NonNumericCompareValue()
