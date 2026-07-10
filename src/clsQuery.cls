@@ -103,10 +103,9 @@ End Function
 ' 1. 기본 필터 (v2.5 JIT Architecture)
 ' 설명: 연산자(sOp)에 따라 수치/문자 경로를 분리하고, 모든 전처리를 루프 외부로 격리 (Hoisting).
 '       루프 내부의 함수 호출 및 메모리 할당을 제거하여 성능을 극대화.
+'       스캔 코어는 EvaluateArm(단일 조건 공용 헬퍼)에 있다 - FilterAny와 공유.
 Public Function Filter(ByVal sColName As String, ByVal sOp As String, ByVal vValue As Variant) As clsQuery
-    Dim setSurvivors As New DbRowSet
-    Dim vRowID As Variant
-    Dim i As Long
+    Dim vCandidates As Variant
 
     ' 연산자 화이트리스트 검증 (audit F1, V1/V2): 미지 연산자는 후보 유무와 무관하게
     ' 즉시 raise - 컬럼명 오타(아래 9999)와 오류 처리 대칭. 정규화도 이 단일 지점에서.
@@ -115,22 +114,36 @@ Public Function Filter(ByVal sColName As String, ByVal sOp As String, ByVal vVal
     EnsureCandidatesCurrent
     If m_bIsFirstCondition Then InitializeAllRows
     If m_setCandidates.Count = 0 Then Set Filter = Me: Exit Function
-    setSurvivors.BindTo m_SourceTable
-    
+
+    vCandidates = m_setCandidates.ToArray
+    Set m_setCandidates = EvaluateArm(sColName, sOp, vValue, vCandidates, "clsQuery.Filter")
+    m_bIsFirstCondition = False
+    Set Filter = Me
+End Function
+
+' 단일 조건 스캔 코어 (Filter/FilterAny 공용): 컬럼 존재/수치 비교값 검증과
+' 수치/문자 dual-path 루프를 한 곳에 보유. 전제: sOp는 NormalizeFilterOp 정규화 완료.
+' vCandidates(후보 rowId 0-based 배열)는 ByRef로 받아 복사를 회피한다 (읽기 전용).
+Private Function EvaluateArm(ByVal sColName As String, ByVal sOp As String, _
+                             ByVal vValue As Variant, ByRef vCandidates As Variant, _
+                             ByVal sSource As String) As DbRowSet
+    Dim setSurvivors As New DbRowSet
+    Dim i As Long
+
     ' 1. [Hoisting] 루프 외부에서 모든 전처리 완료
     Dim rdr As DbColumnReader
     Dim vCol As Variant
-    Dim vCandidates As Variant
 
     ' 1-1. 컬럼 접근 표면 획득 (Phase 6.8 밀봉 - 레이아웃 비의존)
     Set rdr = m_SourceTable.GetColumnReader(sColName)
-    If rdr Is Nothing Then Err.Raise 9999, "clsQuery.Filter", "Column not found: " & sColName
+    If rdr Is Nothing Then Err.Raise 9999, sSource, "Column not found: " & sColName
+
+    setSurvivors.BindTo m_SourceTable
 
     ' 1-2. 컬럼 1D 배열 로컬 변수에 할당 (루프 내부는 직접 인덱싱 유지)
     vCol = rdr.Values
-    vCandidates = m_setCandidates.ToArray
-    
-    ' 2. [Dual Path] 연산자 종류에 따라 실행 경로 분기 (sOp는 위에서 정규화 완료)
+
+    ' 2. [Dual Path] 연산자 종류에 따라 실행 경로 분기 (sOp는 호출자에서 정규화 완료)
     Select Case sOp
         Case "=", "<>", ">", "<", ">=", "<="
             ' ==========================================================
@@ -141,7 +154,7 @@ Public Function Filter(ByVal sColName As String, ByVal sOp As String, ByVal vVal
 
             ' 수치 연산자에 비숫자 비교값은 문장 수준 오류 - fail-fast (audit F6, V1)
             If Not IsNumeric(vValue) Then
-                Err.Raise 9999, "clsQuery.Filter", _
+                Err.Raise 9999, sSource, _
                     "Numeric operator '" & sOp & "' requires a numeric compare value: '" & CStr(vValue) & "'"
             End If
             dTarget = CDbl(vValue)
@@ -206,10 +219,8 @@ Public Function Filter(ByVal sColName As String, ByVal sOp As String, ByVal vVal
                     Next i
             End Select
     End Select
-    
-    Set m_setCandidates = setSurvivors
-    m_bIsFirstCondition = False
-    Set Filter = Me
+
+    Set EvaluateArm = setSurvivors
 End Function
 
 ' ==============================================================================
