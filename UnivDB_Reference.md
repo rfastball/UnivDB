@@ -1,7 +1,7 @@
 # UnivDB Library Reference (Consolidated)
 
 > **For**: Claude Code agent context. Single-file reference replacing CheatSheet, Docs, Guide, Template.
-> **Version**: v2.7.1
+> **Version**: v2.7.2
 
 ---
 
@@ -68,7 +68,8 @@ UnivDB.EditTable(TableName, KeyCol) -> clsTableBuilder ' 기존 테이블 스키
 
 ### Execute (Write) — Long 반환, 체이닝 마지막에 위치
 ```vb
-.SetValue(Col, Val)           ' Insert/Update 값 설정 (체이닝 가능)
+.SetVal(Col, Val)             ' Insert/Update 값 스테이징 (canonical, 빌더 SetVal 정합)
+.SetValue(Col, Val)           ' SetVal과 동일 (호환 유지)
 .Insert() -> Long
 .Update() -> Long             ' Where/Filter 조건 매칭 행 일괄 수정
 .Delete() -> Long
@@ -118,7 +119,8 @@ UnivDB.Query("Emp") _
 .Keep(Col, Op, Val)                                ' 조건 행 유지 (canonical, Exclude와 대칭)
 .Filter(Col, Op, Val)                              ' Keep과 동일 (호환 유지 - 주의: 즉시 실행)
 .Exclude(Col, Op, Val)                             ' 조건 행 제거 (Remove)
-.UpdateValue(TgtCol, NewVal, CondCol, Op, CondVal) ' 조건부 값 변경 (IF 효과)
+.PatchIf(CondCol, Op, CondVal, TgtCol, NewVal)     ' 조건부 값 변경 (canonical, 빌더 PatchIf 인자 순서)
+.UpdateValue(TgtCol, NewVal, CondCol, Op, CondVal) ' PatchIf와 동일 (호환 유지 - 인자 순서 주의)
 ```
 
 > **실행 시점 주의**: `clsQuery.Filter`는 지연(후보 축소만, `ToTable()`에서 물질화)이지만
@@ -172,7 +174,9 @@ UnivDB.Report("SalesData") _
                                      '   상수 리터럴 미지원)
 .OrderBy(Col, [bDescending])        ' 정렬 (in-place, Me 반환)
 .AddColumn(Col, [Init])             ' 컬럼 추가 - 멱등 ensure (이미 있으면 무시)
+.AddColumns("B, C") / ("B", "C")    ' 복수 추가 - 개별 인자/csv/Array 허용 (멱등 ensure)
 .RemoveColumn(Col)                  ' 컬럼 삭제 - 멱등 drop (없으면 무시)
+.RemoveColumns("B, C") / ("B", "C") ' 복수 삭제 - 개별 인자/csv/Array 허용 (멱등 drop)
 .CopyColumn(Src, Tgt)               ' 고속 컬럼 복사 (Src 오타는 raise)
 .UpdateBatch(SetCol, SetVal, WhereCol, WhereVal)  ' 동등 조건 일괄 변경
 .DeleteBatch(WhereCol, WhereVal)    ' 동등 조건 일괄 삭제 (0건 매칭은 무동작)
@@ -264,6 +268,29 @@ Where/Join/GroupBy 키는 전부 단일 정규화 계약을 탄다:
   컬럼 `3`을 찾다 raise).
 - **`AddColumn`은 멱등 ensure / `RemoveColumn`은 멱등 drop**: 존재/부재 시 조용히
   무시가 계약이다 (컬럼명 오타 검출이 필요하면 `Headers.exists`로 확인).
+
+### 6.7 어휘 지도 (Vocabulary Map)
+
+같은 개념의 canonical 이름과 표면별 대응. 레거시 이름은 전부 영구 유지된다.
+빈 칸은 해당 표면에 그 개념이 없음.
+
+| 개념 | canonical | clsQuery | clsReportBuilder | clsTableBuilder | clsTable |
+|---|---|---|---|---|---|
+| 종결 (테이블 물질화) | `ToTable` | ToTable = SelectTable | ToTable = Table(Get) | ToTable | (자신이 테이블) |
+| 지연 필터 (후보 축소) | `Filter`/`Where` | Filter, Where, FilterIn 등 | | | |
+| 즉시 필터 (행 유지/제거) | `Keep`/`Exclude` | | Keep = Filter / Exclude | | |
+| 값 스테이징 | `SetVal` | SetVal = SetValue | | SetVal (Val은 레거시 혼성) | |
+| 조건부 패치 | `PatchIf` (cond,op,val,tgt,new) | | PatchIf = UpdateValue(인자 순서 상이) | PatchIf | |
+| 직접 셀 쓰기 | `Value` (Let) | | | | Value(row, col) = v |
+| 행 제거 | 개념별 상이 | Delete() -> Long (스테이지드 CRUD) | Exclude (술어 즉시) | | DeleteBatch (동등 일괄) |
+| 컬럼 추가/삭제 | `AddColumns`/`RemoveColumns` | | AddColumns/RemoveColumns (csv 전용 - 레거시 규약) | (자동 확장) | AddColumns/RemoveColumns (개별/csv/Array) + 단수형 |
+| 조인 | `Join` | Join (기본 jtInner, 물질화 장벽) | JoinTable (기본 jtLeft) | | (엔진: modEngine) |
+| 진입점 | 명사형 | UnivDB.Query | UnivDB.Report | UnivDB.Builder / EditTable(동사구 - 별칭 없이 유지) | UnivDB.GetTable/CreateTable |
+
+- 행 제거 3종은 **서로 다른 연산**이다 (스테이지드 CRUD / 술어 즉시 / 동등 일괄) -
+  이름을 통일하지 않는 것이 의도된 결정 (같은 이름 = 같은 의미론 원칙).
+- 목록 인자 규약: canonical은 "ParamArray + 개별 인자/csv 한 줄/Array 모두 허용"
+  (clsTable.SelectColumns/AddColumns/RemoveColumns). RB의 csv 전용은 레거시.
 
 ---
 

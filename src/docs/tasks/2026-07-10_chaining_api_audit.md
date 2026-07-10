@@ -289,8 +289,7 @@ C3 구현 중 코드 재정독으로 전수조사 매트릭스의 오판정 2건
 
 - F8/F9 (OrderBy/SelectColumns 동명이의): 의미 차이는 Reference에 문서화로 완화.
   이름 분리는 이득 대비 표면 증식이 커서 보류.
-- F11~F13, F15, F20 (값 설정/행 제거/단복수/진입점/인자 규약의 전면 통일): canonical
-  별칭 최소 세트(7.3)로 완화. 잔여 어휘 통일은 1.0 전 재평가.
+- ~~F11~F13, F15, F20 (잔여 어휘 통일)~~: **2026-07-10 B축으로 해소** - 7.6절 참조.
 - C-1 (교차 컬럼 OR), C-2 (Compute 상수): 표현력 확장 축 - 별도 task로 이월.
 - ~~F17 (파사드 Join 체인 단절)~~: **2026-07-10 해소** - 7.5절 참조.
 
@@ -307,3 +306,22 @@ C3 구현 중 코드 재정독으로 전수조사 매트릭스의 오판정 2건
   유발이라 **현행 핀 고정이 불가능**해 2단 커밋 패턴 예외(fix + 신규 계약 핀만).
   Err.Raise 9999로 교정. 전수조사 매트릭스가 modEngine(비체이닝 엔진 모듈)을 스코프
   밖에 둬 놓친 사례 - 엔진 모듈의 오류 처리도 후속 점검 후보.
+
+### 7.6 B축 잔여 어휘 통일 실행 결과 (2026-07-10)
+
+원칙: 개념이 진짜 같은 곳만 canonical 별칭 수렴(additive), 개념이 다른 것의 이름
+통일은 V3 역행이라 어휘 지도 문서화. 별칭 범위는 사용자 확정 3종.
+
+- `6581ae7` **F11 부분 해소**: clsQuery.SetVal(=SetValue - 빌더 SetVal과 같은 개념),
+  RB.PatchIf(=UpdateValue, 빌더 PatchIf 인자 순서 cond/op/val/tgt/new로 정합).
+  clsTable.Value(Let)는 직접 셀 쓰기로 개념 상이 - 무접촉.
+- `058d3a8` **F13/F20 해소**: SelectColumns의 플랫 파싱을 FlattenColumnArgs로 추출
+  공용화, clsTable.AddColumns/RemoveColumns 신설(개별/csv/Array 허용, 멱등 위임).
+  목록 인자 canonical 규약 = "ParamArray + csv/Array 허용", RB csv 전용은 레거시.
+- **문서화만으로 확정 (재론 시 이 결정 인용)**: F12 행 제거 3종은 서로 다른 연산
+  (스테이지드 CRUD/술어 즉시/동등 일괄)이라 별칭 없음. F15 UnivDB.Editor 별칭은
+  미채택(경미). Reference v2.7.2에 "6.7 어휘 지도(Vocabulary Map)" 신설로 전 개념 x
+  표면 대응을 명문화.
+
+이로써 audit 위반 F1~F25 중 코드 접촉 대상은 전부 종결. 잔여는 표현력 확장 축
+(C-1 교차 컬럼 OR, C-2 Compute 상수)과 F8/F9 의도적 보류(문서화 완화)뿐.
