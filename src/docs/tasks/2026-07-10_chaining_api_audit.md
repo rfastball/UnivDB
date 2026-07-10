@@ -2,7 +2,7 @@
 
 작성일: 2026-07-10
 근거 문서: `../reference/query_api_language_survey_202607.md` (검증 기준 V1~V9의 출처)
-상태: **검증 완료 - 개선 방향 승인 대기**
+상태: **리팩토링 완료 (2026-07-10 전면 승인 - 7장 실행 결과 참조)**
 검증 방법: 코드 정독 판독. 실행으로 재현하지 않은 판정은 "(실행 미검증)" 표기 -
 실행 고정은 후속 핀 테스트(C0)의 몫.
 
@@ -238,3 +238,58 @@
 - 교차 컬럼 OR 도입, Compute 상수 피연산자 등 표현력 확장 - 위반 아님(공백),
   별도 task로 이월 판단.
 - jOOQ류 코드 생성 타입 안전화 - VBA 도구 체인 부재 (survey 4장).
+
+## 7. 실행 결과 (2026-07-10 전면 리팩토링 완료)
+
+"전수조사 기반 전면 리팩토링" 승인으로 S1~S5 전 등급 실행. 2단 커밋 패턴
+(C0 핀 고정 -> 계약 변경 + 핀 flip 동일 커밋), 매 커밋 vbaflow test 전량 green.
+
+### 7.1 추보 발견 (매트릭스 정정 2건)
+
+C3 구현 중 코드 재정독으로 전수조사 매트릭스의 오판정 2건을 발견, 정정한다:
+
+- **F23 [V1/V2] clsTable.CopyColumn 소스 컬럼 오타 = 조용한 무동작** (구 L1089
+  `Exit Sub`). 매트릭스 2.5의 CopyColumn V2=O는 오판정.
+- **F24 [V2] clsTable.Value(Let) 미지 컬럼 = Debug.Print 경고 후 무시** (구 L1080) -
+  Debug.Print는 헤드리스에서 안 보이므로 사실상 조용한 무시. 매트릭스 2.5의
+  Value(Let) V2=O는 오판정.
+
+두 건 모두 fail-fast(9999)로 교정 완료. 교훈: "코드 판독 (실행 미검증)" 매트릭스는
+구현 단계의 재정독을 검산으로 삼는다.
+
+### 7.2 커밋 이력
+
+- `da44338` **C0 핀**: TestChainingSemantics.bas 신설, F1~F6 현행 조용한 실패 고정.
+- `37375ef` **C1a**: modOperators 신설(화이트리스트 단일 정규화 지점, F18 해소) +
+  clsQuery.Filter 미지 연산자/비숫자 비교값 raise (F1, F6). RB 3메서드 자동 상속.
+- `20a209b` **C1b**: GroupBy 미지 집계함수 raise (F2) - 파싱 단일 지점이라 단일/복합
+  경로 동시 커버. 함수 생략 시 COUNT 기본은 유효 계약 유지.
+- `ab9e9b6` **C1c**: Compute 문장 수준 검증을 타겟 컬럼 생성 앞으로 재배치 (F3) -
+  반쪽 실행 제거. 행 데이터 수준 오류는 계약된 관용 유지 (문장/데이터 등급 분리).
+- `bb1e056` **C1d**: PatchIf 미지 연산자 raise (F4).
+- `e093aee` **C2**: 어휘 통일 (additive) - ToTable canonical 종결자 (F10, clsQuery/RB),
+  Keep 즉시 실행 어휘 (F7), SetVal/GetVal 분리 (F19, GetVal은 fail-fast getter),
+  SelectFinal deprecated 표기 (F14). 기존 이름 전부 영구 유지.
+- `0f7ec38` **C3**: clsTable 변형 8메서드 Sub -> Function(Me 반환) 전환 (F16) - 문
+  위치 호출 소스 호환, 기존 스위트 전량 green으로 무파손 확인. + F23/F24 교정.
+- **C4 (본 커밋)**: UnivDB_Reference.md v2.7.0 - 6.5 연산자 화이트리스트/fail-fast 계약,
+  6.6 표현력 공백 명문화 (F21, F22), canonical 어휘/실행 시점 주의/멱등 계약/VBA 체인
+  구문 계약 반영. 본 문서 상태 갱신.
+
+### 7.3 확정된 계약 요약
+
+- **문장 수준 오류는 raise 9999** (미지 연산자/집계함수, 컬럼명 오타, 수치 연산자에
+  비숫자 비교값), **데이터 수준 문제는 NULL/skip 계약** (Empty/Error/비숫자 셀 불참).
+- **canonical 어휘**: ToTable(종결) / Keep·Exclude(즉시 실행 필터) / SetVal·GetVal
+  (빌더 값 접근). 레거시 이름(SelectTable/Table/Filter(RB)/SelectFinal/Val)은 영구 유지.
+- **clsTable 변형 메서드는 전부 체인 가능** (Me 반환, in-place 의미론/세대 계약 불변).
+- **멱등 계약 명문화**: AddColumn=ensure, RemoveColumn=drop, DeleteBatch 0건=무동작.
+
+### 7.4 잔여 이월 (미착수 확정)
+
+- F8/F9 (OrderBy/SelectColumns 동명이의): 의미 차이는 Reference에 문서화로 완화.
+  이름 분리는 이득 대비 표면 증식이 커서 보류.
+- F11~F13, F15, F20 (값 설정/행 제거/단복수/진입점/인자 규약의 전면 통일): canonical
+  별칭 최소 세트(7.3)로 완화. 잔여 어휘 통일은 1.0 전 재평가.
+- F17 (파사드 Join 체인 단절), C-1 (교차 컬럼 OR), C-2 (Compute 상수): 표현력 확장
+  축 - 별도 task로 이월.

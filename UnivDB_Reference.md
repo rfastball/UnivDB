@@ -1,7 +1,7 @@
 # UnivDB Library Reference (Consolidated)
 
 > **For**: Claude Code agent context. Single-file reference replacing CheatSheet, Docs, Guide, Template.
-> **Version**: v2.6.0
+> **Version**: v2.7.0
 
 ---
 
@@ -51,7 +51,8 @@ UnivDB.EditTable(TableName, KeyCol) -> clsTableBuilder ' 기존 테이블 스키
 
 ### Execute (Read)
 ```vb
-.SelectTable() -> clsTable    ' 결과를 clsTable로 반환
+.ToTable() -> clsTable        ' 결과를 clsTable로 물질화 (canonical 종결자)
+.SelectTable() -> clsTable    ' ToTable과 동일 (호환 유지)
 ```
 
 ### Execute (Write) — Long 반환, 체이닝 마지막에 위치
@@ -103,16 +104,23 @@ UnivDB.Query("Emp") _
 
 ### Filter & Update
 ```vb
-.Filter(Col, Op, Val)                              ' 조건 행 유지 (Keep)
+.Keep(Col, Op, Val)                                ' 조건 행 유지 (canonical, Exclude와 대칭)
+.Filter(Col, Op, Val)                              ' Keep과 동일 (호환 유지 - 주의: 즉시 실행)
 .Exclude(Col, Op, Val)                             ' 조건 행 제거 (Remove)
 .UpdateValue(TgtCol, NewVal, CondCol, Op, CondVal) ' 조건부 값 변경 (IF 효과)
 ```
 
+> **실행 시점 주의**: `clsQuery.Filter`는 지연(후보 축소만, `ToTable()`에서 물질화)이지만
+> ReportBuilder의 `Keep`/`Filter`/`Exclude`는 **즉시 실행**(작업 테이블을 그 자리에서 교체)이다.
+> 신규 코드는 즉시 실행 어휘 `Keep`을 사용해 혼동을 피할 것.
+
 ### Output
 ```vb
-.SelectFinal("Col1", "Col2", ...)                  ' 최종 컬럼 순서
+.SelectColumns("Col1", "Col2", ...)                ' 최종 컬럼 순서 (canonical)
+.SelectFinal("Col1", "Col2", ...)                  ' [Deprecated] SelectColumns 별칭 (호환 유지)
 .DefineColumn(Col, [vWidth], [vFormat], [vAlign], [vHeaderAlias])
 .BuildToSheet Sheet, "A1"                          ' 시트 렌더링 (서식 포함)
+.ToTable() -> clsTable                             ' 작업 테이블 반환 (canonical, .Table과 동일)
 ```
 
 ### Example
@@ -141,11 +149,26 @@ UnivDB.Report("SalesData") _
 ```
 
 ### Data Operations
+
+변형(mutation) 메서드는 전부 자기 자신(`clsTable`)을 반환해 체이닝이 가능하다
+(in-place 변형이며 세대(Generation)는 규칙대로 증가한다):
+
 ```vb
 .UpsertFrom(SourceTable, KeyCol)    ' 키 기준 Insert or Update (Merge)
 .GroupBy(GroupCols, AggList)         ' 집계: "Col:SUM, Col:AVG, Col:COUNT, Col:MAX, Col:MIN"
-.Compute(TgtCol, Col1, Op, Col2)    ' 컬럼 간 연산: +, -, *, /, &
-.OrderBy(Col, [bDescending])        ' 정렬
+                                     '   함수 생략 시 COUNT 기본 ("Col" == "Col:COUNT")
+.Compute(TgtCol, Col1, Op, Col2)    ' 컬럼 간 연산: +, -, *, /, & (피연산자는 컬럼명만,
+                                     '   상수 리터럴 미지원)
+.OrderBy(Col, [bDescending])        ' 정렬 (in-place, Me 반환)
+.AddColumn(Col, [Init])             ' 컬럼 추가 - 멱등 ensure (이미 있으면 무시)
+.RemoveColumn(Col)                  ' 컬럼 삭제 - 멱등 drop (없으면 무시)
+.CopyColumn(Src, Tgt)               ' 고속 컬럼 복사 (Src 오타는 raise)
+.UpdateBatch(SetCol, SetVal, WhereCol, WhereVal)  ' 동등 조건 일괄 변경
+.DeleteBatch(WhereCol, WhereVal)    ' 동등 조건 일괄 삭제 (0건 매칭은 무동작)
+
+' 체이닝 예:
+Set tTop = T.GroupBy("Dept", "Amt:SUM").OrderBy("Amt_SUM", True)
+T.AddColumn("Bonus", 0).Compute("Total", "Amt", "+", "Bonus").OrderBy "Total", True
 ```
 
 ### Properties
@@ -205,6 +228,32 @@ Where/Join/GroupBy 키는 전부 단일 정규화 계약을 탄다:
 4. **둘 다 IsNumeric** → CDbl 수치 비교 — Empty는 0 취급
 5. **그 외** → 텍스트 fallback
 
+### 6.5 연산자 화이트리스트와 fail-fast (`modOperators`)
+
+연산자/집계함수 문자열을 받는 모든 표면은 `modOperators`의 단일 정규화 지점을 경유하며,
+**미지 문자열은 즉시 `Err.Raise 9999`** 한다 (조용한 0행/무동작/빈 컬럼 없음 — 컬럼명
+오타의 9999와 오류 처리 대칭):
+
+| 표면 | 허용 목록 |
+|---|---|
+| `Filter` / `Keep` / `Exclude` / `UpdateValue` 연산자 | `=` `<>` `>` `<` `>=` `<=` `IS` `IS NOT` `LIKE` `NOT LIKE` (대소문자/공백 무관) |
+| `GroupBy` 집계함수 | `SUM` `AVG` `COUNT` `MIN` `MAX` |
+| `Compute` 연산자 | `+` `-` `*` `/` `&` |
+| `PatchIf` 연산자 | `=` `<>` `>` `>=` `<` `<=` |
+
+**문장 수준 vs 데이터 수준 오류의 구분**: 개발자가 쓴 문장의 오류(미지 연산자, 컬럼명
+오타, 수치 연산자에 비숫자 비교값)는 raise. 데이터 셀 수준의 문제(Empty/Error/비숫자
+셀)는 6.2~6.3의 NULL/skip 계약대로 해당 셀만 불참 — 크래시도, 조용한 오염도 없다.
+
+### 6.6 표현력 공백 (명시적 비지원)
+
+- **조건 결합은 AND 전용**: `Where`/`Filter` 체인은 항상 논리곱. 교차 컬럼 OR은 표현
+  불가. 동일 컬럼의 OR(값 목록 매칭)은 `FilterIn(Col, v1, v2, ...)`이 커버한다.
+- **`Compute`의 피연산자는 컬럼명만**: 상수 리터럴 미지원 (`Compute("T", "A", "+", "3")`은
+  컬럼 `3`을 찾다 raise).
+- **`AddColumn`은 멱등 ensure / `RemoveColumn`은 멱등 drop**: 존재/부재 시 조용히
+  무시가 계약이다 (컬럼명 오타 검출이 필요하면 `Headers.exists`로 확인).
+
 ---
 
 ## 7. clsTableBuilder (Dynamic Row Assembly)
@@ -213,13 +262,23 @@ Where/Join/GroupBy 키는 전부 단일 정규화 계약을 탄다:
 Dim B As clsTableBuilder
 Set B = UnivDB.Builder("PROD_ID")
 
-' Call 필수 (체이닝 시)
-Call B.Row("P001").Val("Name", "Mouse").Val("Qty", 10).Val("Price", 15000)
-Call B.Row("P002").Val("Name", "Keyboard").Val("Qty", 0).PatchIf("Qty", "=", 0, "Status", "SoldOut")
+' canonical: SetVal(순수 setter, 빌더 반환) / GetVal(getter, 미지 컬럼 raise)
+' 체인 마지막 호출을 괄호 없이 쓰면 Call 불필요:
+B.Row("P001").SetVal("Name", "Mouse").SetVal("Qty", 10).SetVal "Price", 15000
+' 또는 전체를 Call로 감싼다:
+Call B.Row("P002").SetVal("Name", "Keyboard").SetVal("Qty", 0).PatchIf("Qty", "=", 0, "Status", "SoldOut")
+
+Debug.Print B.GetVal("Qty")   ' 커서 행 값 읽기 - 미지 컬럼이면 Err.Raise 9999
 
 Dim tNew As clsTable
 Set tNew = B.ToTable()
+
+' [Legacy] Val(col[, value])은 getter/setter 혼성 - 호환 유지, 신규 코드는 SetVal/GetVal
 ```
+
+> **VBA 체인 구문 계약**: 문(statement) 위치에서 괄호 붙은 다인자 호출로 체인을 끝내면
+> VBA 구문 오류다. (1) 마지막 호출만 괄호 없이 쓰거나 (2) 전체를 `Call`로 감싼다.
+> 이는 모든 빌더 체인에 공통인 VBA 제약이다.
 
 ---
 
