@@ -158,6 +158,15 @@ Public Function Keep(ByVal sColName As String, ByVal sOp As String, ByVal vValue
     Set Keep = Me.Filter(sColName, sOp, vValue)
 End Function
 
+' @desc arm 중 하나라도 맞는 행 즉시 유지 (교차 컬럼 OR, FilterAny 위임)
+Public Function KeepAny(ParamArray vArms() As Variant) As clsReportBuilder
+    ' ParamArray는 재전달 시 단일 배열 요소가 된다 - FilterAny의 재귀 평탄화가 해석.
+    ' 문장 수준 오류는 m_tWork 교체 전에 raise (변형 없는 실패).
+    Set m_tWork = UnivDB.Query(m_tWork).FilterAny(vArms).SelectTable()
+    m_bIsSafeCopy = True ' SelectTable 결과는 항상 새로운 테이블임
+    Set KeepAny = Me
+End Function
+
 ' 조건에 맞는 행 삭제하기 (Remove)
 Public Function Exclude(ByVal sColName As String, ByVal sOp As String, ByVal vValue As Variant) As clsReportBuilder
     EnsureSafeCopy ' [중요] 원본 삭제 방지를 위해 복사본 생성 후 수행

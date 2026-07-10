@@ -224,6 +224,138 @@ Private Function EvaluateArm(ByVal sColName As String, ByVal sOp As String, _
 End Function
 
 ' ==============================================================================
+' [Step 1.5] FilterAny - OR 그룹 (교차 컬럼 OR, 표현력 확장 C-1)
+' 의미론: 한 호출 = 하나의 OR 그룹. 그룹 안 arm들은 OR, 그룹과 체인의 나머지는 AND.
+'   결과 = (arm1 OR arm2 OR ...) AND 이전 체인. FilterAny 여러 번 호출은 그룹 간 AND.
+' arm 형식: Array(컬럼, 연산자, 값) 3요소. 연산자는 Filter와 같은 화이트리스트.
+'   개별 arm 인자 외에 arm 배열 1개(동적 목록, KeepAny 위임)도 허용 - 재귀 평탄화.
+' 검증: 전체 arm을 평가 전에 문장 수준 검증 (audit F3 교훈 - 부분 축소 없이 9999).
+'   Filter와 달리 후보 0행 early-out보다 검증이 앞선다 (의도된 비대칭 - 더 엄격).
+' 성능: arm당 컬럼 사본 1회 (Filter N회 체인과 동일 비용 프로파일).
+' ==============================================================================
+
+' @desc 조건 arm들 받아 하나라도 맞는 행 유지 (OR 그룹, 체인 나머지와는 AND)
+Public Function FilterAny(ParamArray vArms() As Variant) As clsQuery
+    Dim colArms As New Collection
+    Dim vItem As Variant, vArm As Variant
+    Dim k As Long, lb As Long
+    Dim lArmCount As Long
+    Dim sCols() As String, sOps() As String, vVals() As Variant
+    Dim dicHeaders As Object
+    Dim vCandidates As Variant
+    Dim setUnion As DbRowSet
+    Dim setArm As DbRowSet
+
+    ' 1. arm 평탄화 (개별 Array 인자 / arm 배열 혼용 허용)
+    If UBound(vArms) < LBound(vArms) Then
+        Err.Raise 9999, "clsQuery.FilterAny", "FilterAny requires at least one Array(column, op, value) arm"
+    End If
+    For Each vItem In vArms
+        FlattenArms vItem, colArms
+    Next vItem
+    lArmCount = colArms.Count
+    If lArmCount = 0 Then
+        Err.Raise 9999, "clsQuery.FilterAny", "FilterAny requires at least one Array(column, op, value) arm"
+    End If
+
+    ' 2. 문장 수준 검증 - 전체 arm을 평가 앞에서 (미지 연산자/컬럼 오타/비숫자 비교값)
+    ReDim sCols(1 To lArmCount): ReDim sOps(1 To lArmCount): ReDim vVals(1 To lArmCount)
+    Set dicHeaders = m_SourceTable.Headers
+
+    k = 0
+    For Each vArm In colArms
+        k = k + 1
+        ValidateArmShape vArm
+        lb = LBound(vArm)
+        If IsObject(vArm(lb)) Or IsArray(vArm(lb)) _
+           Or IsObject(vArm(lb + 1)) Or IsArray(vArm(lb + 1)) _
+           Or IsObject(vArm(lb + 2)) Or IsArray(vArm(lb + 2)) Then
+            Err.Raise 9999, "clsQuery.FilterAny", "Malformed arm: elements must be scalar (column, op, value)"
+        End If
+        sCols(k) = Trim(CStr(vArm(lb)))
+        sOps(k) = modOperators.NormalizeFilterOp(CStr(vArm(lb + 1)))
+        vVals(k) = vArm(lb + 2)
+
+        If Not dicHeaders.exists(UCase(sCols(k))) Then
+            Err.Raise 9999, "clsQuery.FilterAny", "Column not found: " & sCols(k)
+        End If
+        Select Case sOps(k)
+            Case "=", "<>", ">", "<", ">=", "<="
+                If Not IsNumeric(vVals(k)) Then
+                    Err.Raise 9999, "clsQuery.FilterAny", _
+                        "Numeric operator '" & sOps(k) & "' requires a numeric compare value: '" & CStr(vVals(k)) & "'"
+                End If
+        End Select
+    Next vArm
+
+    ' 3. 실행: 같은 후보 스냅샷에 arm별 독립 스캔 -> 합집합 (중복 행은 비트맵이 무계수)
+    EnsureCandidatesCurrent
+    If m_bIsFirstCondition Then InitializeAllRows
+    If m_setCandidates.Count = 0 Then Set FilterAny = Me: Exit Function
+
+    vCandidates = m_setCandidates.ToArray
+    For k = 1 To lArmCount
+        Set setArm = EvaluateArm(sCols(k), sOps(k), vVals(k), vCandidates, "clsQuery.FilterAny")
+        If setUnion Is Nothing Then
+            Set setUnion = setArm
+        Else
+            setUnion.UnionWith setArm
+        End If
+    Next k
+
+    Set m_setCandidates = setUnion
+    m_bIsFirstCondition = False
+    Set FilterAny = Me
+End Function
+
+' arm 인자 재귀 평탄화: 첫 요소가 배열이면 arm 목록으로 보고 내부로 재귀
+' (유효 arm의 첫 요소는 컬럼명 스칼라라 모호성 없음)
+Private Sub FlattenArms(ByVal vItem As Variant, ByVal colArms As Collection)
+    Dim vSub As Variant
+    If IsArmList(vItem) Then
+        For Each vSub In vItem
+            FlattenArms vSub, colArms
+        Next vSub
+    Else
+        colArms.Add vItem
+    End If
+End Sub
+
+' arm 목록 판별: 배열이고 첫 요소가 배열이면 True (빈 배열/판독 불가는 False)
+Private Function IsArmList(ByVal vItem As Variant) As Boolean
+    Dim vFirst As Variant
+    If Not IsArray(vItem) Then Exit Function
+    On Error Resume Next
+    vFirst = vItem(LBound(vItem))
+    If Err.Number <> 0 Then
+        Err.Clear
+        On Error GoTo 0
+        Exit Function
+    End If
+    On Error GoTo 0
+    IsArmList = IsArray(vFirst)
+End Function
+
+' arm 형태 검증: 3요소 1D 배열이 아니면 9999 (2D 배열/비배열 포함)
+Private Sub ValidateArmShape(ByVal vArm As Variant)
+    Dim lProbe As Long
+    If Not IsArray(vArm) Then
+        Err.Raise 9999, "clsQuery.FilterAny", "Each arm must be Array(column, op, value)"
+    End If
+    On Error Resume Next
+    lProbe = UBound(vArm, 2)
+    If Err.Number = 0 Then
+        On Error GoTo 0
+        Err.Raise 9999, "clsQuery.FilterAny", "Each arm must be a 1D Array(column, op, value)"
+    End If
+    Err.Clear
+    On Error GoTo 0
+    If UBound(vArm) - LBound(vArm) <> 2 Then
+        Err.Raise 9999, "clsQuery.FilterAny", "Each arm must have exactly 3 elements (column, op, value)"
+    End If
+End Sub
+
+' ==============================================================================
 ' [Step 2.7] Join - 조인을 쿼리 체인에 합류 (audit F17)
 ' 의미론: 물질화 장벽(materialization barrier). Join 시점까지 스테이징된
 ' 조건/투영/정렬/Top을 ToTable()로 실행해 좌측 테이블을 확정한 뒤, 조인 결과로

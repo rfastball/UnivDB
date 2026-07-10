@@ -396,3 +396,177 @@ Public Sub Test_Chain_NonNumericCompareValue()
     LogShim.AssertEq "chain_f6_nonnumval_errno", 9999, lErrNo
     LogShim.AssertEq "chain_f6_nonnumval_nores", True, tR Is Nothing
 End Sub
+
+' ==============================================================================
+' C-1: FilterAny (교차 컬럼 OR) - 신규 계약 핀 (impl과 같은 커밋, 1ce5f27 패턴)
+' ==============================================================================
+
+' FilterAny 공용 테이블: Dept/Amt/Active 3컬럼 5행
+Private Function NewOrGroupTable() As clsTable
+    Dim T As clsTable
+    Dim vData(1 To 6, 1 To 3) As Variant
+
+    vData(1, 1) = "Dept": vData(1, 2) = "Amt": vData(1, 3) = "Active"
+    vData(2, 1) = "Sales": vData(2, 2) = 500: vData(2, 3) = "Y"
+    vData(3, 1) = "IT": vData(3, 2) = 1500: vData(3, 3) = "Y"
+    vData(4, 1) = "HR": vData(4, 2) = 800: vData(4, 3) = "N"
+    vData(5, 1) = "Sales": vData(5, 2) = 2000: vData(5, 3) = "N"
+    vData(6, 1) = "IT": vData(6, 2) = 300: vData(6, 3) = "Y"
+
+    Set T = UnivDB.CreateTable()
+    T.LoadFromArray vData
+    Set NewOrGroupTable = T
+End Function
+
+' 기본 계약: (arm1 OR arm2) AND 후속 Filter
+Public Sub Test_Chain_FilterAnyCrossColumnOr()
+    Dim T As clsTable
+    Dim tR As clsTable
+
+    Set T = NewOrGroupTable()
+
+    ' (Dept=Sales {2,5} OR Amt>1000 {3,5}) = {2,3,5}, AND Active=Y = {2,3}
+    Set tR = UnivDB.Query(T) _
+        .FilterAny(Array("Dept", "IS", "Sales"), Array("Amt", ">", 1000)) _
+        .Filter("Active", "IS", "Y") _
+        .ToTable()
+
+    LogShim.AssertEq "chain_c1_or_and_rows", 3, tR.RowCount
+    LogShim.AssertEq "chain_c1_or_and_r1", "Sales", tR.Value(2, "Dept")
+    LogShim.AssertEq "chain_c1_or_and_r2", "IT", tR.Value(3, "Dept")
+End Sub
+
+' 첫 조건 시딩(전행) / 선행 Where 후보 축소와의 결합
+Public Sub Test_Chain_FilterAnyFirstCondition()
+    Dim T As clsTable
+    Dim tR As clsTable
+
+    Set T = NewOrGroupTable()
+
+    ' 첫 조건: 전행 시딩 후 (HR {4} OR Amt<400 {6}) = {4,6}
+    Set tR = UnivDB.Query(T) _
+        .FilterAny(Array("Dept", "IS", "HR"), Array("Amt", "<", 400)) _
+        .ToTable()
+    LogShim.AssertEq "chain_c1_first_rows", 3, tR.RowCount
+
+    ' 선행 Where(Active=Y {2,3,6}) 후: (Sales{2} OR Amt>1000{3}) = {2,3}
+    Set tR = UnivDB.Query(T) _
+        .Where("Active", "Y") _
+        .FilterAny(Array("Dept", "IS", "Sales"), Array("Amt", ">", 1000)) _
+        .ToTable()
+    LogShim.AssertEq "chain_c1_after_where_rows", 3, tR.RowCount
+End Sub
+
+' 두 arm에 모두 매칭되는 행은 결과에 1회만 (비트맵 멱등)
+Public Sub Test_Chain_FilterAnyOverlapNoDupes()
+    Dim T As clsTable
+    Dim tR As clsTable
+
+    Set T = NewOrGroupTable()
+
+    ' Sales {2,5} OR Amt>1800 {5} - 행5는 양쪽 매칭이지만 1회
+    Set tR = UnivDB.Query(T) _
+        .FilterAny(Array("Dept", "IS", "Sales"), Array("Amt", ">", 1800)) _
+        .ToTable()
+    LogShim.AssertEq "chain_c1_overlap_rows", 3, tR.RowCount
+End Sub
+
+' 동일 컬럼 arm = IN 의미론 (값 목록 매칭)
+Public Sub Test_Chain_FilterAnySameColumnIn()
+    Dim T As clsTable
+    Dim tR As clsTable
+
+    Set T = NewOrGroupTable()
+
+    Set tR = UnivDB.Query(T) _
+        .FilterAny(Array("Dept", "IS", "IT"), Array("Dept", "IS", "HR")) _
+        .ToTable()
+    LogShim.AssertEq "chain_c1_in_rows", 4, tR.RowCount
+End Sub
+
+' 동적 arm 목록 (arm 배열 1개) = ParamArray 개별 인자와 동일 결과
+Public Sub Test_Chain_FilterAnyDynamicList()
+    Dim T As clsTable
+    Dim tR1 As clsTable
+    Dim tR2 As clsTable
+    Dim vArmList As Variant
+
+    Set T = NewOrGroupTable()
+    vArmList = Array(Array("Dept", "IS", "IT"), Array("Dept", "IS", "HR"))
+
+    Set tR1 = UnivDB.Query(T).FilterAny(vArmList).ToTable()
+    Set tR2 = UnivDB.Query(T).FilterAny(Array("Dept", "IS", "IT"), Array("Dept", "IS", "HR")).ToTable()
+    LogShim.AssertEq "chain_c1_dynlist_rows", tR2.RowCount, tR1.RowCount
+End Sub
+
+' 문장 수준 검증 5종: 0 arm / 2요소 arm / 미지 연산자 / 컬럼 오타 / 비숫자 비교값
+Public Sub Test_Chain_FilterAnyValidation()
+    Dim T As clsTable
+    Dim lErrNo As Long
+
+    Set T = NewOrGroupTable()
+
+    On Error Resume Next
+    UnivDB.Query(T).FilterAny
+    lErrNo = Err.Number
+    On Error GoTo 0
+    LogShim.AssertEq "chain_c1_val_zeroarm", 9999, lErrNo
+
+    On Error Resume Next
+    UnivDB.Query(T).FilterAny Array("Dept", "IS")
+    lErrNo = Err.Number
+    On Error GoTo 0
+    LogShim.AssertEq "chain_c1_val_2elem", 9999, lErrNo
+
+    On Error Resume Next
+    UnivDB.Query(T).FilterAny Array("Dept", "=>", "Sales")
+    lErrNo = Err.Number
+    On Error GoTo 0
+    LogShim.AssertEq "chain_c1_val_unknownop", 9999, lErrNo
+
+    On Error Resume Next
+    UnivDB.Query(T).FilterAny Array("Nope", "IS", "x")
+    lErrNo = Err.Number
+    On Error GoTo 0
+    LogShim.AssertEq "chain_c1_val_badcol", 9999, lErrNo
+
+    On Error Resume Next
+    UnivDB.Query(T).FilterAny Array("Amt", ">", "abc")
+    lErrNo = Err.Number
+    On Error GoTo 0
+    LogShim.AssertEq "chain_c1_val_nonnum", 9999, lErrNo
+End Sub
+
+' 검증은 변형 앞: arm2 오류 시 arm1의 부분 축소 없음 (audit F3 교훈)
+Public Sub Test_Chain_FilterAnyValidateBeforeMutate()
+    Dim T As clsTable
+    Dim q As clsQuery
+    Dim lErrNo As Long
+
+    Set T = NewOrGroupTable()
+    Set q = UnivDB.Query(T).Where("Active", "Y") ' 후보 {2,3,6}
+
+    On Error Resume Next
+    q.FilterAny Array("Dept", "IS", "Sales"), Array("Nope", "IS", "x")
+    lErrNo = Err.Number
+    On Error GoTo 0
+    LogShim.AssertEq "chain_c1_prevalidate_errno", 9999, lErrNo
+
+    ' 후보 무변화 확인: Where 결과 3행 그대로
+    LogShim.AssertEq "chain_c1_prevalidate_intact", 4, q.ToTable().RowCount
+End Sub
+
+' clsReportBuilder.KeepAny: 즉시 실행 OR + 원본 무접촉
+Public Sub Test_Chain_ReportKeepAny()
+    Dim T As clsTable
+    Dim tR As clsTable
+
+    Set T = NewOrGroupTable()
+
+    Set tR = UnivDB.Report(T) _
+        .KeepAny(Array("Dept", "IS", "Sales"), Array("Amt", ">", 1000)) _
+        .ToTable()
+
+    LogShim.AssertEq "chain_c1_keepany_rows", 4, tR.RowCount
+    LogShim.AssertEq "chain_c1_keepany_orig_intact", 6, T.RowCount
+End Sub
