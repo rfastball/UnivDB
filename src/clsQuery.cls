@@ -339,6 +339,12 @@ Public Function SetValue(ByVal sColName As String, ByVal vValue As Variant) As c
     Set SetValue = Me
 End Function
 
+' @desc 업데이트 값 스테이징 후 자기 자신 반환, canonical (SetValue 동의어)
+Public Function SetVal(ByVal sColName As String, ByVal vValue As Variant) As clsQuery
+    ' 값 스테이징 어휘 수렴 (audit F11): clsTableBuilder.SetVal과 같은 개념 - 이름 공유
+    Set SetVal = Me.SetValue(sColName, vValue)
+End Function
+
 ' ------------------------------------------------------------------------------
 ' [Step 4] Update 실행 (SQL UPDATE)
 ' 설명: 조건에 맞는 행들의 컬럼 값을 일괄 변경합니다.

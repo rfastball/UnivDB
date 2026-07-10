@@ -179,6 +179,14 @@ Public Function UpdateValue(ByVal sTargetCol As String, ByVal vNewVal As Variant
     Set UpdateValue = Me
 End Function
 
+' @desc 조건 매칭 행의 값 일괄 패치, canonical (UpdateValue 동의어, 빌더 PatchIf 인자 순서)
+Public Function PatchIf(ByVal sCondCol As String, ByVal sOp As String, ByVal vCondVal As Variant, _
+                        ByVal sTargetCol As String, ByVal vNewVal As Variant) As clsReportBuilder
+    ' 조건부 패치 어휘 수렴 (audit F11): clsTableBuilder.PatchIf와 같은 개념/인자 순서.
+    ' UpdateValue(target, new, cond, op, condVal)는 레거시 인자 순서로 유지.
+    Set PatchIf = Me.UpdateValue(sTargetCol, vNewVal, sCondCol, sOp, vCondVal)
+End Function
+
 ' ==============================================================================
 ' [Internal Helper] 날짜 변환 로직 (사용자 정의 로직 이식)
 ' ==============================================================================

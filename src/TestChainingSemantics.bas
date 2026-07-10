@@ -214,6 +214,32 @@ Public Sub Test_Chain_ColumnWriteFailFast()
     LogShim.AssertEq "chain_f24_valuelet_errno", 9999, lErrNo2
 End Sub
 
+' B축 (계약): 값 스테이징/조건부 패치 어휘 수렴 - clsQuery.SetVal(=SetValue),
+' RB.PatchIf(=UpdateValue, 빌더 PatchIf 인자 순서 cond,op,val,target,new)
+Public Sub Test_Chain_VocabAliases()
+    Dim T As clsTable
+    Dim tRes As clsTable
+    Dim lChanged As Long
+    Dim vData(1 To 3, 1 To 2) As Variant
+
+    vData(1, 1) = "Name": vData(1, 2) = "Grade"
+    vData(2, 1) = "A": vData(2, 2) = 100
+    vData(3, 1) = "B": vData(3, 2) = 50
+
+    Set T = UnivDB.CreateTable()
+    T.LoadFromArray vData
+
+    ' clsQuery.SetVal == SetValue: 스테이징 후 Update
+    lChanged = UnivDB.Query(T).Filter("Grade", ">=", 100).SetVal("Name", "TOP").Update()
+    LogShim.AssertEq "chain_b_setval_changed", 1, lChanged
+    LogShim.AssertEq "chain_b_setval_applied", "TOP", T.Value(2, "Name")
+
+    ' RB.PatchIf(cond, op, condVal, target, new) == UpdateValue(target, new, cond, op, condVal)
+    Set tRes = UnivDB.Report(T).PatchIf("Grade", "<", 60, "Name", "LOW").ToTable()
+    LogShim.AssertEq "chain_b_patchif_applied", "LOW", tRes.Value(3, "Name")
+    LogShim.AssertEq "chain_b_patchif_untouched", "TOP", tRes.Value(2, "Name")
+End Sub
+
 ' F17 (계약): clsQuery.Join - 조인을 쿼리 체인에 합류. 물질화 장벽 의미론.
 ' 기본 jType=jtInner(파사드 정합). vRight의 이름(String) 경로는 UnivDB.Join에
 ' verbatim 위임이라 기존 TestJoin(등록 경로 핀)이 커버 - 여기선 객체 경로만.
