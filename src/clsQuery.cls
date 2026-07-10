@@ -108,6 +108,10 @@ Public Function Filter(ByVal sColName As String, ByVal sOp As String, ByVal vVal
     Dim vRowID As Variant
     Dim i As Long
 
+    ' 연산자 화이트리스트 검증 (audit F1, V1/V2): 미지 연산자는 후보 유무와 무관하게
+    ' 즉시 raise - 컬럼명 오타(아래 9999)와 오류 처리 대칭. 정규화도 이 단일 지점에서.
+    sOp = modOperators.NormalizeFilterOp(sOp)
+
     EnsureCandidatesCurrent
     If m_bIsFirstCondition Then InitializeAllRows
     If m_setCandidates.Count = 0 Then Set Filter = Me: Exit Function
@@ -126,21 +130,19 @@ Public Function Filter(ByVal sColName As String, ByVal sOp As String, ByVal vVal
     vCol = rdr.Values
     vCandidates = m_setCandidates.ToArray
     
-    ' 2. [Dual Path] 연산자 종류에 따라 실행 경로 분기
-    Select Case UCase(Trim(sOp))
+    ' 2. [Dual Path] 연산자 종류에 따라 실행 경로 분기 (sOp는 위에서 정규화 완료)
+    Select Case sOp
         Case "=", "<>", ">", "<", ">=", "<="
             ' ==========================================================
             ' [Path A] 수치 연산 경로 (Numeric Path)
             ' ==========================================================
             Dim dTarget As Double
             Dim vCell As Variant
-            
-            ' 비교값 사전 변환
-            If Not IsNumeric(vValue) Then ' 비교값이 숫자가 아니면 필터링 결과 0
-                Set m_setCandidates = New DbRowSet
-                m_setCandidates.BindTo m_SourceTable
-                Set Filter = Me
-                Exit Function
+
+            ' 수치 연산자에 비숫자 비교값은 문장 수준 오류 - fail-fast (audit F6, V1)
+            If Not IsNumeric(vValue) Then
+                Err.Raise 9999, "clsQuery.Filter", _
+                    "Numeric operator '" & sOp & "' requires a numeric compare value: '" & CStr(vValue) & "'"
             End If
             dTarget = CDbl(vValue)
             
@@ -150,7 +152,7 @@ Public Function Filter(ByVal sColName As String, ByVal sOp As String, ByVal vVal
                 ' Empty=NULL 계약(D1): IsNumeric(Empty)=True라 0으로 참여하던 것을 차단.
                 ' Error/Date는 이미 IsNumeric=False로 제외 - 인덱스 계약과 정합.
                 If Not IsEmpty(vCell) And IsNumeric(vCell) Then
-                    Select Case UCase(Trim(sOp))
+                    Select Case sOp
                         Case "=": If CDbl(vCell) = dTarget Then setSurvivors.AddRow vCandidates(i)
                         Case "<>": If CDbl(vCell) <> dTarget Then setSurvivors.AddRow vCandidates(i)
                         Case ">": If CDbl(vCell) > dTarget Then setSurvivors.AddRow vCandidates(i)
@@ -171,7 +173,7 @@ Public Function Filter(ByVal sColName As String, ByVal sOp As String, ByVal vVal
             ' Error=skip 계약(D1): Error 셀은 어느 연산에서도 결과에 참여하지 않는다.
             ' 부정 연산(IS NOT/NOT LIKE)에서도 "not equal"로 걸리지 않고 skip - raw CStr(Error)의
             ' locale 문자열 은밀 참여를 차단. (Empty는 CStr(Empty)="" 로 IS "" 매칭 유지)
-            Select Case UCase(Trim(sOp))
+            Select Case sOp
                 Case "IS" ' StrComp 기반의 대소문자 무시 비교 (=)
                     For i = LBound(vCandidates) To UBound(vCandidates)
                         vCell = vCol(vCandidates(i))

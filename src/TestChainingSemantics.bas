@@ -8,7 +8,8 @@ Option Explicit
 ' 여기의 기대값은 "현행 실동작"이지 "옳은 계약"이 아니다 - C1(fail-fast화)에서
 ' 기대값 flip은 해당 fix와 같은 커밋으로 갱신된다. 전부 dict 경로만 사용.
 
-' F1: Filter 미지 연산자는 에러 없이 0행 (Case Else 부재)
+' F1 (C1 계약): Filter 미지 연산자는 즉시 Err.Raise 9999 (modOperators 화이트리스트)
+' C0 핀(에러 없이 0행)에서 flip - fail-fast fix와 같은 커밋
 Public Sub Test_Chain_UnknownFilterOp()
     Dim T As clsTable
     Dim tR As clsTable
@@ -27,8 +28,8 @@ Public Sub Test_Chain_UnknownFilterOp()
     lErrNo = Err.Number
     On Error GoTo 0
 
-    LogShim.AssertEq "chain_f1_unknownop_errno", 0, lErrNo
-    LogShim.AssertEq "chain_f1_unknownop_rows", 0, tR.RowCount - 1
+    LogShim.AssertEq "chain_f1_unknownop_errno", 9999, lErrNo
+    LogShim.AssertEq "chain_f1_unknownop_nores", True, tR Is Nothing
 End Sub
 
 ' F2: GroupBy 미지 집계함수는 에러 없이 빈 컬럼 (누적 Case Else 부재 + 렌더 fallback)
@@ -111,7 +112,8 @@ Public Sub Test_Chain_PatchIfUnknownOp()
     LogShim.AssertEq "chain_f4_patchif_nocol", False, T.Headers.exists("STATUS")
 End Sub
 
-' F6: Filter 수치 경로에서 비숫자 비교값은 에러 없이 0행
+' F6 (C1 계약): 수치 연산자에 비숫자 비교값은 즉시 Err.Raise 9999 (문장 수준 오류)
+' C0 핀(에러 없이 0행)에서 flip - fail-fast fix와 같은 커밋
 Public Sub Test_Chain_NonNumericCompareValue()
     Dim T As clsTable
     Dim tR As clsTable
@@ -130,6 +132,6 @@ Public Sub Test_Chain_NonNumericCompareValue()
     lErrNo = Err.Number
     On Error GoTo 0
 
-    LogShim.AssertEq "chain_f6_nonnumval_errno", 0, lErrNo
-    LogShim.AssertEq "chain_f6_nonnumval_rows", 0, tR.RowCount - 1
+    LogShim.AssertEq "chain_f6_nonnumval_errno", 9999, lErrNo
+    LogShim.AssertEq "chain_f6_nonnumval_nores", True, tR Is Nothing
 End Sub
