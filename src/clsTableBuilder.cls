@@ -180,10 +180,13 @@ Public Function PatchIf(ByVal ColName As String, ByVal Operator As String, ByVal
     Dim bMatched As Boolean
     
     vCurrent = Me.Val(ColName)
-    
-    ' 단순 비교 연산
+
+    ' 미지 연산자는 즉시 raise (audit F4, V1) - On Error 진입 전에 검증
+    Operator = modOperators.NormalizeCompareOp(Operator)
+
+    ' 단순 비교 연산 - 행 데이터 수준 비교 오류(타입 불일치)는 무매칭으로 관용 (계약)
     On Error Resume Next
-    Select Case Trim(Operator)
+    Select Case Operator
         Case "=":  bMatched = (vCurrent = CondVal)
         Case "<>": bMatched = (vCurrent <> CondVal)
         Case ">":  bMatched = (vCurrent > CondVal)

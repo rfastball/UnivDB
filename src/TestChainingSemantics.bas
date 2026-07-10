@@ -96,7 +96,8 @@ Public Sub Test_Chain_ComputeSilentFailures()
     LogShim.AssertEq "chain_f3_valid_sum", 12, T.Value(2, "R3")
 End Sub
 
-' F4: PatchIf 미지 연산자는 조용한 무매칭 (Case Else: bMatched=False)
+' F4 (C1 계약): PatchIf 미지 연산자는 즉시 Err.Raise 9999 (modOperators 화이트리스트)
+' C0 핀(조용한 무매칭)에서 flip. 데이터 수준 비교 오류(타입 불일치)는 무매칭 관용 유지.
 Public Sub Test_Chain_PatchIfUnknownOp()
     Dim B As clsTableBuilder
     Dim T As clsTable
@@ -111,8 +112,7 @@ Public Sub Test_Chain_PatchIfUnknownOp()
     On Error GoTo 0
 
     Set T = B.ToTable()
-    LogShim.AssertEq "chain_f4_patchif_errno", 0, lErrNo
-    ' 무매칭이라 Status 컬럼 자체가 생성되지 않음
+    LogShim.AssertEq "chain_f4_patchif_errno", 9999, lErrNo
     LogShim.AssertEq "chain_f4_patchif_nocol", False, T.Headers.exists("STATUS")
 End Sub
 
