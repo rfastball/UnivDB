@@ -60,8 +60,8 @@ Public Sub Test_Chain_UnknownAggFunc()
     LogShim.AssertEq "chain_f2_default_count", 2, tG.Value(2, "Score_COUNT")
 End Sub
 
-' F3: Compute는 미지 연산자도, 피연산자 컬럼 오타도 조용한 무동작
-'     (타겟 컬럼은 자동 생성된 채 잔류 - 반쪽 실행)
+' F3 (C1 계약): Compute의 미지 연산자/피연산자 컬럼 오타는 즉시 Err.Raise 9999,
+' 타겟 컬럼 자동 생성 전에 검증되어 반쪽 실행 없음. C0 핀(조용한 무동작)에서 flip.
 Public Sub Test_Chain_ComputeSilentFailures()
     Dim T As clsTable
     Dim lErrNo1 As Long
@@ -75,23 +75,25 @@ Public Sub Test_Chain_ComputeSilentFailures()
     Set T = UnivDB.CreateTable()
     T.LoadFromArray vData
 
-    ' (1) 미지 연산자 "%": 에러 없이 타겟 컬럼만 생성, 값 전부 Empty
+    ' (1) 미지 연산자 "%": raise + 타겟 컬럼 미생성 (반쪽 실행 없음)
     On Error Resume Next
     T.Compute "R1", "A", "%", "B"
     lErrNo1 = Err.Number
     On Error GoTo 0
-    LogShim.AssertEq "chain_f3_unknownop_errno", 0, lErrNo1
-    LogShim.AssertEq "chain_f3_unknownop_created", True, T.Headers.exists("R1")
-    LogShim.AssertEq "chain_f3_unknownop_empty", True, IsEmpty(T.Value(2, "R1"))
+    LogShim.AssertEq "chain_f3_unknownop_errno", 9999, lErrNo1
+    LogShim.AssertEq "chain_f3_unknownop_nocol", False, T.Headers.exists("R1")
 
-    ' (2) 피연산자 컬럼 오타: 에러 없이 Exit Sub, 타겟 컬럼만 생성
+    ' (2) 피연산자 컬럼 오타: raise + 타겟 컬럼 미생성
     On Error Resume Next
     T.Compute "R2", "A", "+", "NOPE"
     lErrNo2 = Err.Number
     On Error GoTo 0
-    LogShim.AssertEq "chain_f3_badcol_errno", 0, lErrNo2
-    LogShim.AssertEq "chain_f3_badcol_created", True, T.Headers.exists("R2")
-    LogShim.AssertEq "chain_f3_badcol_empty", True, IsEmpty(T.Value(2, "R2"))
+    LogShim.AssertEq "chain_f3_badcol_errno", 9999, lErrNo2
+    LogShim.AssertEq "chain_f3_badcol_nocol", False, T.Headers.exists("R2")
+
+    ' (3) 정상 경로 회귀: 유효 연산은 그대로 동작
+    T.Compute "R3", "A", "+", "B"
+    LogShim.AssertEq "chain_f3_valid_sum", 12, T.Value(2, "R3")
 End Sub
 
 ' F4: PatchIf 미지 연산자는 조용한 무매칭 (Case Else: bMatched=False)

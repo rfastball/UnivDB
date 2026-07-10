@@ -1266,22 +1266,27 @@ Public Sub Compute(ByVal sTargetCol As String, ByVal sCol1 As String, ByVal sOp 
     Dim idxTarget As Long, idx1 As Long, idx2 As Long
     Dim i As Long
     Dim v1 As Variant, v2 As Variant, vRes As Variant
-    
-    ' 컬럼 존재 확인 및 인덱스 확보
-    If Not m_dicHeaders.exists(UCase(sTargetCol)) Then AddColumn sTargetCol ' 타겟 없으면 자동 생성
+
+    ' 문장 수준 검증 선행 (audit F3, V1/V2): 연산자/피연산자 오류는 구조 변경(타겟
+    ' 컬럼 자동 생성) 전에 raise - 이전엔 타겟만 만들고 조용히 무동작하는 반쪽 실행.
+    ' 상수(Literal) 피연산자는 미지원 - 두 피연산자 모두 컬럼명이어야 한다.
+    sOp = modOperators.NormalizeComputeOp(sOp)
+    If Not m_dicHeaders.exists(UCase(sCol1)) Then Err.Raise 9999, "clsTable.Compute", "Column not found: " & sCol1
+    If Not m_dicHeaders.exists(UCase(sCol2)) Then Err.Raise 9999, "clsTable.Compute", "Column not found: " & sCol2
+    idx1 = m_dicHeaders(UCase(sCol1))
+    idx2 = m_dicHeaders(UCase(sCol2))
+
+    ' 타겟 컬럼 확보 (없으면 자동 생성)
+    If Not m_dicHeaders.exists(UCase(sTargetCol)) Then AddColumn sTargetCol
     idxTarget = m_dicHeaders(UCase(sTargetCol))
-    
-    If m_dicHeaders.exists(UCase(sCol1)) Then idx1 = m_dicHeaders(UCase(sCol1)) Else Exit Sub
-    
-    ' 두 번째 피연산자가 컬럼명이면 인덱스, 아니면 상수(Literal)로 취급 가능하나 여기선 컬럼명만 가정
-    If m_dicHeaders.exists(UCase(sCol2)) Then idx2 = m_dicHeaders(UCase(sCol2)) Else Exit Sub
-    
+
     ' 고속 배열 연산
     For i = (m_lHeaderRowIndex + 1) To m_lRowCount
         v1 = m_vData(i, idx1)
         v2 = m_vData(i, idx2)
-        
-        ' 에러 방지 (숫자가 아닌 경우 처리)
+
+        ' 행 데이터 수준 오류(비숫자 셀 등)는 계약된 관용 - 해당 셀만 미기입.
+        ' 문장 수준 오류(위 raise)와 구분되는 데이터 수준 skip이다.
         On Error Resume Next
         Select Case sOp
             Case "+": m_vData(i, idxTarget) = v1 + v2
