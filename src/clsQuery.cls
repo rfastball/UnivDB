@@ -213,6 +213,35 @@ Public Function Filter(ByVal sColName As String, ByVal sOp As String, ByVal vVal
 End Function
 
 ' ==============================================================================
+' [Step 2.7] Join - 조인을 쿼리 체인에 합류 (audit F17)
+' 의미론: 물질화 장벽(materialization barrier). Join 시점까지 스테이징된
+' 조건/투영/정렬/Top을 ToTable()로 실행해 좌측 테이블을 확정한 뒤, 조인 결과로
+' 재소싱해 체인을 초기 상태에서 계속한다 (지연 엔진이 단일 소스 전제라 지연 조인 불가).
+' ==============================================================================
+
+' @desc 우측 테이블과 조인 후 결과로 재소싱해 체인 유지, 물질화 장벽 (스테이징 전부 실행)
+Public Function Join(ByVal vRight As Variant, ByVal sLeftKey As String, _
+                     Optional ByVal jType As joinType = jtInner, _
+                     Optional ByVal sRightPrefix As String = "", _
+                     Optional ByVal sRightKey As String = "") As clsQuery
+    Dim tJoined As clsTable
+    ' vRight는 테이블명(String)/clsTable 혼용 - UnivDB.Join의 ResolveTable이 해석.
+    ' 기본 jType은 파사드와 정합(jtInner). ReportBuilder.JoinTable의 jtLeft 기본과 다름 주의.
+    Set tJoined = UnivDB.Join(Me.ToTable(), vRight, sLeftKey, jType, sRightPrefix, sRightKey)
+    Me.From tJoined            ' 후보/업데이트 리셋 (From 계약)
+    ResetPipelineState         ' 투영/정렬/Top 기본값 복원 (From이 안 하는 부분)
+    Set Join = Me
+End Function
+
+' 물질화 장벽 통과 후 파이프라인 상태를 Class_Initialize 기본값으로 복원
+Private Sub ResetPipelineState()
+    m_sTargetColumns = "*"
+    m_sSortColumn = ""
+    m_bSortDesc = False
+    m_lLimit = 0
+End Sub
+
+' ==============================================================================
 ' [Step 2.5] Projection 설정 (SQL의 SELECT 절)
 ' 설명: 결과로 출력할 컬럼과 그 순서를 지정합니다. (기본값: "*")===============
 ' 설명: 출력할 컬럼 목록을 유연하게 입력받아 내부 문자열로 합칩니다.

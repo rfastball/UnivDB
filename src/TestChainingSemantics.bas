@@ -214,6 +214,80 @@ Public Sub Test_Chain_ColumnWriteFailFast()
     LogShim.AssertEq "chain_f24_valuelet_errno", 9999, lErrNo2
 End Sub
 
+' F17 (계약): clsQuery.Join - 조인을 쿼리 체인에 합류. 물질화 장벽 의미론.
+' 기본 jType=jtInner(파사드 정합). vRight의 이름(String) 경로는 UnivDB.Join에
+' verbatim 위임이라 기존 TestJoin(등록 경로 핀)이 커버 - 여기선 객체 경로만.
+Public Sub Test_Chain_QueryJoinChain()
+    Dim tL As clsTable
+    Dim tR As clsTable
+    Dim tRes As clsTable
+    Dim vL(1 To 4, 1 To 2) As Variant
+    Dim vR(1 To 4, 1 To 2) As Variant
+
+    vL(1, 1) = "Dept": vL(1, 2) = "Amt"
+    vL(2, 1) = "IT": vL(2, 2) = 10
+    vL(3, 1) = "HR": vL(3, 2) = 20
+    vL(4, 1) = "FIN": vL(4, 2) = 30   ' 우측 미매칭 - jtInner에서 탈락
+
+    vR(1, 1) = "Dept": vR(1, 2) = "Boss"
+    vR(2, 1) = "IT": vR(2, 2) = "Kim"
+    vR(3, 1) = "IT": vR(3, 2) = "Park" ' IT 중복 키 (1:N 조인)
+    vR(4, 1) = "HR": vR(4, 2) = "Lee"
+
+    Set tL = UnivDB.CreateTable()
+    tL.LoadFromArray vL
+    Set tR = UnivDB.CreateTable()
+    tR.LoadFromArray vR
+
+    ' 기본 체인: 필터 -> 조인(jtInner 기본) -> prefix 컬럼 위 필터 -> 종결
+    Set tRes = UnivDB.Query(tL).Filter("Amt", ">", 5) _
+        .Join(tR, "Dept", , "R_") _
+        .Filter("R_Boss", "IS", "Kim").ToTable()
+    LogShim.AssertEq "chain_f17_join_rows", 1, tRes.RowCount - 1
+    LogShim.AssertEq "chain_f17_join_prefixcol", True, tRes.Headers.exists("R_BOSS")
+    LogShim.AssertEq "chain_f17_join_amt", 10, tRes.Value(2, "Amt")
+
+    ' jtInner 기본 확인: 필터 없이 조인만 - FIN(미매칭) 탈락, IT는 1:N으로 2행
+    Set tRes = UnivDB.Query(tL).Join(tR, "Dept").ToTable()
+    LogShim.AssertEq "chain_f17_join_inner_default", 3, tRes.RowCount - 1
+End Sub
+
+' F17 (계약): 물질화 장벽 - Join 전 정렬/Top은 좌측에 소진되고, Join 후
+' 파이프라인 상태(투영/정렬/Top)는 초기값으로 리셋된다.
+Public Sub Test_Chain_QueryJoinBarrier()
+    Dim tL As clsTable
+    Dim tR As clsTable
+    Dim tRes As clsTable
+    Dim vL(1 To 4, 1 To 2) As Variant
+    Dim vR(1 To 4, 1 To 2) As Variant
+
+    vL(1, 1) = "Dept": vL(1, 2) = "Amt"
+    vL(2, 1) = "IT": vL(2, 2) = 10
+    vL(3, 1) = "HR": vL(3, 2) = 20
+    vL(4, 1) = "FIN": vL(4, 2) = 30
+
+    vR(1, 1) = "Dept": vR(1, 2) = "Boss"
+    vR(2, 1) = "IT": vR(2, 2) = "Kim"
+    vR(3, 1) = "IT": vR(3, 2) = "Park"
+    vR(4, 1) = "HR": vR(4, 2) = "Lee"
+
+    Set tL = UnivDB.CreateTable()
+    tL.LoadFromArray vL
+    Set tR = UnivDB.CreateTable()
+    tR.LoadFromArray vR
+
+    ' 장벽: OrderBy+Top(1)이 좌측에 소진 - Amt 최대(FIN 30) 1행만 좌측, jtLeft로 보존
+    Set tRes = UnivDB.Query(tL).OrderBy("Amt", True).Top(1) _
+        .Join(tR, "Dept", jtLeft, "R_").ToTable()
+    LogShim.AssertEq "chain_f17_barrier_rows", 1, tRes.RowCount - 1
+    LogShim.AssertEq "chain_f17_barrier_topval", 30, tRes.Value(2, "Amt")
+
+    ' 리셋: Join 전 Top(1)이 좌측(IT 1행)에 소진된 뒤, 조인(1:N)의 2행이
+    ' 이전 Top에 잘리지 않고 전부 반환 - m_lLimit 잔존 없음 증명
+    Set tRes = UnivDB.Query(tL).Top(1).Join(tR, "Dept", jtInner, "R_").ToTable()
+    LogShim.AssertEq "chain_f17_reset_rows", 2, tRes.RowCount - 1
+End Sub
+
 ' F25 (audit 추보): 조인 키 컬럼 오타는 즉시 Err.Raise 9999.
 ' 이전 동작(MsgBox 모달 + Nothing 반환)은 헤드리스에서 핀 고정 자체가 불가능해
 ' 2단 커밋 패턴 예외 - fix와 신규 계약 핀만 (사유는 audit 문서 기록).
