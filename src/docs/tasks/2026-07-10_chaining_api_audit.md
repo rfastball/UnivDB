@@ -290,7 +290,7 @@ C3 구현 중 코드 재정독으로 전수조사 매트릭스의 오판정 2건
 - F8/F9 (OrderBy/SelectColumns 동명이의): 의미 차이는 Reference에 문서화로 완화.
   이름 분리는 이득 대비 표면 증식이 커서 보류.
 - ~~F11~F13, F15, F20 (잔여 어휘 통일)~~: **2026-07-10 B축으로 해소** - 7.6절 참조.
-- C-1 (교차 컬럼 OR), C-2 (Compute 상수): 표현력 확장 축 - 별도 task로 이월.
+- ~~C-1 (교차 컬럼 OR), C-2 (Compute 상수)~~: **2026-07-10 해소** - 7.8절 참조.
 - ~~F17 (파사드 Join 체인 단절)~~: **2026-07-10 해소** - 7.5절 참조.
 
 ### 7.5 F17 해소 + 추보 F25 (2026-07-10)
@@ -341,3 +341,26 @@ C3 구현 중 코드 재정독으로 전수조사 매트릭스의 오판정 2건
 - **레거시 문서 모듈 은퇴**: Docs.bas(v2.1)/modTemplate.bas(v2.0)를 삭제 +
   워크북 prune (`d4a8fce`). Reference v2.7.2가 대체 선언한 구세대 사본으로
   canonical 어휘 미반영 상태였음. 참조 0 확인, 전체 79 테스트 green.
+
+### 7.8 표현력 확장 축 실행 결과 (C-1/C-2, 2026-07-10 오후)
+
+사용자 확정: OR 문법은 FilterAny 그룹 형태, C-2 동반 진행. 5커밋, 매 커밋 green.
+
+- `f99a78c` **DbRowSet.UnionWith**: IntersectWithRowList(AND)의 쌍대 합집합 +
+  결속 계약 가드(9998). AddRow 멱등이라 중복 무계수.
+- `b2698dd` **EvaluateArm 추출**: Filter의 dual-path 스캔 코어를 private 헬퍼로 -
+  행동 보존, 기존 스위트가 핀.
+- `8a7473a` **C-1 FilterAny/KeepAny**: 한 호출 = 한 OR 그룹, 그룹과 체인 나머지는
+  AND. arm = Array(컬럼, 연산자, 값), Filter 화이트리스트 공유, 전체 arm 사전 검증
+  (부분 축소 없는 9999). 동일 컬럼 arm이 IN 의미론 겸용. 표현 계약은 "AND of
+  OR-groups" - OR 안 AND 중첩은 여전히 공백(V9)으로 문서화.
+- `8a74df1` **C-2 Compute 숫자 상수**: 피연산자 구분 규칙 = String이면 컬럼명,
+  그 외 타입이면 숫자 상수. 상수 0 나눗셈은 문장 수준 raise. 문자열 리터럴 상수는
+  구분 규칙과 충돌이라 계속 공백(V9) 문서화.
+- **추보 F26 [문서]**: Reference에 있던 FilterIn/FilterNotIn/FilterLike/FilterNotLike
+  4종은 구현된 적 없는 유령 표기였음(은퇴한 Docs.bas 계보). v2.8.0에서 정정 -
+  IN은 FilterAny 동일 컬럼 arm으로 표현. 6.6절의 "FilterIn이 커버" 문구도 오류였다.
+- Reference v2.8.0: 3장 FilterAny/KeepAny, 5장 Compute 상수, 6.5 신규 raise 목록,
+  6.6 재작성(AND of OR-groups 계약), 6.7 어휘 지도 OR 그룹 행 추가.
+
+이로써 audit 파생 작업은 전부 종결. 잔여는 F8/F9 의도적 보류(문서화 완화)뿐.

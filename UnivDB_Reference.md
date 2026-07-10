@@ -1,7 +1,7 @@
 # UnivDB Library Reference (Consolidated)
 
 > **For**: Claude Code agent context. Single-file reference replacing CheatSheet, Docs, Guide, Template.
-> **Version**: v2.7.2
+> **Version**: v2.8.0
 
 ---
 
@@ -36,11 +36,17 @@ UnivDB.EditTable(TableName, KeyCol) -> clsTableBuilder ' 기존 테이블 스키
 ```vb
 .Where(Col, Val)              ' 인덱스 기반 동등검색 (최고속, 먼저 호출 권장)
 .Filter(Col, Op, Val)         ' 조건 스캔 (>, <, >=, <=, =, <>, LIKE, NOT LIKE, IS, IS NOT)
-.FilterIn(Col, Val1, ...)     ' SQL IN
-.FilterNotIn(Col, Val1, ...)  ' SQL NOT IN
-.FilterLike(Col, Pat1, ...)   ' 패턴 OR 매칭
-.FilterNotLike(Col, Pat...)   ' 패턴 OR 제외
+.FilterAny(Array(Col, Op, Val), ...)  ' OR 그룹 (arm 중 하나라도 매칭 - 아래 참조)
 ```
+
+> **FilterAny (교차 컬럼 OR)**: 한 호출이 하나의 OR 그룹이다 - 그룹 안 arm들은 OR,
+> 그룹과 체인의 나머지는 AND (`(arm1 OR arm2) AND ...`). 각 arm은 `Array(컬럼, 연산자, 값)`
+> 3요소이고 연산자는 `Filter`와 같은 화이트리스트를 쓴다. 동일 컬럼 arm을 나열하면
+> SQL IN 의미론이 된다. arm 배열 하나(`FilterAny(vArmList)`)를 넘기는 동적 목록 형태도
+> 허용. 전체 arm이 평가 전에 문장 수준 검증된다 (arm 하나가 틀리면 부분 축소 없이 9999).
+>
+> (v2.8.0 정정: 이전 문서의 `FilterIn`/`FilterNotIn`/`FilterLike`/`FilterNotLike`는
+> 구현된 적 없는 유령 표기였다 - IN은 `FilterAny`의 동일 컬럼 arm으로 표현한다.)
 
 ### Sort / Limit / Project
 ```vb
@@ -117,6 +123,7 @@ UnivDB.Query("Emp") _
 ### Filter & Update
 ```vb
 .Keep(Col, Op, Val)                                ' 조건 행 유지 (canonical, Exclude와 대칭)
+.KeepAny(Array(Col, Op, Val), ...)                 ' OR 그룹 행 유지 (clsQuery.FilterAny 위임, 즉시 실행)
 .Filter(Col, Op, Val)                              ' Keep과 동일 (호환 유지 - 주의: 즉시 실행)
 .Exclude(Col, Op, Val)                             ' 조건 행 제거 (Remove)
 .PatchIf(CondCol, Op, CondVal, TgtCol, NewVal)     ' 조건부 값 변경 (canonical, 빌더 PatchIf 인자 순서)
@@ -124,7 +131,7 @@ UnivDB.Query("Emp") _
 ```
 
 > **실행 시점 주의**: `clsQuery.Filter`는 지연(후보 축소만, `ToTable()`에서 물질화)이지만
-> ReportBuilder의 `Keep`/`Filter`/`Exclude`는 **즉시 실행**(작업 테이블을 그 자리에서 교체)이다.
+> ReportBuilder의 `Keep`/`KeepAny`/`Filter`/`Exclude`는 **즉시 실행**(작업 테이블을 그 자리에서 교체)이다.
 > 신규 코드는 즉시 실행 어휘 `Keep`을 사용해 혼동을 피할 것.
 
 ### Output
@@ -170,8 +177,9 @@ UnivDB.Report("SalesData") _
 .UpsertFrom(SourceTable, KeyCol)    ' 키 기준 Insert or Update (Merge)
 .GroupBy(GroupCols, AggList)         ' 집계: "Col:SUM, Col:AVG, Col:COUNT, Col:MAX, Col:MIN"
                                      '   함수 생략 시 COUNT 기본 ("Col" == "Col:COUNT")
-.Compute(TgtCol, Col1, Op, Col2)    ' 컬럼 간 연산: +, -, *, /, & (피연산자는 컬럼명만,
-                                     '   상수 리터럴 미지원)
+.Compute(TgtCol, Op1, Op, Op2)      ' 컬럼/상수 연산: +, -, *, /, & - 피연산자가 String이면
+                                     '   컬럼명(부재 시 9999), 그 외 타입이면 숫자 상수
+                                     '   (예: .Compute("Tax", "Amt", "*", 0.1))
 .OrderBy(Col, [bDescending])        ' 정렬 (in-place, Me 반환)
 .AddColumn(Col, [Init])             ' 컬럼 추가 - 멱등 ensure (이미 있으면 무시)
 .AddColumns("B, C") / ("B", "C")    ' 복수 추가 - 개별 인자/csv/Array 허용 (멱등 ensure)
@@ -251,7 +259,7 @@ Where/Join/GroupBy 키는 전부 단일 정규화 계약을 탄다:
 
 | 표면 | 허용 목록 |
 |---|---|
-| `Filter` / `Keep` / `Exclude` / `UpdateValue` 연산자 | `=` `<>` `>` `<` `>=` `<=` `IS` `IS NOT` `LIKE` `NOT LIKE` (대소문자/공백 무관) |
+| `Filter` / `FilterAny` / `Keep` / `KeepAny` / `Exclude` / `UpdateValue` 연산자 | `=` `<>` `>` `<` `>=` `<=` `IS` `IS NOT` `LIKE` `NOT LIKE` (대소문자/공백 무관) |
 | `GroupBy` 집계함수 | `SUM` `AVG` `COUNT` `MIN` `MAX` |
 | `Compute` 연산자 | `+` `-` `*` `/` `&` |
 | `PatchIf` 연산자 | `=` `<>` `>` `>=` `<` `<=` |
@@ -260,12 +268,20 @@ Where/Join/GroupBy 키는 전부 단일 정규화 계약을 탄다:
 오타, 수치 연산자에 비숫자 비교값)는 raise. 데이터 셀 수준의 문제(Empty/Error/비숫자
 셀)는 6.2~6.3의 NULL/skip 계약대로 해당 셀만 불참 — 크래시도, 조용한 오염도 없다.
 
+v2.8.0에서 추가된 문장 수준 raise: `FilterAny`의 0개 arm/3요소 아닌 arm/비스칼라 arm 요소
+(전체 arm이 평가 앞에서 검증 - 부분 축소 없음), `Compute`의 비String 비숫자 피연산자
+(Empty/Null/Date/배열/객체)와 상수 0 나눗셈 (컬럼 셀의 0 나눗셈은 기존 데이터 수준 관용 유지).
+
 ### 6.6 표현력 공백 (명시적 비지원)
 
-- **조건 결합은 AND 전용**: `Where`/`Filter` 체인은 항상 논리곱. 교차 컬럼 OR은 표현
-  불가. 동일 컬럼의 OR(값 목록 매칭)은 `FilterIn(Col, v1, v2, ...)`이 커버한다.
-- **`Compute`의 피연산자는 컬럼명만**: 상수 리터럴 미지원 (`Compute("T", "A", "+", "3")`은
-  컬럼 `3`을 찾다 raise).
+- **조건 결합: 체인은 AND, OR은 `FilterAny` 그룹 단위로만** (v2.8.0에서 교차 컬럼 OR
+  지원). 표현 가능한 형태는 정확히 `(arm1 OR arm2 OR ...) AND (다음 그룹/조건) AND ...` -
+  즉 AND of OR-groups. **OR 그룹 안에 AND를 중첩하는 형태(`(A AND B) OR C`)는 여전히 표현
+  불가**가 계약이다 (분배법칙으로 AND-of-ORs로 변환하거나 쿼리를 분리할 것). 동일 컬럼
+  값 목록 매칭(IN)은 `FilterAny`의 동일 컬럼 arm으로 표현한다.
+- **`Compute` 상수는 숫자만**: 피연산자 구분 규칙이 "String=컬럼명, 그 외=숫자 상수"라
+  **문자열 리터럴 상수는 표현 불가** (`Compute("T", "A", "&", "-")`는 컬럼 `-`를 찾다
+  raise). 문자열 결합에 리터럴이 필요하면 `AddColumn`으로 상수 컬럼을 만들어 쓸 것.
 - **`AddColumn`은 멱등 ensure / `RemoveColumn`은 멱등 drop**: 존재/부재 시 조용히
   무시가 계약이다 (컬럼명 오타 검출이 필요하면 `Headers.exists`로 확인).
 
@@ -277,7 +293,8 @@ Where/Join/GroupBy 키는 전부 단일 정규화 계약을 탄다:
 | 개념 | canonical | clsQuery | clsReportBuilder | clsTableBuilder | clsTable |
 |---|---|---|---|---|---|
 | 종결 (테이블 물질화) | `ToTable` | ToTable = SelectTable | ToTable = Table(Get) | ToTable | (자신이 테이블) |
-| 지연 필터 (후보 축소) | `Filter`/`Where` | Filter, Where, FilterIn 등 | | | |
+| 지연 필터 (후보 축소) | `Filter`/`Where` | Filter, Where | | | |
+| OR 그룹 (교차 컬럼/IN) | `FilterAny` | FilterAny (지연) | KeepAny (즉시) | | |
 | 즉시 필터 (행 유지/제거) | `Keep`/`Exclude` | | Keep = Filter / Exclude | | |
 | 값 스테이징 | `SetVal` | SetVal = SetValue | | SetVal (Val은 레거시 혼성) | |
 | 조건부 패치 | `PatchIf` (cond,op,val,tgt,new) | | PatchIf = UpdateValue(인자 순서 상이) | PatchIf | |
