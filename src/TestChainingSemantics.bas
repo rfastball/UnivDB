@@ -214,6 +214,38 @@ Public Sub Test_Chain_ColumnWriteFailFast()
     LogShim.AssertEq "chain_f24_valuelet_errno", 9999, lErrNo2
 End Sub
 
+' F25 (audit 추보): 조인 키 컬럼 오타는 즉시 Err.Raise 9999.
+' 이전 동작(MsgBox 모달 + Nothing 반환)은 헤드리스에서 핀 고정 자체가 불가능해
+' 2단 커밋 패턴 예외 - fix와 신규 계약 핀만 (사유는 audit 문서 기록).
+Public Sub Test_Chain_JoinBadKeyFailFast()
+    Dim tL As clsTable
+    Dim tR As clsTable
+    Dim tJ As clsTable
+    Dim lErrNo1 As Long
+    Dim lErrNo2 As Long
+    Dim vL(1 To 2, 1 To 1) As Variant
+    Dim vR(1 To 2, 1 To 1) As Variant
+
+    vL(1, 1) = "K": vL(2, 1) = "a"
+    vR(1, 1) = "K": vR(2, 1) = "a"
+
+    Set tL = UnivDB.CreateTable()
+    tL.LoadFromArray vL
+    Set tR = UnivDB.CreateTable()
+    tR.LoadFromArray vR
+
+    On Error Resume Next
+    Set tJ = UnivDB.Join(tL, tR, "NOPE")
+    lErrNo1 = Err.Number
+    Err.Clear
+    Set tJ = UnivDB.Join(tL, tR, "K", jtInner, "", "NOPE")
+    lErrNo2 = Err.Number
+    On Error GoTo 0
+
+    LogShim.AssertEq "chain_f25_join_badleftkey_errno", 9999, lErrNo1
+    LogShim.AssertEq "chain_f25_join_badrightkey_errno", 9999, lErrNo2
+End Sub
+
 ' F6 (C1 계약): 수치 연산자에 비숫자 비교값은 즉시 Err.Raise 9999 (문장 수준 오류)
 ' C0 핀(에러 없이 0행)에서 flip - fail-fast fix와 같은 커밋
 Public Sub Test_Chain_NonNumericCompareValue()
