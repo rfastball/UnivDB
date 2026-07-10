@@ -1194,29 +1194,23 @@ End Function
 ' 사용법 2: t.SelectColumns "Name, Age, ID"          (기존 호환)
 ' 사용법 3: t.SelectColumns Array("Name", "Age")     (배열 전달 가능)
 ' ==============================================================================
-Public Function SelectColumns(ParamArray vCols() As Variant) As clsTable
+' 목록 인자 플랫 파싱 (개별 인자/csv 한 줄/Array 허용) - SelectColumns/AddColumns/
+' RemoveColumns 공용. 쿼리 실행 경로가 아닌 인자 파싱 표면이라 Collection 사용 허용.
+Private Function FlattenColumnArgs(ByVal vArgs As Variant) As Collection
     Dim vItem As Variant, vSubItem As Variant
     Dim arrTemp As Variant
-    Dim colFinalList As Collection
-    
-    Dim vNewData() As Variant
-    Dim arrOldIndices() As Long
-    Dim i As Long, j As Long
-    Dim lNewColCount As Long
     Dim sColName As String
-    
-    ' 1. 인자 파싱 (ParamArray -> Flat Collection)
-    If UBound(vCols) < 0 Then Set SelectColumns = Me: Exit Function
-    
-    Set colFinalList = New Collection
-    
-    For Each vItem In vCols
+
+    Set FlattenColumnArgs = New Collection
+    If UBound(vArgs) < LBound(vArgs) Then Exit Function
+
+    For Each vItem In vArgs
         If IsArray(vItem) Then
             ' Case: Array("A", "B")가 넘어온 경우
             For Each vSubItem In vItem
                 If Not IsError(vSubItem) And Not IsEmpty(vSubItem) Then
                     sColName = Trim(CStr(vSubItem))
-                    If Len(sColName) > 0 Then colFinalList.Add sColName
+                    If Len(sColName) > 0 Then FlattenColumnArgs.Add sColName
                 End If
             Next vSubItem
         ElseIf Not IsError(vItem) And Not IsEmpty(vItem) Then
@@ -1225,15 +1219,50 @@ Public Function SelectColumns(ParamArray vCols() As Variant) As clsTable
                 arrTemp = Split(CStr(vItem), ",")
                 For Each vSubItem In arrTemp
                     sColName = Trim(CStr(vSubItem))
-                    If Len(sColName) > 0 Then colFinalList.Add sColName
+                    If Len(sColName) > 0 Then FlattenColumnArgs.Add sColName
                 Next vSubItem
             Else
                 sColName = Trim(CStr(vItem))
-                If Len(sColName) > 0 Then colFinalList.Add sColName
+                If Len(sColName) > 0 Then FlattenColumnArgs.Add sColName
             End If
         End If
     Next vItem
-    
+End Function
+
+' @desc 컬럼 여러 개 추가 후 자기 자신 반환, 개별 인자/csv/Array 허용 (멱등 ensure)
+Public Function AddColumns(ParamArray vCols() As Variant) As clsTable
+    Dim colNames As Collection
+    Dim vName As Variant
+    Set colNames = FlattenColumnArgs(vCols)
+    For Each vName In colNames
+        AddColumn CStr(vName)
+    Next vName
+    Set AddColumns = Me
+End Function
+
+' @desc 컬럼 여러 개 삭제 후 자기 자신 반환, 개별 인자/csv/Array 허용 (멱등 drop)
+Public Function RemoveColumns(ParamArray vCols() As Variant) As clsTable
+    Dim colNames As Collection
+    Dim vName As Variant
+    Set colNames = FlattenColumnArgs(vCols)
+    For Each vName In colNames
+        RemoveColumn CStr(vName)
+    Next vName
+    Set RemoveColumns = Me
+End Function
+
+Public Function SelectColumns(ParamArray vCols() As Variant) As clsTable
+    Dim colFinalList As Collection
+
+    Dim vNewData() As Variant
+    Dim arrOldIndices() As Long
+    Dim i As Long, j As Long
+    Dim lNewColCount As Long
+    Dim sColName As String
+
+    ' 1. 인자 파싱 (ParamArray -> Flat Collection, 공용 헬퍼)
+    Set colFinalList = FlattenColumnArgs(vCols)
+
     lNewColCount = colFinalList.Count
     If lNewColCount = 0 Then Set SelectColumns = Me: Exit Function
     

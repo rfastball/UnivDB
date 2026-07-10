@@ -240,6 +240,33 @@ Public Sub Test_Chain_VocabAliases()
     LogShim.AssertEq "chain_b_patchif_untouched", "TOP", tRes.Value(2, "Name")
 End Sub
 
+' B축 (계약): clsTable.AddColumns/RemoveColumns - 개별 인자/csv 허용(SelectColumns
+' 파싱 규약 공유), AddColumn/RemoveColumn 멱등 계약 위임, 체인 유지
+Public Sub Test_Chain_TableAddRemoveColumns()
+    Dim T As clsTable
+    Dim vData(1 To 2, 1 To 1) As Variant
+
+    vData(1, 1) = "A"
+    vData(2, 1) = 1
+
+    Set T = UnivDB.CreateTable()
+    T.LoadFromArray vData
+
+    ' csv 한 줄 + 체인
+    T.AddColumns("B, C").AddColumns "D"
+    LogShim.AssertEq "chain_b_addcols_csv", True, T.Headers.exists("C")
+    LogShim.AssertEq "chain_b_addcols_chain", True, T.Headers.exists("D")
+    LogShim.AssertEq "chain_b_addcols_count", 4, T.ColCount
+
+    ' 개별 인자 + 멱등 ensure (기존 B는 무시)
+    T.AddColumns "E", "B"
+    LogShim.AssertEq "chain_b_addcols_multi", 5, T.ColCount
+
+    ' 제거: csv + 체인 + 멱등 drop (없는 X 무시)
+    T.RemoveColumns("D, E").RemoveColumns "X"
+    LogShim.AssertEq "chain_b_removecols", 3, T.ColCount
+End Sub
+
 ' F17 (계약): clsQuery.Join - 조인을 쿼리 체인에 합류. 물질화 장벽 의미론.
 ' 기본 jType=jtInner(파사드 정합). vRight의 이름(String) 경로는 UnivDB.Join에
 ' verbatim 위임이라 기존 TestJoin(등록 경로 핀)이 커버 - 여기선 객체 경로만.
