@@ -831,7 +831,7 @@ End Function
 ' ==============================================================================
 
 ' 특정 컬럼 기준 정렬 (QuickSort Wrapper)
-Public Sub OrderBy(ByVal sColName As String, Optional ByVal bDescending As Boolean = False)
+Public Function OrderBy(ByVal sColName As String, Optional ByVal bDescending As Boolean = False) As clsTable
     Dim lColIdx As Long
     Dim arrIndices() As Long
     Dim i As Long
@@ -857,16 +857,18 @@ Public Sub OrderBy(ByVal sColName As String, Optional ByVal bDescending As Boole
     
     ' 4. 데이터 재구성 (Rebuild)
     Call RebuildData(arrIndices)
-    
-End Sub
+
+    Set OrderBy = Me
+End Function
 ' ==============================================================================
 ' [8] 비즈니스 로직 (Business Logic) - 상태 변경(Mutation) 메서드
+' 변형 메서드는 Me를 반환해 체인을 유지한다 (audit F16, in-place 의미론은 불변)
 ' ==============================================================================
 
 ' 8-1. Upsert (Merge): 다른 테이블의 데이터를 키 기준으로 병합 (Insert + Update)
 ' 설명: 키가 같으면 덮어쓰고(Update), 없으면 추가(Insert)합니다.
 ' 전략: Update는 In-place로 즉시 처리, Insert는 모아서 배치로 처리 (배열 재할당 비용 최소화)
-Public Sub UpsertFrom(ByVal tSource As clsTable, ByVal sKeyCol As String)
+Public Function UpsertFrom(ByVal tSource As clsTable, ByVal sKeyCol As String) As clsTable
     Dim idxKey As DbHashIndex
     Dim rowsForKey As DbRowList
     Dim vSourceData As Variant
@@ -974,12 +976,14 @@ Public Sub UpsertFrom(ByVal tSource As clsTable, ByVal sKeyCol As String)
     ElseIf bUpdated Then
         BumpGeneration
     End If
-End Sub
+
+    Set UpsertFrom = Me
+End Function
 
 ' 8-2. Batch Update: 조건에 맞는 행의 특정 값을 일괄 변경
 ' 예: UpdateBatch "Status", "Inactive", "LastLogin", "< 2023-01-01" (현재는 Equal 조건만 지원)
-Public Sub UpdateBatch(ByVal sSetCol As String, ByVal vSetVal As Variant, _
-                       ByVal sWhereCol As String, ByVal vWhereVal As Variant)
+Public Function UpdateBatch(ByVal sSetCol As String, ByVal vSetVal As Variant, _
+                            ByVal sWhereCol As String, ByVal vWhereVal As Variant) As clsTable
     
     Dim colTargetRows As Collection
     Dim vRowID As Variant
@@ -1002,11 +1006,13 @@ Public Sub UpdateBatch(ByVal sSetCol As String, ByVal vSetVal As Variant, _
         ' 해당 컬럼의 데이터가 변했으므로 관련 인덱스 캐시를 제거
         InvalidateIndexByColumnName sSetCol
     End If
-End Sub
+
+    Set UpdateBatch = Me
+End Function
 
 ' 8-3. Batch Delete: 조건에 맞는 행을 일괄 삭제
 ' 전략: 삭제 대상이 아닌 행만 골라내어 새 배열로 옮기는 Rebuild 방식 (Copy Alive)
-Public Sub DeleteBatch(ByVal sWhereCol As String, ByVal vWhereVal As Variant)
+Public Function DeleteBatch(ByVal sWhereCol As String, ByVal vWhereVal As Variant) As clsTable
     Dim colDeleteRows As Collection
     Dim dicDeleteMap As Object
     Dim vRowID As Variant
@@ -1014,9 +1020,9 @@ Public Sub DeleteBatch(ByVal sWhereCol As String, ByVal vWhereVal As Variant)
     Dim lNewRowCount As Long
     Dim i As Long, j As Long, lCurrentRow As Long
     
-    ' 삭제 대상 검색
+    ' 삭제 대상 검색 (0건 매칭은 데이터 수준 - 무동작이 계약)
     Set colDeleteRows = Me.SelectRows(sWhereCol, vWhereVal)
-    If colDeleteRows.Count = 0 Then Exit Sub
+    If colDeleteRows.Count = 0 Then Set DeleteBatch = Me: Exit Function
     
     ' 빠른 조회를 위해 Dictionary로 변환 (O(1) Lookup)
     Set dicDeleteMap = CreateObject("Scripting.Dictionary")
@@ -1055,7 +1061,9 @@ Public Sub DeleteBatch(ByVal sWhereCol As String, ByVal vWhereVal As Variant)
     
     ' 행 번호가 완전히 바뀌었으므로 세대 증가 (전체 파생물 실효)
     BumpGeneration
-End Sub
+
+    Set DeleteBatch = Me
+End Function
 
 ' ==============================================================================
 ' [9] 데이터 조작 (Data Manipulation) - v1.3 추가 기능
@@ -1076,17 +1084,18 @@ Public Property Let Value(ByVal lRow As Long, ByVal sColName As String, ByVal vV
             InvalidateIndexByColumnName sColName
         End If
     Else
-        ' 컬럼이 없으면 에러 대신 무시하거나 디버그 메시지
-        Debug.Print "[Warning] Column not found: " & sColName
+        ' 미지 컬럼 쓰기는 문장 수준 오류 - fail-fast (audit 추보 F24, V2).
+        ' 이전 Debug.Print 경고는 헤드리스에서 보이지 않는 조용한 무시였다.
+        Err.Raise 9999, "clsTable.Value(Let)", "Column not found: " & sColName
     End If
 End Property
 ' 9-1-2 clsTable에 추가해두면 좋은 고속 복사 메서드
-Public Sub CopyColumn(ByVal sSourceCol As String, ByVal sTargetCol As String)
+Public Function CopyColumn(ByVal sSourceCol As String, ByVal sTargetCol As String) As clsTable
     Dim idxSrc As Long, idxDst As Long
     Dim i As Long
-    
-    ' 컬럼 존재 확인
-    If Not m_dicHeaders.exists(UCase(sSourceCol)) Then Exit Sub
+
+    ' 소스 컬럼 오타는 문장 수준 오류 - fail-fast (audit 추보 F23, 이전엔 조용한 무동작)
+    If Not m_dicHeaders.exists(UCase(sSourceCol)) Then Err.Raise 9999, "clsTable.CopyColumn", "Column not found: " & sSourceCol
     idxSrc = m_dicHeaders(UCase(sSourceCol))
     
     ' 타겟 컬럼 없으면 생성, 있으면 인덱스 확보
@@ -1099,17 +1108,19 @@ Public Sub CopyColumn(ByVal sSourceCol As String, ByVal sTargetCol As String)
     Next i
     
     InvalidateIndexByColumnName sTargetCol
-End Sub
+
+    Set CopyColumn = Me
+End Function
 
 ' 9-2-1. 새로운 컬럼 추가 (리포트 생성 시 필수)
 ' sColName: 추가할 헤더명
 ' vInitialValue: (선택) 초기값. 생략 시 Empty.
-Public Sub AddColumn(ByVal sColName As String, Optional ByVal vInitialValue As Variant)
+Public Function AddColumn(ByVal sColName As String, Optional ByVal vInitialValue As Variant) As clsTable
     Dim i As Long
-    
-    ' 1. 중복 컬럼명 방지
+
+    ' 1. 중복 컬럼명 방지 (멱등 ensure 계약 - 이미 존재하면 무시, 문서화는 C4)
     sColName = Trim(sColName)
-    If m_dicHeaders.exists(UCase(sColName)) Then Exit Sub ' 이미 존재하면 무시
+    If m_dicHeaders.exists(UCase(sColName)) Then Set AddColumn = Me: Exit Function
     
     ' 2. 컬럼 카운트 증가
     m_lColCount = m_lColCount + 1
@@ -1130,16 +1141,19 @@ Public Sub AddColumn(ByVal sColName As String, Optional ByVal vInitialValue As V
     End If
 
     BumpGeneration
-End Sub
+
+    Set AddColumn = Me
+End Function
 ' 9-2-2. 기존 컬럼 삭제
 ' sColName: 삭제할 헤더명
-Public Sub RemoveColumn(ByVal sColName As String)
+Public Function RemoveColumn(ByVal sColName As String) As clsTable
     Dim lTargetIdx As Long
     Dim i As Long, j As Long, k As Long
     Dim vNewData() As Variant
-    
+
     sColName = Trim(sColName)
-    If Not m_dicHeaders.exists(UCase(sColName)) Then Exit Sub ' 없으면 종료
+    ' 멱등 drop 계약 - 없으면 무시 (문서화는 C4)
+    If Not m_dicHeaders.exists(UCase(sColName)) Then Set RemoveColumn = Me: Exit Function
     
     ' 1. 삭제할 컬럼의 인덱스 확인
     lTargetIdx = m_dicHeaders(UCase(sColName))
@@ -1169,7 +1183,9 @@ Public Sub RemoveColumn(ByVal sColName As String)
     Next j
 
     BumpGeneration
-End Sub
+
+    Set RemoveColumn = Me
+End Function
 
 ' ==============================================================================
 ' [기능 개선] 특정 열만 남기기 (Select Columns) - ParamArray 적용
@@ -1262,7 +1278,7 @@ End Function
 ' 9-3. 컬럼 간 연산 (Loop 없는 수식 대체)
 ' 사용법: t.Compute "Total", "Qty", "*", "Price" (Total = Qty * Price)
 ' 지원 연산자: +, -, *, /, & (문자열 결합)
-Public Sub Compute(ByVal sTargetCol As String, ByVal sCol1 As String, ByVal sOp As String, ByVal sCol2 As String)
+Public Function Compute(ByVal sTargetCol As String, ByVal sCol1 As String, ByVal sOp As String, ByVal sCol2 As String) As clsTable
     Dim idxTarget As Long, idx1 As Long, idx2 As Long
     Dim i As Long
     Dim v1 As Variant, v2 As Variant, vRes As Variant
@@ -1297,9 +1313,11 @@ Public Sub Compute(ByVal sTargetCol As String, ByVal sCol1 As String, ByVal sOp 
         End Select
         On Error GoTo 0
     Next i
-    
+
     InvalidateIndexByColumnName sTargetCol
-End Sub
+
+    Set Compute = Me
+End Function
 
 Public Property Get Value(ByVal lRow As Long, ByVal sColName As String) As Variant
     Dim lCol As Long

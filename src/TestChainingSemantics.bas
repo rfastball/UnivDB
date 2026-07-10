@@ -163,6 +163,57 @@ Public Sub Test_Chain_BuilderSetGetVal()
     LogShim.AssertEq "chain_c2_setval_roundtrip", "Mouse", T.Value(2, "Name")
 End Sub
 
+' C3 계약: clsTable 변형 메서드는 Me를 반환해 체인 유지 (audit F16, in-place 의미론 불변)
+Public Sub Test_Chain_TableMutationChaining()
+    Dim T As clsTable
+    Dim tG As clsTable
+    Dim vData(1 To 4, 1 To 2) As Variant
+
+    vData(1, 1) = "Dept": vData(1, 2) = "Score"
+    vData(2, 1) = "IT": vData(2, 2) = 30
+    vData(3, 1) = "HR": vData(3, 2) = 20
+    vData(4, 1) = "IT": vData(4, 2) = 10
+
+    Set T = UnivDB.CreateTable()
+    T.LoadFromArray vData
+
+    ' GroupBy 결과에 곧바로 OrderBy 체인 (C3 이전엔 Sub라 컴파일 불가)
+    Set tG = T.GroupBy("Dept", "Score:SUM").OrderBy("Score_SUM")
+    LogShim.AssertEq "chain_c3_groupby_orderby_r2", 20, tG.Value(2, "Score_SUM")
+    LogShim.AssertEq "chain_c3_groupby_orderby_r3", 40, tG.Value(3, "Score_SUM")
+
+    ' AddColumn -> Compute -> OrderBy 변형 체인 (마지막 호출은 괄호 없이)
+    T.AddColumn("Bonus", 5).Compute("Total", "Score", "+", "Bonus").OrderBy "Total", True
+    LogShim.AssertEq "chain_c3_mutation_chain", 35, T.Value(2, "Total")
+End Sub
+
+' F23/F24 (audit 추보): CopyColumn 소스 컬럼 오타, Value Let 미지 컬럼 - fail-fast
+' (이전: CopyColumn 조용한 무동작, Value Let은 헤드리스에서 안 보이는 Debug.Print 무시)
+Public Sub Test_Chain_ColumnWriteFailFast()
+    Dim T As clsTable
+    Dim lErrNo1 As Long
+    Dim lErrNo2 As Long
+    Dim vData(1 To 2, 1 To 1) As Variant
+
+    vData(1, 1) = "A"
+    vData(2, 1) = 10
+
+    Set T = UnivDB.CreateTable()
+    T.LoadFromArray vData
+
+    On Error Resume Next
+    T.CopyColumn "NOPE", "X"
+    lErrNo1 = Err.Number
+    Err.Clear
+    T.Value(2, "NOPE") = 1
+    lErrNo2 = Err.Number
+    On Error GoTo 0
+
+    LogShim.AssertEq "chain_f23_copycol_errno", 9999, lErrNo1
+    LogShim.AssertEq "chain_f23_copycol_nocol", False, T.Headers.exists("X")
+    LogShim.AssertEq "chain_f24_valuelet_errno", 9999, lErrNo2
+End Sub
+
 ' F6 (C1 계약): 수치 연산자에 비숫자 비교값은 즉시 Err.Raise 9999 (문장 수준 오류)
 ' C0 핀(에러 없이 0행)에서 flip - fail-fast fix와 같은 커밋
 Public Sub Test_Chain_NonNumericCompareValue()
