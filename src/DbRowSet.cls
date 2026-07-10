@@ -131,6 +131,36 @@ Public Sub IntersectWithRowList(ByVal rows As DbRowList)
     mCount = newCount
 End Sub
 
+' 결합 대상 RowSet의 결속을 승계하거나, 서로 다른 결속이면 즉시 실패
+' (AdoptOrVerifyBinding의 RowSet 판 - VBA는 오버로드 불가라 별도 이름)
+Private Sub AdoptOrVerifyBindingSet(ByVal other As DbRowSet)
+    If other Is Nothing Then Exit Sub
+    If other.OwnerPtr = 0 Then Exit Sub
+
+    If mOwnerPtr = 0 Then
+        BindRaw other.OwnerPtr, other.BoundGeneration
+    ElseIf mOwnerPtr <> other.OwnerPtr Or mGeneration <> other.BoundGeneration Then
+        Err.Raise modDbContract.DB_ERR_STALE_GENERATION, "DbRowSet", _
+            "Derived structures bound to different table generations"
+    End If
+End Sub
+
+' @desc 다른 RowSet 받아 합집합으로 병합함, 결속 상이 시 9998 에러
+Public Sub UnionWith(ByVal other As DbRowSet)
+    Dim v As Variant
+    Dim i As Long
+
+    If other Is Nothing Then Exit Sub
+    AdoptOrVerifyBindingSet other
+    If other.Count = 0 Then Exit Sub
+
+    ' AddRow가 멱등(플래그 검사)이라 중복 행은 재계수되지 않는다
+    v = other.ToArray
+    For i = LBound(v) To UBound(v)
+        AddRow v(i)
+    Next i
+End Sub
+
 Public Function ToArray() As Variant
     Dim result() As Long
     Dim rowId As Long

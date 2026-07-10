@@ -70,6 +70,66 @@ Public Sub Test_Query_RowSet_Candidate_Order_And_Update()
     LogShim.AssertEq "query_rowset_update_remaining", 0, UnivDB.Query(T).Where("Dept", "IT").Where("Active", "Y").SelectTable().RowCount - 1
 End Sub
 
+' UnionWith: 합집합 병합 (교차 컬럼 OR의 기반 - audit C-1)
+Public Sub Test_RowSet_UnionWith()
+    Dim setA As New DbRowSet
+    Dim setB As New DbRowSet
+    Dim setEmpty As New DbRowSet
+    Dim setC As New DbRowSet
+    Dim arr As Variant
+
+    setA.AddRow 5: setA.AddRow 2: setA.AddRow 7
+    setB.AddRow 7: setB.AddRow 3
+
+    setA.UnionWith setB
+
+    ' 겹치는 행(7)은 1회만 계수, ToArray는 rowId 오름차순
+    LogShim.AssertEq "rowset_union_count", 4, setA.Count
+    LogShim.AssertEq "rowset_union_has2", True, setA.ContainsRow(2)
+    LogShim.AssertEq "rowset_union_has3", True, setA.ContainsRow(3)
+    LogShim.AssertEq "rowset_union_has5", True, setA.ContainsRow(5)
+    LogShim.AssertEq "rowset_union_has7", True, setA.ContainsRow(7)
+    arr = setA.ToArray()
+    LogShim.AssertEq "rowset_union_arr_first", 2, arr(0)
+    LogShim.AssertEq "rowset_union_arr_last", 7, arr(3)
+
+    ' 빈 집합과의 합집합은 무변화, 빈 집합 쪽으로의 합집합은 내용 승계
+    setA.UnionWith setEmpty
+    LogShim.AssertEq "rowset_union_empty_noop", 4, setA.Count
+    setC.UnionWith setB
+    LogShim.AssertEq "rowset_union_into_empty", 2, setC.Count
+End Sub
+
+' UnionWith 세대 계약: 서로 다른 테이블에 결속된 집합 병합은 9998
+Public Sub Test_RowSet_UnionWith_BindingMismatch()
+    Dim tA As clsTable, tB As clsTable
+    Dim setA As New DbRowSet
+    Dim setB As New DbRowSet
+    Dim setU As New DbRowSet
+    Dim lErrNo As Long
+    Dim vData(1 To 2, 1 To 1) As Variant
+
+    vData(1, 1) = "C"
+    vData(2, 1) = 1
+
+    Set tA = UnivDB.CreateTable(): tA.LoadFromArray vData
+    Set tB = UnivDB.CreateTable(): tB.LoadFromArray vData
+
+    setA.BindTo tA: setA.AddRow 2
+    setB.BindTo tB: setB.AddRow 2
+
+    On Error Resume Next
+    setA.UnionWith setB
+    lErrNo = Err.Number
+    On Error GoTo 0
+    LogShim.AssertEq "rowset_union_mismatch_errno", 9998, lErrNo
+
+    ' 미결속 상대는 계약 밖 통과 (AdoptOrVerifyBinding과 대칭)
+    setU.AddRow 3
+    setA.UnionWith setU
+    LogShim.AssertEq "rowset_union_unbound_ok", True, setA.ContainsRow(3)
+End Sub
+
 Private Function NewRowSetQueryTable() As clsTable
     Dim vData(1 To 6, 1 To 4) As Variant
     Dim T As clsTable
