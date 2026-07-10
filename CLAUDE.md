@@ -82,6 +82,10 @@ rowID는 특정 테이블의 특정 세대 안에서만 유효한 물리 행 번
 
 ## 설계 문서 (읽는 순서)
 
+- `src/docs/tasks/2026-07-10_chaining_api_audit.md` - 다음 작업 축: 체이닝 API 전수조사
+  결과 (위반 F1~F22, 개선 방향 승인 대기)
+- `src/docs/reference/query_api_language_survey_202607.md` - 상용 쿼리 API 언어철학 조사
+  + 문법 검증 기준 V1~V9 (위 audit의 근거)
 - `src/docs/tasks/2026-07-08_null_type_semantics.md` - 비결정 D 실행 계획 D0~D3 (완료된 이력)
 - `src/docs/tasks/2026-07-05_next_direction.md` - Phase R0~R5 기록 (완료된 이력 + 결정 로그)
 - `src/docs/UnivDB_design_decisions_202607.md` - 세대 계약·스토리지 레이아웃 결정과 근거
