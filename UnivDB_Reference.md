@@ -19,11 +19,13 @@
 UnivDB.InitDB                                          ' 엔진 초기화 (최초 1회)
 UnivDB.RegisterTable "Name", Sheet1.Range("A1")        ' 시트→메모리 등록 (Smart Range)
 UnivDB.GetTable("Name") -> clsTable                    ' 등록된 테이블 직접 참조
+UnivDB.CreateTable() -> clsTable                       ' [Factory] 빈 clsTable 생성 (xlam 참조 시 New 불가 대응)
 UnivDB.ClearDB                                         ' 메모리 정리
 
 UnivDB.Query(Target) -> clsQuery                       ' Target: String(테이블명) | clsTable
 UnivDB.Report(Target) -> clsReportBuilder              ' Target: String | clsTable
 UnivDB.Join(Left, Right, Key, [JoinType], [Prefix], [RightKey]) -> clsTable
+UnivDB.Upsert Target, Source, KeyCol                   ' 소스를 대상에 키 기준 병합 (clsTable.UpsertFrom 파사드)
 UnivDB.Builder(KeyCol) -> clsTableBuilder              ' 빈 빌더 생성
 UnivDB.EditTable(TableName, KeyCol) -> clsTableBuilder ' 기존 테이블 스키마 복제 빌더
 ```
