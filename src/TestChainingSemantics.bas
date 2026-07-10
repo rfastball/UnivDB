@@ -570,3 +570,86 @@ Public Sub Test_Chain_ReportKeepAny()
     LogShim.AssertEq "chain_c1_keepany_rows", 4, tR.RowCount
     LogShim.AssertEq "chain_c1_keepany_orig_intact", 6, T.RowCount
 End Sub
+
+' ==============================================================================
+' C-2: Compute 숫자 상수 피연산자 - 신규 계약 핀 (impl과 같은 커밋)
+' ==============================================================================
+
+' 기본 계약: 컬럼 x 상수 / 상수 x 컬럼 / 체인 유지
+Public Sub Test_Chain_ComputeConstOperand()
+    Dim T As clsTable
+    Dim tChain As clsTable
+
+    Set T = NewOrGroupTable()
+
+    T.Compute "Half", "Amt", "*", 0.5
+    LogShim.AssertEq "chain_c2_const_right", 250, T.Value(2, "Half")
+
+    T.Compute "Rem", 100, "-", "Amt"
+    LogShim.AssertEq "chain_c2_const_left", -400, T.Value(2, "Rem")
+
+    Set tChain = T.Compute("Twice", "Amt", "*", 2)
+    LogShim.AssertEq "chain_c2_const_chain", True, tChain Is T
+End Sub
+
+' 상수 x 상수: 전 행 동일 값 (금지보다 단순한 계약 - AddColumn 초기화와 중복일 뿐)
+Public Sub Test_Chain_ComputeConstBoth()
+    Dim T As clsTable
+
+    Set T = NewOrGroupTable()
+    T.Compute "K", 2, "*", 3
+    LogShim.AssertEq "chain_c2_both_r1", 6, T.Value(2, "K")
+    LogShim.AssertEq "chain_c2_both_r5", 6, T.Value(6, "K")
+End Sub
+
+' 문장 수준 검증: String "3"은 여전히 컬럼명(9999) / Empty 거부 / 상수 0 나눗셈 거부
+' 전부 타겟 컬럼 미생성 (반쪽 실행 없음 - audit F3 계약 유지)
+Public Sub Test_Chain_ComputeConstValidation()
+    Dim T As clsTable
+    Dim lErrNo As Long
+
+    Set T = NewOrGroupTable()
+
+    On Error Resume Next
+    T.Compute "R1", "Amt", "+", "3"
+    lErrNo = Err.Number
+    On Error GoTo 0
+    LogShim.AssertEq "chain_c2_strlit_errno", 9999, lErrNo
+    LogShim.AssertEq "chain_c2_strlit_nocol", False, T.Headers.exists("R1")
+
+    On Error Resume Next
+    T.Compute "R2", "Amt", "+", Empty
+    lErrNo = Err.Number
+    On Error GoTo 0
+    LogShim.AssertEq "chain_c2_empty_errno", 9999, lErrNo
+    LogShim.AssertEq "chain_c2_empty_nocol", False, T.Headers.exists("R2")
+
+    On Error Resume Next
+    T.Compute "R3", "Amt", "/", 0
+    lErrNo = Err.Number
+    On Error GoTo 0
+    LogShim.AssertEq "chain_c2_divzero_errno", 9999, lErrNo
+    LogShim.AssertEq "chain_c2_divzero_nocol", False, T.Headers.exists("R3")
+End Sub
+
+' 상수와 & 결합은 CStr 참여, 비숫자 셀은 데이터 수준 skip 관용 유지
+Public Sub Test_Chain_ComputeConstConcatAndNullSkip()
+    Dim T As clsTable
+    Dim vData(1 To 4, 1 To 1) As Variant
+
+    Set T = NewOrGroupTable()
+    T.Compute "Lbl", "Dept", "&", 9
+    LogShim.AssertEq "chain_c2_concat", "Sales9", T.Value(2, "Lbl")
+
+    vData(1, 1) = "A"
+    vData(2, 1) = 10
+    vData(3, 1) = "abc"
+    vData(4, 1) = 30
+
+    Set T = UnivDB.CreateTable()
+    T.LoadFromArray vData
+    T.Compute "R", "A", "+", 1
+    LogShim.AssertEq "chain_c2_skip_ok1", 11, T.Value(2, "R")
+    LogShim.AssertEq "chain_c2_skip_cell", True, IsEmpty(T.Value(3, "R"))
+    LogShim.AssertEq "chain_c2_skip_ok2", 31, T.Value(4, "R")
+End Sub

@@ -1304,22 +1304,31 @@ Public Function SelectColumns(ParamArray vCols() As Variant) As clsTable
 End Function
 
 
-' 9-3. 컬럼 간 연산 (Loop 없는 수식 대체)
-' 사용법: t.Compute "Total", "Qty", "*", "Price" (Total = Qty * Price)
+' 9-3. 컬럼 간/상수 연산 (Loop 없는 수식 대체)
+' 사용법: t.Compute "Total", "Qty", "*", "Price" (컬럼 x 컬럼)
+'         t.Compute "Tax", "Amt", "*", 0.1     (컬럼 x 숫자 상수)
 ' 지원 연산자: +, -, *, /, & (문자열 결합)
-Public Function Compute(ByVal sTargetCol As String, ByVal sCol1 As String, ByVal sOp As String, ByVal sCol2 As String) As clsTable
+' 피연산자 구분 규칙: String이면 컬럼명(부재 시 9999), 그 외 타입이면 숫자 상수.
+' 문자열 리터럴 상수는 미지원 (String=컬럼명 규칙과 충돌 - V9 공백으로 문서화).
+' @desc 컬럼/숫자 상수 피연산자 연산해 타겟 컬럼 기록, 문장 오류 시 9999
+Public Function Compute(ByVal sTargetCol As String, ByVal vOperand1 As Variant, ByVal sOp As String, ByVal vOperand2 As Variant) As clsTable
     Dim idxTarget As Long, idx1 As Long, idx2 As Long
+    Dim bConst1 As Boolean, bConst2 As Boolean
+    Dim vConst1 As Variant, vConst2 As Variant
     Dim i As Long
     Dim v1 As Variant, v2 As Variant, vRes As Variant
 
     ' 문장 수준 검증 선행 (audit F3, V1/V2): 연산자/피연산자 오류는 구조 변경(타겟
     ' 컬럼 자동 생성) 전에 raise - 이전엔 타겟만 만들고 조용히 무동작하는 반쪽 실행.
-    ' 상수(Literal) 피연산자는 미지원 - 두 피연산자 모두 컬럼명이어야 한다.
     sOp = modOperators.NormalizeComputeOp(sOp)
-    If Not m_dicHeaders.exists(UCase(sCol1)) Then Err.Raise 9999, "clsTable.Compute", "Column not found: " & sCol1
-    If Not m_dicHeaders.exists(UCase(sCol2)) Then Err.Raise 9999, "clsTable.Compute", "Column not found: " & sCol2
-    idx1 = m_dicHeaders(UCase(sCol1))
-    idx2 = m_dicHeaders(UCase(sCol2))
+    ResolveComputeOperand vOperand1, bConst1, idx1, vConst1
+    ResolveComputeOperand vOperand2, bConst2, idx2, vConst2
+
+    ' 상수 0 나눗셈은 문장에 쓰인 개발자 오류 - 문장 수준 raise
+    ' (컬럼 셀의 0은 기존 데이터 수준 관용 유지: 해당 행만 0 기입)
+    If sOp = "/" And bConst2 Then
+        If CDbl(vConst2) = 0 Then Err.Raise 9999, "clsTable.Compute", "Constant divisor must not be zero"
+    End If
 
     ' 타겟 컬럼 확보 (없으면 자동 생성)
     If Not m_dicHeaders.exists(UCase(sTargetCol)) Then AddColumn sTargetCol
@@ -1327,8 +1336,8 @@ Public Function Compute(ByVal sTargetCol As String, ByVal sCol1 As String, ByVal
 
     ' 고속 배열 연산
     For i = (m_lHeaderRowIndex + 1) To m_lRowCount
-        v1 = m_vData(i, idx1)
-        v2 = m_vData(i, idx2)
+        If bConst1 Then v1 = vConst1 Else v1 = m_vData(i, idx1)
+        If bConst2 Then v2 = vConst2 Else v2 = m_vData(i, idx2)
 
         ' 행 데이터 수준 오류(비숫자 셀 등)는 계약된 관용 - 해당 셀만 미기입.
         ' 문장 수준 오류(위 raise)와 구분되는 데이터 수준 skip이다.
@@ -1347,6 +1356,30 @@ Public Function Compute(ByVal sTargetCol As String, ByVal sCol1 As String, ByVal
 
     Set Compute = Me
 End Function
+
+' 피연산자 해석 (Compute 전용): String은 컬럼명(부재 시 9999), 그 외는 숫자 상수.
+' IsNumeric(Empty)=True 같은 관용 흡수를 막기 위해 Empty/Null/배열/객체/Error를
+' 명시 거부하고 숫자 판정만 IsNumeric에 맡긴다 (Date도 비숫자로 거부).
+Private Sub ResolveComputeOperand(ByVal vOperand As Variant, ByRef bConst As Boolean, _
+                                  ByRef idxCol As Long, ByRef vConst As Variant)
+    If VarType(vOperand) = vbString Then
+        If Not m_dicHeaders.exists(UCase(vOperand)) Then
+            Err.Raise 9999, "clsTable.Compute", "Column not found: " & vOperand
+        End If
+        idxCol = m_dicHeaders(UCase(vOperand))
+        bConst = False
+    Else
+        If IsEmpty(vOperand) Or IsNull(vOperand) Or IsArray(vOperand) _
+           Or IsObject(vOperand) Or IsError(vOperand) Then
+            Err.Raise 9999, "clsTable.Compute", "Operand must be a column name (String) or numeric constant"
+        End If
+        If Not IsNumeric(vOperand) Then
+            Err.Raise 9999, "clsTable.Compute", "Operand must be a column name (String) or numeric constant"
+        End If
+        bConst = True
+        vConst = vOperand
+    End If
+End Sub
 
 Public Property Get Value(ByVal lRow As Long, ByVal sColName As String) As Variant
     Dim lCol As Long
