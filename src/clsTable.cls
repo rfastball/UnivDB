@@ -568,7 +568,10 @@ Public Function GroupBy(ByVal sGroupCols As String, ByVal sAggList As String) As
         If InStr(sVal, ":") > 0 Then
             arrTemp = Split(sVal, ":")
             sVal = Trim(arrTemp(0))
-            arrAggFuncs(i) = UCase(Trim(arrTemp(1)))
+            ' 화이트리스트 검증 (audit F2, V1): 미지 함수는 즉시 raise - 이전엔 누적
+            ' 분기 미매칭 + 렌더 fallback으로 "조용한 빈 컬럼"이 나왔다 (Agg Column
+            ' Not Found의 9999와 오류 처리 대칭)
+            arrAggFuncs(i) = modOperators.NormalizeAggFunc(arrTemp(1))
         Else
             ' 함수 명시 없으면 기본 COUNT로 처리
             arrAggFuncs(i) = "COUNT"

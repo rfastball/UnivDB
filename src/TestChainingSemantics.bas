@@ -32,12 +32,12 @@ Public Sub Test_Chain_UnknownFilterOp()
     LogShim.AssertEq "chain_f1_unknownop_nores", True, tR Is Nothing
 End Sub
 
-' F2: GroupBy 미지 집계함수는 에러 없이 빈 컬럼 (누적 Case Else 부재 + 렌더 fallback)
+' F2 (C1 계약): GroupBy 미지 집계함수는 즉시 Err.Raise 9999 (modOperators 화이트리스트)
+' C0 핀(에러 없이 빈 컬럼)에서 flip - fail-fast fix와 같은 커밋
 Public Sub Test_Chain_UnknownAggFunc()
     Dim T As clsTable
     Dim tG As clsTable
     Dim lErrNo As Long
-    Dim vCell As Variant
     Dim vData(1 To 3, 1 To 2) As Variant
 
     vData(1, 1) = "Dept": vData(1, 2) = "Score"
@@ -50,12 +50,14 @@ Public Sub Test_Chain_UnknownAggFunc()
     On Error Resume Next
     Set tG = T.GroupBy("Dept", "Score:SUMM")
     lErrNo = Err.Number
-    If lErrNo = 0 Then vCell = tG.Value(2, "Score_SUMM")
     On Error GoTo 0
 
-    LogShim.AssertEq "chain_f2_unknownagg_errno", 0, lErrNo
-    ' 헤더는 생성되고 값은 전부 Empty - "조용한 빈 컬럼"
-    LogShim.AssertEq "chain_f2_unknownagg_empty", True, IsEmpty(vCell)
+    LogShim.AssertEq "chain_f2_unknownagg_errno", 9999, lErrNo
+    LogShim.AssertEq "chain_f2_unknownagg_nores", True, tG Is Nothing
+
+    ' 함수 생략 시 COUNT 기본은 유효한 계약으로 유지 (문서화는 C4)
+    Set tG = T.GroupBy("Dept", "Score")
+    LogShim.AssertEq "chain_f2_default_count", 2, tG.Value(2, "Score_COUNT")
 End Sub
 
 ' F3: Compute는 미지 연산자도, 피연산자 컬럼 오타도 조용한 무동작
