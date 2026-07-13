@@ -23,6 +23,21 @@ End Sub
 Public Function TryGetRows(ByVal key As Variant, ByRef outRows As DbRowList) As Boolean
 End Function
 
+' span 계열 (객체 생성 없는 핫 경로용): 버퍼는 호출자 소유 재사용,
+' 부족 시 구현이 배가 ReDim, 내용은 호출마다 덮어씀 - 소비는 outCount 기준.
+
+' @desc 키의 rowId span을 버퍼에 복사 여부 반환, 미존재/Error 키 시 False에 0건
+Public Function TryGetRowIdSpan(ByVal key As Variant, ByRef outRowIds() As Long, ByRef outCount As Long) As Boolean
+End Function
+
+' @desc 키의 행 수만 반환 여부 반환(복사 없음), 미존재/Error 키 시 False에 0건
+Public Function TryGetRowCount(ByVal key As Variant, ByRef outCount As Long) As Boolean
+End Function
+
+' @desc 키의 첫 rowId 반환 여부 반환, 미존재/Error 키 시 False
+Public Function TryGetFirstRowId(ByVal key As Variant, ByRef outRowId As Long) As Boolean
+End Function
+
 ' @desc 고유 키 개수 반환
 Public Property Get CountKeys() As Long
 End Property

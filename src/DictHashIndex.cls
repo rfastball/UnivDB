@@ -80,6 +80,47 @@ Public Function TryGetRows(ByVal key As Variant, ByRef outRows As DbRowList) As 
     End If
 End Function
 
+' @desc 키의 rowId span을 버퍼에 복사 여부 반환, 미존재/Error 키 시 False에 0건
+Public Function TryGetRowIdSpan(ByVal key As Variant, ByRef outRowIds() As Long, ByRef outCount As Long) As Boolean
+    Dim sKey As String
+
+    outCount = 0
+    If IsError(key) Then Exit Function
+
+    sKey = NormalizeKey(key)
+    If mDict.exists(sKey) Then
+        mPayload.CopySpan mDict(sKey), outRowIds, outCount
+        TryGetRowIdSpan = True
+    End If
+End Function
+
+' @desc 키의 행 수만 반환 여부 반환(복사 없음), 미존재/Error 키 시 False에 0건
+Public Function TryGetRowCount(ByVal key As Variant, ByRef outCount As Long) As Boolean
+    Dim sKey As String
+
+    outCount = 0
+    If IsError(key) Then Exit Function
+
+    sKey = NormalizeKey(key)
+    If mDict.exists(sKey) Then
+        outCount = mPayload.CountOf(mDict(sKey))
+        TryGetRowCount = True
+    End If
+End Function
+
+' @desc 키의 첫 rowId 반환 여부 반환, 미존재/Error 키 시 False
+Public Function TryGetFirstRowId(ByVal key As Variant, ByRef outRowId As Long) As Boolean
+    Dim sKey As String
+
+    If IsError(key) Then Exit Function
+
+    sKey = NormalizeKey(key)
+    If mDict.exists(sKey) Then
+        outRowId = mPayload.FirstRowId(mDict(sKey))
+        TryGetFirstRowId = True
+    End If
+End Function
+
 Public Property Get CountKeys() As Long
     CountKeys = mDict.Count
 End Property
@@ -116,6 +157,18 @@ End Sub
 
 Private Function DbHashIndex_TryGetRows(ByVal key As Variant, ByRef outRows As DbRowList) As Boolean
     DbHashIndex_TryGetRows = TryGetRows(key, outRows)
+End Function
+
+Private Function DbHashIndex_TryGetRowIdSpan(ByVal key As Variant, ByRef outRowIds() As Long, ByRef outCount As Long) As Boolean
+    DbHashIndex_TryGetRowIdSpan = TryGetRowIdSpan(key, outRowIds, outCount)
+End Function
+
+Private Function DbHashIndex_TryGetRowCount(ByVal key As Variant, ByRef outCount As Long) As Boolean
+    DbHashIndex_TryGetRowCount = TryGetRowCount(key, outCount)
+End Function
+
+Private Function DbHashIndex_TryGetFirstRowId(ByVal key As Variant, ByRef outRowId As Long) As Boolean
+    DbHashIndex_TryGetFirstRowId = TryGetFirstRowId(key, outRowId)
 End Function
 
 Private Property Get DbHashIndex_CountKeys() As Long

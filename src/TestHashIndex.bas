@@ -73,6 +73,62 @@ Private Sub Test_Case_CursorClear(ByVal idx As DbHashIndex, ByVal sTag As String
     LogShim.AssertEq "iface_reload_count_" & sTag, 1, idx.CountKeys
 End Sub
 
+Public Sub Test_HashIndex_SpanApi_Parametric()
+    Test_Case_SpanApi New DictHashIndex, "dict"
+    Test_Case_SpanApi New CoreHashIndex, "core"
+End Sub
+
+' 케이스 본체: span 계열(TryGetRowIdSpan/TryGetRowCount/TryGetFirstRowId)이
+' TryGetRows 복사본과 동치 + miss/Error 키 False에 0건 + 버퍼 재사용 + 커서 동치
+Private Sub Test_Case_SpanApi(ByVal idx As DbHashIndex, ByVal sTag As String)
+    Dim rows As DbRowList
+    Dim cur As DbIndexCursor
+    Dim buf() As Long
+    Dim n As Long
+    Dim rowId As Long
+
+    idx.AddRow "IT", 2
+    idx.AddRow "it", 3
+    idx.AddRow "HR", 5
+    idx.AddRow Empty, 4
+    idx.AddRow "IT", 9
+
+    ' span 내용 = TryGetRows 복사본과 일치 (대소문자 병합 키, 3건)
+    LogShim.AssertEq "span_try_" & sTag, True, idx.TryGetRowIdSpan("IT", buf, n)
+    LogShim.AssertEq "span_rows_try_" & sTag, True, idx.TryGetRows("IT", rows)
+    LogShim.AssertEq "span_count_" & sTag, rows.Count, n
+    LogShim.AssertEq "span_v1_" & sTag, rows.RowAt(1), buf(1)
+    LogShim.AssertEq "span_v3_" & sTag, rows.RowAt(3), buf(3)
+
+    ' 버퍼 재사용: 큰 span 뒤 작은 span - 소비는 outCount 기준
+    LogShim.AssertEq "span_small_try_" & sTag, True, idx.TryGetRowIdSpan("HR", buf, n)
+    LogShim.AssertEq "span_small_n_" & sTag, 1, n
+    LogShim.AssertEq "span_small_v_" & sTag, 5, buf(1)
+
+    ' miss / Error 키: False + 0건
+    LogShim.AssertEq "span_miss_" & sTag, False, idx.TryGetRowIdSpan("nope", buf, n)
+    LogShim.AssertEq "span_miss_n_" & sTag, 0, n
+    LogShim.AssertEq "span_err_" & sTag, False, idx.TryGetRowIdSpan(CVErr(xlErrNA), buf, n)
+
+    LogShim.AssertEq "spancount_try_" & sTag, True, idx.TryGetRowCount("it", n)
+    LogShim.AssertEq "spancount_n_" & sTag, 3, n
+    LogShim.AssertEq "spancount_miss_" & sTag, False, idx.TryGetRowCount("nope", n)
+    LogShim.AssertEq "spancount_miss_n_" & sTag, 0, n
+
+    LogShim.AssertEq "spanfirst_try_" & sTag, True, idx.TryGetFirstRowId("IT", rowId)
+    LogShim.AssertEq "spanfirst_v_" & sTag, 2, rowId
+    LogShim.AssertEq "spanfirst_miss_" & sTag, False, idx.TryGetFirstRowId("nope", rowId)
+
+    ' 커서 RowCount/CopyRows vs Rows 동치 (전 키 순회)
+    Set cur = idx.Cursor
+    Do While cur.MoveNext
+        cur.CopyRows buf, n
+        LogShim.AssertEq "span_cur_count_" & CStr(cur.Key) & "_" & sTag, cur.Rows.Count, cur.RowCount
+        LogShim.AssertEq "span_cur_copyn_" & CStr(cur.Key) & "_" & sTag, cur.RowCount, n
+        LogShim.AssertEq "span_cur_v1_" & CStr(cur.Key) & "_" & sTag, cur.Rows.RowAt(1), buf(1)
+    Loop
+End Sub
+
 Public Sub Test_TableHashIndex_SelectRows_Parity()
     Dim T As clsTable
     Dim idx As DbHashIndex
