@@ -85,6 +85,20 @@ Public Sub Clear()
     mCount = 0
 End Sub
 
+' 공유 Long 배열의 (offset, count) 구간을 정확 크기로 적재한다 (DbCsrPayload 복사 경로)
+Friend Sub LoadFromLongSpan(ByRef rowIds() As Long, ByVal offset As Long, ByVal count As Long)
+    Dim i As Long
+
+    Clear
+    If count <= 0 Then Exit Sub
+
+    ReDim mRows(1 To count)
+    For i = 1 To count
+        mRows(i) = rowIds(offset + i - 1)
+    Next i
+    mCount = count
+End Sub
+
 Public Sub LoadFromCollection(ByVal rows As Collection)
     Dim rowId As Variant
     
