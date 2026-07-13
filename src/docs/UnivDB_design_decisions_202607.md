@@ -173,3 +173,35 @@ F. UnivCore와의 장기 관계 (독립 커널 vs 흡수)
 따라서 `Err 9999`(fail-fast)는 나중에 덧붙인 철학이 아니라, 집합 연산을 바닥에 둔 라이브러리가
 반드시 마주치는 구조적 문제에 대한 **필연적 응답**이다. 이 계보(필터 -> 집합 연산 -> 체이닝)는
 내부 실행 표현이 `RowSet`/`clsSet.Intersection`을 쓰는 사실로도 코드에 남아 있다.
+
+## 부록 (2026-07-13 추가): 결정 E - 인덱스 페이로드는 CSR 평탄 배열이다
+
+### E.1 결정
+
+해시 인덱스(DictHashIndex/CoreHashIndex)의 rowId 페이로드는 키당 `DbRowList` 객체가
+아니라 공용 `DbCsrPayload` 하나가 보관한다: 공유 Long 배열(mRowIds) + 키별
+(offset, count). 백엔드는 키->keyId(1기반 밀집) 매핑만 담당한다
+(dict = Count+1 순차 부여, core = FastHash slot).
+
+### E.2 근거
+
+키당 객체 저장은 고유키성 컬럼(고유키 수 ~= 행 수)에서 수만 개 COM 인스턴스를 만들고,
+ClearDB/Terminate 시 개별 소멸 캐스케이드가 teardown 지배원이 된다
+(20k행 실측 60ms, 데이터 배열 해제는 2ms - `2026-07-13_teardown_cost_index_payload.md`).
+CSR 전환 후 소멸은 Long 배열 Erase 몇 회로 키 수와 무관해진다 (실측 1ms).
+
+### E.3 규약
+
+- **빌드**: AddRow 스트리밍이 엔트리 버퍼(keyId, rowId 쌍)에 누적, 첫 읽기 접근자에서
+  lazy finalize(prefix-sum + 안정 counting-sort scatter). 키 내 rowId 순서 = AddRow
+  호출 순서. AddRow는 dirty 마킹만 하므로 읽기 후 재적재도 안전(재finalize).
+  빌드 버퍼는 finalize 후에도 유지된다(재finalize 원본, 행당 Long 2개).
+- **복사 반환 의미론**: `TryGetRows`/`DbIndexCursor.Rows`는 인덱스 내부의 라이브 참조가
+  아니라 세대 결속(BindRaw)을 탑재한 fresh DbRowList 복사본을 반환한다. 반환 후의
+  인덱스 변경은 복사본에 반영되지 않는다.
+- **span 버퍼 소유권**: `TryGetRowIdSpan`/`TryGetRowCount`/`TryGetFirstRowId`(인터페이스),
+  커서 `RowCount`/`CopyRows`는 객체 생성 없는 핫 경로용. 버퍼는 호출자 소유 재사용,
+  구현이 부족 시 배가 ReDim, 내용은 호출마다 덮어씀 - 소비는 outCount 기준.
+  miss/Error 키는 False + outCount 0.
+- **세대 결속**: 인덱스 단위 결속(mOwnerPtr/mGeneration)이 유일 진실이고 복사본에
+  전파된다. 키당 결속은 저장 구조에서 사라졌다.

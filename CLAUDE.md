@@ -30,6 +30,7 @@ Excel 배치 워크로드(1만~10만 행, 적재→변환→보고)용 인메모
    - `DbHashIndex.cls` = 백엔드 교체용 인터페이스. 기본 구현 `DictHashIndex`,
      실험 백엔드 `CoreHashIndex`(FastHash 기반, `clsTable.IndexBackend = dbBackendCore` 명시 옵션 전용)
    - 보조 구조: `DbRowList` / `DbRowSet` / `DbIndexCursor` / `DbColumnReader`(컬럼 접근 밀봉 표면)
+     / `DbCsrPayload`(인덱스 rowId를 CSR 평탄 배열로 보관 - 키당 객체 없음, 양 백엔드 공유)
    - 키 정규화는 `modIndexKey.NormalizeIndexKey` 단일 계약: Empty→"", Error 키 skip, CStr, vbTextCompare(대소문자 무시)
 3. **Core 커널** - `Core_*` (구 UnivCore, 현재 UnivDB 정본). 해시/배열 저수준 프리미티브만. DB 의미론 없음.
 

@@ -4,9 +4,10 @@
 발견 경로: 소비 프로젝트 `지출 리팩토링`의 로직 벤치(modBench)에서 버튼 Proc의
 Finally 구간(`cleardb`/`teardown`)이 활성화 직후 2초대로 관측됨. 원인 추적 결과
 비용원이 UnivDB 인덱스 페이로드 설계에 있음을 확인.
-상태: **원인 확정 / 지배 성분 분리측정 완료(성분 A 압도적 지배) / 수정 미착수**
+상태: **해결 완료 (2026-07-13, 처방 A 구현)** - §7에 전후 수치
 검증 방법: 코드 정독 + 소비측 벤치 실측 + `TestBenchDb.Test_BenchDb_Teardown` 분리측정
 (2026-07-13, §5에 수치). 성분 A(인덱스 객체)가 성분 B(데이터 배열)를 ~30배 압도.
+수정: 인덱스 페이로드 CSR 평탄화(`DbCsrPayload`) - idxA_uniq_ms 60/57 -> 1/1.
 
 ## 1. 증상 (소비측 실측)
 
@@ -117,7 +118,28 @@ mRows(slot).Append rowId
 (소비측 cleardb 2090ms는 이 20k 케이스의 60ms를 선형 외삽한 규모 - 다수 고유키성 컬럼×테이블에
 인덱스가 서면서 DbRowList 총량이 수십만 개로 불어난 결과. 스케일 법칙은 위에서 실증됨.)
 
-다음 스텝(이 리포트 범위 밖): §4 처방 A(CSR) 착수 여부 결정.
+## 7. 해결 - 처방 A 구현 완료 (2026-07-13)
+
+커밋 6개(C1~C6)로 CSR 평탄화 완료. 핵심: 키당 `New DbRowList` 저장을 폐기하고,
+양 백엔드가 공용 `DbCsrPayload`(엔트리 버퍼 + lazy finalize + 안정 scatter로 만든
+공유 Long 배열 + 키별 offset/count)에 rowId 보관을 위임. 백엔드는 키->keyId(1기반
+밀집) 매핑만 담당(dict = Count+1 순차, core = FastHash slot).
+
+전후 실측 (`bench_db_teardown`, 20k행 고유키, median ms):
+
+| backend | idxA_uniq (전) | idxA_uniq (후) | with_uniq_idx (전->후) |
+|---|---|---|---|
+| dict | 60 | **1** | 62 -> 3 |
+| core | 57 | **1** | 59 -> 2 |
+
+인덱스 소멸이 데이터 배열 해제(data_only 2ms)와 동급으로 수렴 - 성분 A 소거 완료.
+부수 효과(회귀 없음, 키당 객체 할당 소멸): index_build dict 60/92 -> 48/32,
+join dict j11 29->25 / jnn 19->14 / nomatch 44->35.
+
+계약 변화: `TryGetRows`/`Cursor.Rows`는 라이브 참조 대신 **세대 결속을 탑재한 fresh
+복사본**을 반환한다(전 소비처 즉시 소비 확인 완료). 핫 경로는 신규 span API
+(`TryGetRowIdSpan`/`TryGetRowCount`/`TryGetFirstRowId`, 커서 `RowCount`/`CopyRows`)로
+객체 생성 없이 순회한다. 설계 근거는 `UnivDB_design_decisions_202607.md` CSR 절 참조.
 
 ## 6. 참조 위치
 
