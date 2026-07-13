@@ -179,6 +179,41 @@ Public Sub LoadFromArray(ByVal vArr As Variant, Optional ByVal bHasHeader As Boo
     End If
 End Sub
 
+' 1-3. [Internal] 이미 정규화된 배열 입양 (내부 물질화 전용)
+' LoadFromArray와 달리 데이터 전수 Trim 패스를 생략하고 ByRef로 받아 호출 시점 복사를 줄인다.
+' 원본이 이미 트리밍된 테이블 셀/집계값인 내부 결과(조인, GroupBy, 쿼리 재구축)에서만 쓸 것.
+' 사용자 입력이 섞이는 경로(RegisterTable, Insert, TableBuilder)는 LoadFromArray를 유지한다.
+Friend Sub AdoptArray(ByRef vArr As Variant, Optional ByVal bHasHeader As Boolean = True)
+    Dim j As Long
+    Dim sColName As String
+
+    Clear ' 기존 데이터 초기화 (세대 증가 포함 - 파생 구조 실효)
+
+    m_vData = vArr
+    m_lRowCount = UBound(m_vData, 1)
+    m_lColCount = UBound(m_vData, 2)
+
+    If bHasHeader Then
+        ' 헤더 행만 Trim (헤더 이름 의미론은 LoadFromArray와 동일 유지)
+        Dim lHeadRow As Long: lHeadRow = LBound(m_vData, 1)
+        For j = LBound(m_vData, 2) To UBound(m_vData, 2)
+            If VarType(m_vData(lHeadRow, j)) = vbString Then
+                m_vData(lHeadRow, j) = Trim$(m_vData(lHeadRow, j))
+            End If
+            sColName = CStr(m_vData(lHeadRow, j))
+            If Len(sColName) > 0 Then
+                m_dicHeaders(UCase(sColName)) = j
+            End If
+        Next j
+        m_lHeaderRowIndex = lHeadRow
+    Else
+        For j = LBound(m_vData, 2) To UBound(m_vData, 2)
+            m_dicHeaders("COLUMN" & j) = j
+        Next j
+        m_lHeaderRowIndex = LBound(m_vData, 1) - 1
+    End If
+End Sub
+
 
 
 ' 초기화
@@ -686,7 +721,7 @@ Public Function GroupBy(ByVal sGroupCols As String, ByVal sAggList As String) As
             Next j
         Loop
 
-        tResult.LoadFromArray vResultData
+        tResult.AdoptArray vResultData
         Set GroupBy = tResult
         Exit Function
     End If
@@ -819,7 +854,7 @@ Public Function GroupBy(ByVal sGroupCols As String, ByVal sAggList As String) As
         Next i
     Next R
     
-    tResult.LoadFromArray vResultData
+    tResult.AdoptArray vResultData
     Set GroupBy = tResult
 
 End Function
@@ -887,10 +922,12 @@ Public Function UpsertFrom(ByVal tSource As clsTable, ByVal sKeyCol As String) A
     Dim sColName As String
     
     Set dicColMap = CreateObject("Scripting.Dictionary")
-    
+
+    vSourceData = tSource.RawArray ' 1회 물질화 (RawArray는 호출마다 전체 복사)
+
     ' Source의 헤더를 순회하며 Target에 존재하는지 확인
     For i = 1 To tSource.ColCount
-        sColName = UCase(Trim(tSource.RawArray(1, i)))
+        sColName = UCase(Trim(vSourceData(1, i)))
         If m_dicHeaders.exists(sColName) Then
             dicColMap(i) = m_dicHeaders(sColName)
         End If
@@ -908,7 +945,6 @@ Public Function UpsertFrom(ByVal tSource As clsTable, ByVal sKeyCol As String) A
     Set idxKey = Me.GetHashIndex(sKeyCol)
     If idxKey Is Nothing Then Err.Raise 9999, , "Upsert Error: Target table missing key column"
 
-    vSourceData = tSource.RawArray
     Set colNewRows = New Collection
 
     ' 3. Source 데이터 순회 및 분류 (Update vs Insert)

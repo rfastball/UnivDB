@@ -547,8 +547,8 @@ Public Function Delete() As Long
         End If
     Next i
     
-    ' 2. 테이블 갱신
-    m_SourceTable.LoadFromArray vNewData, True
+    ' 2. 테이블 갱신 (기존 셀 재배치라 이미 정규화됨 - 입양 경로)
+    m_SourceTable.AdoptArray vNewData, True
     Set m_setCandidates = Nothing: m_bIsFirstCondition = True
     
     Delete = lDeleteCount
@@ -686,8 +686,8 @@ Public Function SelectTable() As clsTable
         Next i
     End If
     
-    ' 결과 로드
-    tResult.LoadFromArray vResultData, True
+    ' 결과 로드 (원본 셀 프로젝션이라 이미 정규화됨 - 입양 경로)
+    tResult.AdoptArray vResultData, True
     
     ' 6. [Post-Process] 정렬 및 정렬 후 Limit 처리
     If Len(m_sSortColumn) > 0 Then
@@ -711,8 +711,8 @@ Public Function SelectTable() As clsTable
                 Next j
             Next i
             
-            ' 잘라낸 데이터로 다시 로드
-            tResult.LoadFromArray vSliced, True
+            ' 잘라낸 데이터로 다시 로드 (정렬 결과 슬라이스 - 입양 경로)
+            tResult.AdoptArray vSliced, True
         End If
     End If
     

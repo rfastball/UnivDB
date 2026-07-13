@@ -47,8 +47,10 @@ Private Sub EnsureSafeCopy()
     If m_bIsSafeCopy Then Exit Sub
     
     Dim tClone As New clsTable
-    ' 원본 배열을 복사하여 새로운 테이블 생성
-    tClone.LoadFromArray m_tWork.RawArray, True
+    Dim vClone As Variant
+    ' 원본 배열을 복사하여 새로운 테이블 생성 (원본은 이미 정규화됨 - 입양 경로)
+    vClone = m_tWork.RawArray
+    tClone.AdoptArray vClone, True
     Set m_tWork = tClone
     m_bIsSafeCopy = True
 End Sub

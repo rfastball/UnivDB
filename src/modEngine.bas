@@ -131,11 +131,15 @@ Public Function JoinTable(ByVal tLeft As clsTable, _
     
     ReDim vResultData(1 To lRows + 1, 1 To lCols)
     Set colHeaders = New Collection
-    
+
+    ' 원본 배열 1회 물질화 (RawArray는 호출마다 전체 복사 - 루프 안 호출 금지)
+    vLeftData = tLeft.RawArray
+    vRightData = tRight.RawArray
+
     ' --- (4-1) 왼쪽 헤더 등록 ---
     If jType <> jtRightAnti And jType <> jtRightSemi Then
         For i = 1 To lLeftCols
-            sHeader = tLeft.RawArray(1, i)
+            sHeader = vLeftData(1, i)
             vResultData(1, i) = sHeader
             On Error Resume Next
             colHeaders.Add sHeader, UCase(sHeader)
@@ -149,7 +153,7 @@ Public Function JoinTable(ByVal tLeft As clsTable, _
         iStartCol = IIf(jType = jtRightAnti Or jType = jtRightSemi, 0, lLeftCols)
         
         For i = 1 To lRightCols
-            sHeader = tRight.RawArray(1, i)
+            sHeader = vRightData(1, i)
             sNewHeader = sRightPrefix & sHeader
             
             If IsHeaderExists(colHeaders, sNewHeader) Then
@@ -172,8 +176,6 @@ Public Function JoinTable(ByVal tLeft As clsTable, _
     End If
     
     ' 5. [Data Merge] 데이터 채우기
-    vLeftData = tLeft.RawArray
-    vRightData = tRight.RawArray
     lRowIdx = 2
     
     ' (Part 1) Common Keys
@@ -256,9 +258,9 @@ NextRightOnlyKey:
         Loop
     End If
     
-    ' 6. 결과 반환
+    ' 6. 결과 반환 (원본 셀은 이미 트리밍됨 - 입양 경로로 재트리밍 패스 생략)
     Dim tResult As New clsTable
-    tResult.LoadFromArray vResultData
+    tResult.AdoptArray vResultData
     Set JoinTable = tResult
     
 End Function
