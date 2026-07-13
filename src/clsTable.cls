@@ -640,7 +640,8 @@ Public Function GroupBy(ByVal sGroupCols As String, ByVal sAggList As String) As
     If lGroupCount = 1 Then
         Dim idx As DbHashIndex
         Dim cur As DbIndexCursor
-        Dim rowsInGroup As DbRowList
+        Dim bufRows() As Long ' 그룹 span 재사용 버퍼 (키당 객체 생성 없음)
+        Dim cntRows As Long
         Dim lRowId As Long, k As Long
 
         Set idx = GetHashIndexByIndex(arrGroupIndices(0))
@@ -657,7 +658,7 @@ Public Function GroupBy(ByVal sGroupCols As String, ByVal sAggList As String) As
         Do While cur.MoveNext
             R = R + 1
             vResultData(R, 1) = cur.Key
-            Set rowsInGroup = cur.Rows
+            cur.CopyRows bufRows, cntRows
 
             ReDim vStats(0 To (lAggCount * 2) - 1)
             For j = 0 To lAggCount - 1
@@ -665,8 +666,8 @@ Public Function GroupBy(ByVal sGroupCols As String, ByVal sAggList As String) As
                 If arrAggFuncs(j) = "MAX" Then vStats(j * 2) = Empty
             Next j
 
-            For k = 1 To rowsInGroup.Count
-                lRowId = rowsInGroup.RowAt(k)
+            For k = 1 To cntRows
+                lRowId = bufRows(k)
                 For j = 0 To lAggCount - 1
                     vCell = vAggCols(j)(lRowId)
                     ' 집계 본체는 복합 키 경로(2-3)와 동일 계약 - R3에서 공용화 예정
@@ -905,7 +906,6 @@ End Function
 ' 전략: Update는 In-place로 즉시 처리, Insert는 모아서 배치로 처리 (배열 재할당 비용 최소화)
 Public Function UpsertFrom(ByVal tSource As clsTable, ByVal sKeyCol As String) As clsTable
     Dim idxKey As DbHashIndex
-    Dim rowsForKey As DbRowList
     Dim vSourceData As Variant
     Dim vKey As Variant
     Dim lSourceRow As Long, lTargetRow As Long
@@ -948,15 +948,14 @@ Public Function UpsertFrom(ByVal tSource As clsTable, ByVal sKeyCol As String) A
     Set colNewRows = New Collection
 
     ' 3. Source 데이터 순회 및 분류 (Update vs Insert)
-    ' 키 정규화(Empty/CStr/vbTextCompare)는 TryGetRows가 담당
+    ' 키 정규화(Empty/CStr/vbTextCompare)는 TryGetFirstRowId가 담당
     For lSourceRow = 2 To tSource.RowCount
         vKey = vSourceData(lSourceRow, lKeyColSource)
 
-        If idxKey.TryGetRows(vKey, rowsForKey) Then
+        If idxKey.TryGetFirstRowId(vKey, lTargetRow) Then
             ' [UPDATE] 키 존재 -> 기존 행 덮어쓰기 (In-place)
             ' 주의: 중복 키가 있다면 첫 번째 매칭 행만 업데이트
-            lTargetRow = rowsForKey.RowAt(1)
-            
+
             For Each vKey In dicColMap.Keys
                 lSourceColIdx = vKey
                 lTargetColIdx = dicColMap(vKey)

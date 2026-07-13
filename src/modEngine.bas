@@ -41,7 +41,8 @@ Public Function JoinTable(ByVal tLeft As clsTable, _
     
     Dim idxLeft As DbHashIndex, idxRight As DbHashIndex
     Dim cur As DbIndexCursor
-    Dim leftRows As DbRowList, rightRows As DbRowList
+    Dim bufLeft() As Long, bufRight() As Long ' span 재사용 버퍼 (자기조인 대비 좌우 분리)
+    Dim cntLeft As Long, cntRight As Long
     Dim vItemLeft As Long, vItemRight As Long
     Dim a As Long, b As Long
     Dim vLeftData As Variant, vRightData As Variant
@@ -79,40 +80,34 @@ Public Function JoinTable(ByVal tLeft As clsTable, _
         
         Set cur = idxRight.Cursor
         Do While cur.MoveNext
-            vKey = cur.Key
-            Set rightRows = cur.Rows
-            If idxLeft.TryGetRows(vKey, leftRows) Then
+            If idxLeft.TryGetRowCount(cur.Key, cntLeft) Then
                 If jType = jtLeftSemi Then
-                    lRows = lRows + leftRows.Count
+                    lRows = lRows + cntLeft
                 ElseIf jType = jtRightSemi Then
-                    lRows = lRows + rightRows.Count
+                    lRows = lRows + cur.RowCount
                 Else
-                    lRows = lRows + (leftRows.Count * rightRows.Count)
+                    lRows = lRows + (cntLeft * cur.RowCount)
                 End If
             End If
         Loop
     End If
-    
+
     ' (B) Left Only Keys
     If (jType = jtLeft Or jType = jtFull Or jType = jtLeftAnti) Then
         Set cur = idxLeft.Cursor
         Do While cur.MoveNext
-            vKey = cur.Key
-            If Not idxRight.TryGetRows(vKey, rightRows) Then
-                Set leftRows = cur.Rows
-                lRows = lRows + leftRows.Count
+            If Not idxRight.TryGetRowCount(cur.Key, cntRight) Then
+                lRows = lRows + cur.RowCount
             End If
         Loop
     End If
-    
+
     ' (C) Right Only Keys
     If (jType = jtRight Or jType = jtFull Or jType = jtRightAnti) Then
         Set cur = idxRight.Cursor
         Do While cur.MoveNext
-            vKey = cur.Key
-            If Not idxLeft.TryGetRows(vKey, leftRows) Then
-                Set rightRows = cur.Rows
-                lRows = lRows + rightRows.Count
+            If Not idxLeft.TryGetRowCount(cur.Key, cntLeft) Then
+                lRows = lRows + cur.RowCount
             End If
         Loop
     End If
@@ -185,28 +180,29 @@ Public Function JoinTable(ByVal tLeft As clsTable, _
         Set cur = idxRight.Cursor
         Do While cur.MoveNext
             vKey = cur.Key
-            Set rightRows = cur.Rows
-            If Not idxLeft.TryGetRows(vKey, leftRows) Then GoTo NextCommonKey
-            
+            If Not idxLeft.TryGetRowIdSpan(vKey, bufLeft, cntLeft) Then GoTo NextCommonKey
+
             If jType = jtLeftSemi Then
-                For a = 1 To leftRows.Count
-                    vItemLeft = leftRows.RowAt(a)
+                For a = 1 To cntLeft
+                    vItemLeft = bufLeft(a)
                     For j = 1 To lLeftCols: vResultData(lRowIdx, j) = vLeftData(vItemLeft, j): Next j
                     lRowIdx = lRowIdx + 1
                 Next a
-                
+
             ElseIf jType = jtRightSemi Then
-                For b = 1 To rightRows.Count
-                    vItemRight = rightRows.RowAt(b)
+                cur.CopyRows bufRight, cntRight
+                For b = 1 To cntRight
+                    vItemRight = bufRight(b)
                     For j = 1 To lRightCols: vResultData(lRowIdx, j) = vRightData(vItemRight, j): Next j
                     lRowIdx = lRowIdx + 1
                 Next b
-                
+
             Else
-                For a = 1 To leftRows.Count
-                    vItemLeft = leftRows.RowAt(a)
-                    For b = 1 To rightRows.Count
-                        vItemRight = rightRows.RowAt(b)
+                cur.CopyRows bufRight, cntRight
+                For a = 1 To cntLeft
+                    vItemLeft = bufLeft(a)
+                    For b = 1 To cntRight
+                        vItemRight = bufRight(b)
                         For j = 1 To lLeftCols: vResultData(lRowIdx, j) = vLeftData(vItemLeft, j): Next j
                         For j = 1 To lRightCols: vResultData(lRowIdx, lLeftCols + j) = vRightData(vItemRight, j): Next j
                         lRowIdx = lRowIdx + 1
@@ -222,12 +218,12 @@ NextCommonKey:
         Set cur = idxLeft.Cursor
         Do While cur.MoveNext
             vKey = cur.Key
-            If idxRight.TryGetRows(vKey, rightRows) Then GoTo NextLeftOnlyKey
-            Set leftRows = cur.Rows
-            For a = 1 To leftRows.Count
-                vItemLeft = leftRows.RowAt(a)
+            If idxRight.TryGetRowCount(vKey, cntRight) Then GoTo NextLeftOnlyKey
+            cur.CopyRows bufLeft, cntLeft
+            For a = 1 To cntLeft
+                vItemLeft = bufLeft(a)
                 For j = 1 To lLeftCols: vResultData(lRowIdx, j) = vLeftData(vItemLeft, j): Next j
-                
+
                 If jType <> jtLeftAnti Then
                     For j = 1 To lRightCols: vResultData(lRowIdx, lLeftCols + j) = Empty: Next j
                 End If
@@ -242,10 +238,10 @@ NextLeftOnlyKey:
         Set cur = idxRight.Cursor
         Do While cur.MoveNext
             vKey = cur.Key
-            If idxLeft.TryGetRows(vKey, leftRows) Then GoTo NextRightOnlyKey
-            Set rightRows = cur.Rows
-            For b = 1 To rightRows.Count
-                vItemRight = rightRows.RowAt(b)
+            If idxLeft.TryGetRowCount(vKey, cntLeft) Then GoTo NextRightOnlyKey
+            cur.CopyRows bufRight, cntRight
+            For b = 1 To cntRight
+                vItemRight = bufRight(b)
                 If jType <> jtRightAnti Then
                     For j = 1 To lLeftCols: vResultData(lRowIdx, j) = Empty: Next j
                     For j = 1 To lRightCols: vResultData(lRowIdx, lLeftCols + j) = vRightData(vItemRight, j): Next j
