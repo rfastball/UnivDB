@@ -13,14 +13,15 @@ Option Explicit
 
 Implements DbHashIndex
 
-' 구조: Core_clsFastHash가 정규화 키와 slot을 결정하고,
-' mRows 병렬 배열이 slot(1 기반) -> DbRowList payload를 연결한다.
+' 구조: Core_clsFastHash가 정규화 키와 slot(1 기반)을 결정하고, rowId 페이로드는
+' mPayload(CSR 공유 배열)가 slot = keyId로 보관한다. 키당 객체 0개 - 소멸이
+' 키 수와 무관 (이슈 2026-07-13_teardown_cost_index_payload 처방 A).
 ' build-only 전제: AddRow/Clear만 사용 (FastHash RemoveKey는 swap-last로
 ' slot을 재배치하므로 인덱스 용도에서 금지 - 재구축은 Clear 후 재적재).
+' CSR 페이로드는 slot이 build 동안 1..Count 밀집·삽입 순서 안정임에 의존한다.
 
 Private mEngine As Core_clsFastHash
-Private mRows() As DbRowList
-Private mRowsCap As Long
+Private mPayload As DbCsrPayload
 
 ' 세대 계약 결속 (ObjPtr 스냅샷 - 객체 참조 아님, 순환 참조 방지)
 Private mOwnerPtr As LongPtr
@@ -28,7 +29,7 @@ Private mGeneration As Long
 
 Private Sub Class_Initialize()
     Set mEngine = New Core_clsFastHash
-    mRowsCap = 0
+    Set mPayload = New DbCsrPayload
 End Sub
 
 ' @desc 키와 rowID를 받아 인덱스에 적재함
@@ -37,20 +38,13 @@ Public Sub AddRow(ByVal key As Variant, ByVal rowId As Long)
     Dim sKey As String
     Dim slot As Long
     Dim isNew As Boolean
-    Dim rows As DbRowList
 
     If IsError(key) Then Exit Sub
     sKey = modIndexKey.NormalizeIndexKey(key)
     vKey = sKey
     slot = mEngine.EnsureKeyH(vKey, Core_HashKeyText(sKey), isNew)
 
-    If slot > mRowsCap Then GrowRows slot
-    If isNew Then
-        Set rows = New DbRowList
-        rows.BindRaw mOwnerPtr, mGeneration
-        Set mRows(slot) = rows
-    End If
-    mRows(slot).Append rowId
+    mPayload.AddEntry slot, rowId
 End Sub
 
 ' @desc 테이블을 받아 현재 세대에 결속함
@@ -65,6 +59,7 @@ Public Sub EnsureCurrent(ByVal tbl As clsTable)
 End Sub
 
 ' @desc 키 받아 RowList 반환 여부 반환, 미존재/Error 키 시 False
+' 반환 리스트는 세대 결속을 탑재한 fresh 복사본 (인덱스 내부 상태와 분리)
 Public Function TryGetRows(ByVal key As Variant, ByRef outRows As DbRowList) As Boolean
     Dim vKey As Variant
     Dim slot As Long
@@ -77,7 +72,7 @@ Public Function TryGetRows(ByVal key As Variant, ByRef outRows As DbRowList) As 
     vKey = modIndexKey.NormalizeIndexKey(key)
     slot = mEngine.FindIndex(vKey)
     If slot > 0 Then
-        Set outRows = mRows(slot)
+        Set outRows = mPayload.MakeRowList(slot, mOwnerPtr, mGeneration)
         TryGetRows = True
     Else
         Set outRows = Nothing
@@ -90,17 +85,16 @@ End Property
 
 Public Sub Clear()
     mEngine.Clear
-    Erase mRows
-    mRowsCap = 0
+    mPayload.Clear
 End Sub
 
-' @desc 키-RowList 순회용 커서 반환 (Core 배열 경로 - 삽입 순서 보존)
+' @desc 키-RowList 순회용 커서 반환 (CSR 경로 - 삽입 순서 보존)
 Public Function Cursor() As DbIndexCursor
     Dim vKeys As Variant
     Dim cur As New DbIndexCursor
 
     vKeys = mEngine.KeysArray
-    Set Cursor = cur.InitArrays(vKeys, mRows, mEngine.Count)
+    Set Cursor = cur.InitCsr(vKeys, mPayload, mEngine.Count, mOwnerPtr, mGeneration)
 End Function
 
 Friend Property Get OwnerPtr() As LongPtr
@@ -110,22 +104,6 @@ End Property
 Friend Property Get BoundGeneration() As Long
     BoundGeneration = mGeneration
 End Property
-
-Private Sub GrowRows(ByVal lNeed As Long)
-    Dim newCap As Long
-
-    newCap = mRowsCap
-    If newCap = 0 Then newCap = 16
-    Do While newCap < lNeed
-        newCap = newCap * 2
-    Loop
-    If mRowsCap = 0 Then
-        ReDim mRows(1 To newCap)
-    Else
-        ReDim Preserve mRows(1 To newCap)
-    End If
-    mRowsCap = newCap
-End Sub
 
 ' ==============================================================================
 ' DbHashIndex 인터페이스 위임 (기존 Public 표면 유지)
