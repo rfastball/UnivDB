@@ -400,6 +400,71 @@ Public Sub Test_BenchDb_ColumnAccess()
 End Sub
 
 ' ==============================================================================
+' 7. Teardown 분리측정 (성분 A: 키당 DbRowList 객체 / 성분 B: m_vData BSTR 배열)
+' 마지막 참조를 끊는 Set T = Nothing 구간(동기 소멸 캐스케이드)을 QPC로 감싸되,
+' 인덱스 유무만 바꿔 차분(with_uniq - data_only)으로 성분 A를 분리한다.
+' 참조: docs/tasks/2026-07-13_teardown_cost_index_payload.md §5
+' 주의: 인덱스 반환값을 잡으면 사슬이 안 끊겨 성분 A가 측정에서 누락된다 -> 반환 폐기.
+'       공유 캐시 GetBench20k 금지 -> 매번 신선 테이블이 유일 참조가 되게 한다.
+' ==============================================================================
+
+Public Sub Test_BenchDb_Teardown()
+    Dim T As clsTable
+    Dim idx As DbHashIndex
+    Dim R As Long
+    Dim b As Long
+    Dim msData(0 To 2) As Double, msUniq(0 To 2) As Double, msDup(0 To 2) As Double
+    Dim medData As Double, medUniq As Double, medDup As Double
+
+    For b = dbBackendDict To dbBackendCore
+        ' warm-up: 지연 초기화 배출 + 인덱스 페이로드 전제 단언 (고유키 20k / 고중복 5종)
+        Set T = BuildBenchTable(BENCH_ROWS): Set T = Nothing
+        Set T = BuildBenchTable(BENCH_ROWS): T.IndexBackend = b
+        Set idx = T.GetHashIndex("ID")
+        LogShim.AssertEq "bench_teardown_uniq_keys_" & BackendName(b), CLng(BENCH_ROWS), idx.CountKeys
+        Set idx = Nothing: Set T = Nothing
+        Set T = BuildBenchTable(BENCH_ROWS): T.IndexBackend = b
+        Set idx = T.GetHashIndex("Dept")
+        LogShim.AssertEq "bench_teardown_dup_keys_" & BackendName(b), 5, idx.CountKeys
+        Set idx = Nothing: Set T = Nothing
+
+        For R = 0 To 2
+            ' 성분 B: 인덱스 없는 테이블 소멸 (m_vData BSTR 배열 해제)
+            Set T = BuildBenchTable(BENCH_ROWS)
+            TicStart
+            Set T = Nothing
+            msData(R) = TicMs
+
+            ' 성분 A + B: 고유키 인덱스(DbRowList 20k) + 데이터 소멸. 반환 폐기 = 사슬 단독 소유
+            Set T = BuildBenchTable(BENCH_ROWS)
+            T.IndexBackend = b
+            T.GetHashIndex "ID"
+            TicStart
+            Set T = Nothing
+            msUniq(R) = TicMs
+
+            ' 성분 B + 미미한 A: 고중복 인덱스(DbRowList 5) + 데이터 소멸
+            Set T = BuildBenchTable(BENCH_ROWS)
+            T.IndexBackend = b
+            T.GetHashIndex "Dept"
+            TicStart
+            Set T = Nothing
+            msDup(R) = TicMs
+        Next R
+
+        medData = Median3(msData(0), msData(1), msData(2))
+        medUniq = Median3(msUniq(0), msUniq(1), msUniq(2))
+        medDup = Median3(msDup(0), msDup(1), msDup(2))
+
+        ' idxA_uniq_ms = 고유키 인덱스 소멸 순비용 (성분 A 분리치)
+        LogShim.LogEvent "bench_db_teardown", _
+            Array("backend", "rows", "data_only_ms", "with_uniq_idx_ms", "with_dup_idx_ms", "idxA_uniq_ms"), _
+            Array(BackendName(b), BENCH_ROWS, CLng(medData), CLng(medUniq), CLng(medDup), _
+                  CLng(medUniq - medData))
+    Next b
+End Sub
+
+' ==============================================================================
 ' 데이터 생성 헬퍼
 ' ==============================================================================
 
