@@ -266,6 +266,38 @@ Public Sub Test_BenchDb_Join()
 End Sub
 
 ' ==============================================================================
+' 4b. Join wide-table (20k행 x 30컬럼 1:1) - 헤더 구간 RawArray 반복 복사 비용 관측
+' ==============================================================================
+
+Public Sub Test_BenchDb_JoinWide()
+    Const WIDE_ROWS As Long = 20000
+    Const WIDE_COLS As Long = 30
+    Dim tL As clsTable, tR As clsTable
+    Dim tRes As clsTable
+    Dim R As Long
+    Dim msInner(0 To 2) As Double
+
+    Set tL = BuildWideJoinTable(WIDE_ROWS, WIDE_COLS)
+    Set tR = BuildWideJoinTable(WIDE_ROWS, WIDE_COLS)
+
+    ' warm-up (인덱스 빌드 흡수, 측정은 조인 본체 + 물질화)
+    Set tRes = JoinTable(tL, tR, "K", "K", jtInner, "R_")
+
+    For R = 0 To 2
+        TicStart
+        Set tRes = JoinTable(tL, tR, "K", "K", jtInner, "R_")
+        msInner(R) = TicMs
+    Next R
+
+    LogShim.AssertEq "bench_join_wide_rows", CLng(WIDE_ROWS + 1), tRes.RowCount
+    LogShim.AssertEq "bench_join_wide_cols", CLng(WIDE_COLS * 2), tRes.ColCount
+
+    LogShim.LogEvent "bench_db_join_wide", _
+        Array("rows", "cols", "inner_ms"), _
+        Array(WIDE_ROWS, WIDE_COLS, CLng(Median3(msInner(0), msInner(1), msInner(2))))
+End Sub
+
+' ==============================================================================
 ' 5. GroupBy (짧은 키 5종 / 긴 키 180자 pad 50종)
 ' ==============================================================================
 
@@ -397,6 +429,28 @@ Private Function BuildBenchTable(ByVal lRows As Long) As clsTable
 
     T.LoadFromArray vData
     Set BuildBenchTable = T
+End Function
+
+' K = i (고유 키 1:1), Val1..Val(nCols-1) = 수치 채움
+Private Function BuildWideJoinTable(ByVal nRows As Long, ByVal nCols As Long) As clsTable
+    Dim vData() As Variant
+    Dim T As New clsTable
+    Dim i As Long, c As Long
+
+    ReDim vData(1 To nRows + 1, 1 To nCols)
+    vData(1, 1) = "K"
+    For c = 2 To nCols
+        vData(1, c) = "Val" & (c - 1)
+    Next c
+    For i = 1 To nRows
+        vData(i + 1, 1) = i
+        For c = 2 To nCols
+            vData(i + 1, c) = i * 10 + c
+        Next c
+    Next i
+
+    T.LoadFromArray vData
+    Set BuildWideJoinTable = T
 End Function
 
 ' K = lOffset + ((i-1) Mod nDistinct) + 1 (nDistinct = nRows면 고유 키), Val = i
