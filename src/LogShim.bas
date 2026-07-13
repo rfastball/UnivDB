@@ -11,9 +11,11 @@ Private Const DBG_FOLDER As String = "_dbg"
 ' 롤링 누적 상한. Reset 시에만 오래된 앞줄부터 트림한다.
 Private Const MAX_LINES As Long = 5000
 
-' 배포 무해화 스위치(설계 9.3). dist가 주입 텍스트에서만 True로 뒤집어 각 Public 싱크를
+' 배포 무해화 스위치(설계 9.3). dist가 주입 텍스트에서만 True로 뒤집어 테스트/디버그 싱크를
 ' no-op으로 만든다. 정본과 src는 항상 False(아티팩트는 빌드 산출물) - 직접 True로 두지 말 것.
 ' 호출부(LogShim.LogD ...)는 그대로 남아 컴파일 안전, 런타임 비용은 상수 분기 1회.
+' 예외: 오류 계열 이벤트(IsErrorEvent)는 릴리스에서도 기록된다 - 현장 장애 진단 트레일 보존
+' (버그리포트 2026-07-10). LogD/AssertEq/Reset는 릴리스에서 전면 침묵.
 Private Const IS_RELEASE As Boolean = False
 
 ' @desc level과 msg를 D 레코드로 기록함
@@ -27,7 +29,7 @@ End Sub
 
 ' @desc eventName과 dataJson을 J 레코드로 기록함
 Public Sub LogJ(eventName As String, dataJson As String)
-    If IS_RELEASE Then Exit Sub
+    If IS_RELEASE And Not IsErrorEvent(eventName) Then Exit Sub
     On Error GoTo Done
     Dim dataPart As String
     If LenB(dataJson) = 0 Then dataPart = "null" Else dataPart = dataJson
@@ -38,7 +40,7 @@ End Sub
 
 ' @desc 이벤트명과 키/값 배열을 JSON으로 조립해 LogJ로 기록함
 Public Sub LogEvent(eventName As String, keys As Variant, vals As Variant)
-    If IS_RELEASE Then Exit Sub
+    If IS_RELEASE And Not IsErrorEvent(eventName) Then Exit Sub
     On Error GoTo Done
     Dim json As String, i As Long
     json = "{"
@@ -106,6 +108,15 @@ Done:
 End Sub
 
 ' === 내부 구현 ===
+
+' @desc 릴리스에서도 기록해야 하는 오류 계열 이벤트인지 판정 (배포본 진단 트레일 보존)
+Private Function IsErrorEvent(eventName As String) As Boolean
+    ' 운용 오류 계열만 화이트리스트. run_start/run_end는 필요 시 여기에 추가 가능.
+    Select Case eventName
+        Case "cmd_error", "fatal_error", "param_guard"
+            IsErrorEvent = True
+    End Select
+End Function
 
 Private Function LogPath() As String
     ' 미저장 워크북(Path 없음)은 조용히 무시
