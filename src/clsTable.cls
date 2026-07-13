@@ -518,30 +518,62 @@ End Property
 ' [5] 출력 (Export)
 ' ==============================================================================
 
+' @desc 내부 배열을 시트 범위에 일괄 출력함, leading-zero 텍스트 열은 쓰기 전 @서식 고정
 ' 시트에 데이터 고속 출력 (Array Dump 방식)
-Public Sub DumpToSheet(ByVal rngStart As Range, Optional ByVal bAutoFit As Boolean = False)
+Public Sub DumpToSheet(ByVal rngStart As Range, Optional ByVal bAutoFit As Boolean = False, _
+                       Optional ByVal bPreserveLeadingZeros As Boolean = True)
     Dim rngTarget As Range
-    
+
     If m_lRowCount = 0 Then Exit Sub
-    
+
     ' 1. 출력 범위 계산
     ' rngStart 셀을 기준으로 데이터 크기만큼 범위 설정
     Set rngTarget = rngStart.Resize(m_lRowCount, m_lColCount)
-    
+
     ' 2. 기존 데이터 클리어 (선택 사항 - 안전을 위해 해당 범위만 값 덮어쓰기)
     ' rngTarget.ClearContents ' 필요 시 주석 해제
-    
+
+    ' 2.5. leading-zero 소실 방어 - 위험 열만 텍스트(@)로 선고정 (쓰기 전이어야 유효)
+    '  "0" 뒤에 숫자가 오는 문자열은 General 셀에 쓰면 Excel이 숫자로 강제("007"->7)
+    '  순수 숫자 열은 VarType 첫 비교에서 단락되어 사실상 비용 없음
+    If bPreserveLeadingZeros Then GuardLeadingZeroColumns rngTarget
+
     ' 3. 고속 덤프 (배열을 한 번에 뿌림)
     rngTarget.Value2 = m_vData
-    
+
     ' 4. 서식 적용 (헤더 강조)
     With rngTarget.Rows(1)
         .Font.Bold = True
         .Interior.Color = RGB(220, 230, 241) ' 연한 파랑
     End With
-    
+
     ' 5. 컬럼 자동 맞춤
     If bAutoFit Then rngTarget.EntireColumn.AutoFit
+End Sub
+
+' leading-zero 텍스트를 담은 열을 찾아 대상 범위에 텍스트(@) 서식을 건다
+Private Sub GuardLeadingZeroColumns(ByVal rngTarget As Range)
+    Dim i As Long, j As Long
+    Dim v As Variant
+    Dim c As String
+
+    For j = 1 To m_lColCount
+        ' 헤더(행 1) 제외, 데이터 행만 검사. 첫 위험 셀에서 조기 탈출
+        For i = 2 To m_lRowCount
+            If VarType(m_vData(i, j)) = vbString Then
+                v = m_vData(i, j)
+                If Len(v) > 1 Then
+                    If Left$(v, 1) = "0" Then
+                        c = Mid$(v, 2, 1)
+                        If c >= "0" And c <= "9" Then
+                            rngTarget.Columns(j).NumberFormat = "@"
+                            Exit For
+                        End If
+                    End If
+                End If
+            End If
+        Next i
+    Next j
 End Sub
 
 
