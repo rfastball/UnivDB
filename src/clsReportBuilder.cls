@@ -295,11 +295,12 @@ Public Sub BuildToSheet(ByVal ws As Worksheet, ByVal sAddr As String, Optional B
     ws.AutoFilterMode = False
     ws.Range(sAddr).CurrentRegion.ClearContents
     
-    ' 2. 서식 고정 (텍스트)
-    ws.Range(sAddr).Resize(m_tWork.RowCount, m_tWork.ColCount).NumberFormat = "@"
-    
-    ' 3. 덤프
-    m_tWork.DumpToSheet ws.Range(sAddr)
+    ' 2. 서식 초기화 (General) - 이전 실행의 잔여 @ 서식 제거. 이후 가드가 텍스트 열만 선택적 @
+    '    (구 blanket @는 숫자 열까지 텍스트로 강등시켜 DefineColumn 숫자서식이 무효였음)
+    ws.Range(sAddr).Resize(m_tWork.RowCount, m_tWork.ColCount).NumberFormat = "General"
+
+    ' 3. 덤프 - 문자열 서브타입은 텍스트 보존(leading-zero/긴 코드), 진짜 숫자 열은 숫자 유지
+    m_tWork.DumpToSheet ws.Range(sAddr), False, dbGuardAllNumericText
     
     ' 4. 헤더 리네이밍
     If Not IsMissing(arrHeaders) Then

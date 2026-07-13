@@ -24,6 +24,13 @@ Private m_dicHeaders As Object      ' 컬럼명 -> 열 번호 매핑 (Key: Strin
 Private m_dicHashIndices As Object  ' 인덱스 캐시 (Key: ColName/Index, Value: DbHashIndex) - 유일한 인덱스 진실
 Private m_lIndexBackend As DbIndexBackend ' 인덱스 백엔드 선택 (기본 dbBackendDict, 자동 선택 없음)
 
+' [출력 텍스트 가드 모드] - DumpToSheet가 시트 쓰기 전 텍스트(@) 서식을 걸 대상 판정
+Public Enum DbTextGuard
+    dbGuardNone = 0            ' 가드 없음 (raw 고속 - Excel 숫자 강제 허용)
+    dbGuardLeadingZero = 1     ' "0"+숫자 시작 문자열 열만 @ (기본, 최저 비용)
+    dbGuardAllNumericText = 2  ' 숫자꼴 문자열 열 전부 @ (문자열 서브타입 보존 - 리포트용)
+End Enum
+
 ' [메타 데이터]
 Private m_lRowCount As Long
 Private m_lColCount As Long
@@ -518,10 +525,10 @@ End Property
 ' [5] 출력 (Export)
 ' ==============================================================================
 
-' @desc 내부 배열을 시트 범위에 일괄 출력함, leading-zero 텍스트 열은 쓰기 전 @서식 고정
+' @desc 내부 배열을 시트 범위에 일괄 출력함, 가드 모드에 따라 텍스트 열은 쓰기 전 @서식 고정
 ' 시트에 데이터 고속 출력 (Array Dump 방식)
 Public Sub DumpToSheet(ByVal rngStart As Range, Optional ByVal bAutoFit As Boolean = False, _
-                       Optional ByVal bPreserveLeadingZeros As Boolean = True)
+                       Optional ByVal eTextGuard As DbTextGuard = dbGuardLeadingZero)
     Dim rngTarget As Range
 
     If m_lRowCount = 0 Then Exit Sub
@@ -533,10 +540,10 @@ Public Sub DumpToSheet(ByVal rngStart As Range, Optional ByVal bAutoFit As Boole
     ' 2. 기존 데이터 클리어 (선택 사항 - 안전을 위해 해당 범위만 값 덮어쓰기)
     ' rngTarget.ClearContents ' 필요 시 주석 해제
 
-    ' 2.5. leading-zero 소실 방어 - 위험 열만 텍스트(@)로 선고정 (쓰기 전이어야 유효)
-    '  "0" 뒤에 숫자가 오는 문자열은 General 셀에 쓰면 Excel이 숫자로 강제("007"->7)
+    ' 2.5. 텍스트 소실 방어 - 위험 열만 텍스트(@)로 선고정 (쓰기 전이어야 유효)
+    '  숫자꼴 문자열을 General 셀에 쓰면 Excel이 숫자로 강제("007"->7, 긴 코드 정밀도 손실)
     '  순수 숫자 열은 VarType 첫 비교에서 단락되어 사실상 비용 없음
-    If bPreserveLeadingZeros Then GuardLeadingZeroColumns rngTarget
+    If eTextGuard <> dbGuardNone Then GuardTextColumns rngTarget, eTextGuard
 
     ' 3. 고속 덤프 (배열을 한 번에 뿌림)
     rngTarget.Value2 = m_vData
@@ -551,30 +558,40 @@ Public Sub DumpToSheet(ByVal rngStart As Range, Optional ByVal bAutoFit As Boole
     If bAutoFit Then rngTarget.EntireColumn.AutoFit
 End Sub
 
-' leading-zero 텍스트를 담은 열을 찾아 대상 범위에 텍스트(@) 서식을 건다
-Private Sub GuardLeadingZeroColumns(ByVal rngTarget As Range)
+' 텍스트로 보존할 열을 찾아 대상 범위에 텍스트(@) 서식을 건다 (모드별 위험 판정)
+Private Sub GuardTextColumns(ByVal rngTarget As Range, ByVal eMode As DbTextGuard)
     Dim i As Long, j As Long
-    Dim v As Variant
-    Dim c As String
 
     For j = 1 To m_lColCount
         ' 헤더(행 1) 제외, 데이터 행만 검사. 첫 위험 셀에서 조기 탈출
         For i = 2 To m_lRowCount
             If VarType(m_vData(i, j)) = vbString Then
-                v = m_vData(i, j)
-                If Len(v) > 1 Then
-                    If Left$(v, 1) = "0" Then
-                        c = Mid$(v, 2, 1)
-                        If c >= "0" And c <= "9" Then
-                            rngTarget.Columns(j).NumberFormat = "@"
-                            Exit For
-                        End If
-                    End If
+                If IsTextGuardRisk(CStr(m_vData(i, j)), eMode) Then
+                    rngTarget.Columns(j).NumberFormat = "@"
+                    Exit For
                 End If
             End If
         Next i
     Next j
 End Sub
+
+' 문자열 v가 시트 쓰기 시 Excel에 의해 숫자로 강제될 위험이 있는지 모드별 판정
+Private Function IsTextGuardRisk(ByVal v As String, ByVal eMode As DbTextGuard) As Boolean
+    Dim c As String
+
+    If eMode = dbGuardAllNumericText Then
+        ' Excel이 강제할 모든 숫자꼴 문자열 (긴 코드/지수/소수 포함) - 서브타입 보존
+        IsTextGuardRisk = IsNumeric(v)
+    Else
+        ' dbGuardLeadingZero: "0" 뒤에 숫자가 오는 문자열만 (최저 비용, char 검사)
+        If Len(v) > 1 Then
+            If Left$(v, 1) = "0" Then
+                c = Mid$(v, 2, 1)
+                IsTextGuardRisk = (c >= "0" And c <= "9")
+            End If
+        End If
+    End If
+End Function
 
 
 ' [clsTable.cls] 추가 코드
