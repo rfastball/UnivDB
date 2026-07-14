@@ -1,5 +1,5 @@
 Attribute VB_Name = "TestDumpLeadingZero"
-' @desc DumpToSheet/BuildToSheet 텍스트 가드(leading-zero/긴코드 보존, 숫자열 유지) 회귀 검증 담당
+' @desc DumpToSheet/BuildToSheet 텍스트 가드(leading-zero/긴코드) + 기본 선클리어 계약 회귀 검증 담당
 ' @depends UnivDB
 Option Explicit
 
@@ -126,6 +126,90 @@ Public Sub Test_BuildToSheet_PreservesTextAndNumbers()
     ' Amt: 진짜 숫자로 유지 (vbDouble=5) -> DefineColumn 숫자서식이 실제로 적용됨
     LogShim.AssertEq "b2s_amt_isnum", 5, VarType(ws.Range("C2").Value)
     LogShim.AssertEq "b2s_amt_val", 12345, ws.Range("C2").Value
+
+Clean:
+    KillSheet ws
+End Sub
+
+' 축소 재덤프: 큰 덤프 뒤 작은 덤프가 기본 선클리어로 옛 초과행을 제거해 유령행이 안 남는다.
+' (하위가 CurrentRegion으로 읽어도 유령행을 흡수하지 않음)
+Public Sub Test_DumpToSheet_ShrinkClearsGhostRows()
+    Dim tBig As clsTable, tSmall As clsTable
+    Dim ws As Worksheet
+    Dim vBig(1 To 5, 1 To 1) As Variant
+    Dim vSmall(1 To 2, 1 To 1) As Variant
+
+    vBig(1, 1) = "ID"
+    vBig(2, 1) = "b1": vBig(3, 1) = "b2": vBig(4, 1) = "b3": vBig(5, 1) = "b4"
+    vSmall(1, 1) = "ID"
+    vSmall(2, 1) = "s1"
+
+    Set tBig = UnivDB.CreateTable(): tBig.LoadFromArray vBig
+    Set tSmall = UnivDB.CreateTable(): tSmall.LoadFromArray vSmall
+
+    Set ws = NewTempSheet()
+    On Error GoTo Clean
+    tBig.DumpToSheet ws.Range("A1")      ' A1..A5 채움
+    tSmall.DumpToSheet ws.Range("A1")    ' 기본 선클리어 -> A3..A5 유령행 제거
+
+    ' 옛 초과행(A4,A5) 비워짐
+    LogShim.AssertEq "shrink_ghost_a4", "", CStr(ws.Range("A4").Value)
+    LogShim.AssertEq "shrink_ghost_a5", "", CStr(ws.Range("A5").Value)
+    ' CurrentRegion이 새 크기(헤더+1행=2)만 흡수
+    LogShim.AssertEq "shrink_region_rows", 2, ws.Range("A1").CurrentRegion.Rows.Count
+
+Clean:
+    KillSheet ws
+End Sub
+
+' 옵트아웃(bClearRegion:=False): 선클리어 안 함 -> 외과적 쓰기 동작 보존(옛 초과행 잔존)
+Public Sub Test_DumpToSheet_ClearOptOut_PreservesGhost()
+    Dim tBig As clsTable, tSmall As clsTable
+    Dim ws As Worksheet
+    Dim vBig(1 To 5, 1 To 1) As Variant
+    Dim vSmall(1 To 2, 1 To 1) As Variant
+
+    vBig(1, 1) = "ID"
+    vBig(2, 1) = "b1": vBig(3, 1) = "b2": vBig(4, 1) = "b3": vBig(5, 1) = "b4"
+    vSmall(1, 1) = "ID"
+    vSmall(2, 1) = "s1"
+
+    Set tBig = UnivDB.CreateTable(): tBig.LoadFromArray vBig
+    Set tSmall = UnivDB.CreateTable(): tSmall.LoadFromArray vSmall
+
+    Set ws = NewTempSheet()
+    On Error GoTo Clean
+    tBig.DumpToSheet ws.Range("A1")
+    tSmall.DumpToSheet ws.Range("A1"), bClearRegion:=False   ' 선클리어 억제
+
+    ' 새 데이터는 사각형만 덮어씀 (A2 갱신)
+    LogShim.AssertEq "optout_new_a2", "s1", CStr(ws.Range("A2").Value)
+    ' 옛 초과행은 잔존 (외과적 쓰기 계약 보존)
+    LogShim.AssertEq "optout_ghost_a5", "b4", CStr(ws.Range("A5").Value)
+
+Clean:
+    KillSheet ws
+End Sub
+
+' 빈 결과 덤프도 옛 영역을 비운다 (선클리어가 m_lRowCount=0 조기탈출보다 앞섬)
+Public Sub Test_DumpToSheet_EmptyClearsRegion()
+    Dim tSeed As clsTable, tEmpty As clsTable
+    Dim ws As Worksheet
+    Dim vSeed(1 To 3, 1 To 1) As Variant
+
+    vSeed(1, 1) = "ID"
+    vSeed(2, 1) = "e1": vSeed(3, 1) = "e2"
+
+    Set tSeed = UnivDB.CreateTable(): tSeed.LoadFromArray vSeed
+    Set tEmpty = UnivDB.CreateTable()   ' 0행 (m_lRowCount=0)
+
+    Set ws = NewTempSheet()
+    On Error GoTo Clean
+    tSeed.DumpToSheet ws.Range("A1")    ' A1..A3 채움
+    tEmpty.DumpToSheet ws.Range("A1")   ' 빈 덤프 -> 선클리어 후 조기탈출
+
+    LogShim.AssertEq "empty_clear_a2", "", CStr(ws.Range("A2").Value)
+    LogShim.AssertEq "empty_clear_a3", "", CStr(ws.Range("A3").Value)
 
 Clean:
     KillSheet ws

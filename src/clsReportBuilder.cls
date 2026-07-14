@@ -300,7 +300,7 @@ Public Sub BuildToSheet(ByVal ws As Worksheet, ByVal sAddr As String, Optional B
     ws.Range(sAddr).Resize(m_tWork.RowCount, m_tWork.ColCount).NumberFormat = "General"
 
     ' 3. 덤프 - 문자열 서브타입은 텍스트 보존(leading-zero/긴 코드), 진짜 숫자 열은 숫자 유지
-    m_tWork.DumpToSheet ws.Range(sAddr), False, dbGuardAllNumericText
+    m_tWork.DumpToSheet ws.Range(sAddr), False, dbGuardAllNumericText, bClearRegion:=False
     
     ' 4. 헤더 리네이밍
     If Not IsMissing(arrHeaders) Then

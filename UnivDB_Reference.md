@@ -166,15 +166,16 @@ UnivDB.Report("SalesData") _
 ```vb
 .LoadFromSheet(Range)         ' 시트에서 로드
 .LoadFromArray(Array)         ' 배열에서 로드
-.DumpToSheet(Range, [bAutoFit])  ' 시트로 출력 (새 크기 사각형만 덮어씀 - 클리어 안 함)
+.DumpToSheet(Range, [bAutoFit], [eTextGuard], [bClearRegion])  ' 시트로 출력 (기본 옛 영역 선클리어)
 .RawArray                     ' 내부 2D 배열 접근 (읽기 전용 권장)
 ```
 
-> **DumpToSheet 클리어 계약 (비대칭 주의)**: `DumpToSheet`는 `Resize(새크기)` 사각형만
-> 덮어쓰고 대상 영역을 클리어하지 않는다. 같은 시작셀에 반복 덤프 시 이번 데이터가 더
-> 작으면 옛 초과행이 잔존하고, 하위가 `CurrentRegion`으로 읽으면 유령행이 재유입된다.
-> 영역 축소 가능성이 있으면 호출자가 덤프 직전 `rng.CurrentRegion.ClearContents`로 선클리어할 것.
-> (`clsReportBuilder.BuildToSheet`는 내부에서 선클리어하므로 이 문제 없음.)
+> **DumpToSheet 클리어 계약 (기본 클리어)**: `DumpToSheet`는 기본으로(`bClearRegion:=True`)
+> 쓰기 전 시작셀의 옛 `CurrentRegion`을 선클리어한 뒤 새 데이터를 덮어쓴다. 축소 재덤프에서
+> 옛 초과행이 잔존해 하위 `CurrentRegion` 읽기에 유령행이 재유입되던 silent corruption을
+> 기본에서 차단한다(빈 결과 덤프도 영역을 비운다). 인접 보조열·수식을 보존해야 하는 외과적
+> 쓰기만 `bClearRegion:=False`로 옵트아웃한다. `clsReportBuilder.BuildToSheet`는 자체적으로
+> 영역 위생을 관리하므로 내부에서 `bClearRegion:=False`로 옵트아웃한다.
 > 상세: `src/docs/tasks/2026-07-14_dumptosheet_no_clear_footgun.md`
 
 ### Data Operations

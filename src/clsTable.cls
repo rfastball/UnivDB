@@ -525,20 +525,23 @@ End Property
 ' [5] 출력 (Export)
 ' ==============================================================================
 
-' @desc 내부 배열을 시트 범위에 일괄 출력함, 가드 모드에 따라 텍스트 열은 쓰기 전 @서식 고정
+' @desc 내부 배열을 시트에 일괄 출력함, 기본 옛 영역 선클리어, 가드 모드로 텍스트 열 @서식 고정
 ' 시트에 데이터 고속 출력 (Array Dump 방식)
 Public Sub DumpToSheet(ByVal rngStart As Range, Optional ByVal bAutoFit As Boolean = False, _
-                       Optional ByVal eTextGuard As DbTextGuard = dbGuardLeadingZero)
+                       Optional ByVal eTextGuard As DbTextGuard = dbGuardLeadingZero, _
+                       Optional ByVal bClearRegion As Boolean = True)
     Dim rngTarget As Range
+
+    ' 0. 선클리어 (기본) - 옛 extent(CurrentRegion) 기준. 축소·빈결과에서 유령행 제거해
+    '    하위 CurrentRegion 재유입 차단. m_lRowCount=0 조기탈출보다 먼저여야 빈 덤프도 비운다.
+    '    외과적 쓰기(인접 보조열·수식 보존)는 bClearRegion:=False로 옵트아웃.
+    If bClearRegion Then rngStart.CurrentRegion.ClearContents
 
     If m_lRowCount = 0 Then Exit Sub
 
     ' 1. 출력 범위 계산
     ' rngStart 셀을 기준으로 데이터 크기만큼 범위 설정
     Set rngTarget = rngStart.Resize(m_lRowCount, m_lColCount)
-
-    ' 2. 기존 데이터 클리어 (선택 사항 - 안전을 위해 해당 범위만 값 덮어쓰기)
-    ' rngTarget.ClearContents ' 필요 시 주석 해제
 
     ' 2.5. 텍스트 소실 방어 - 위험 열만 텍스트(@)로 선고정 (쓰기 전이어야 유효)
     '  숫자꼴 문자열을 General 셀에 쓰면 Excel이 숫자로 강제("007"->7, 긴 코드 정밀도 손실)

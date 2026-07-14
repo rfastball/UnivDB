@@ -3,7 +3,8 @@
 작성일: 2026-07-14
 발견 경로: 소비 프로젝트 `지출 리팩토링` 코드 리뷰. "시트 덤프 시 기존값을
 깔끔히 날리는가 / 미처리건 갱신이 바르게 덤프되는가" 점검 중 확인.
-상태: **미해결 (라이브러리)** - 소비측(`지출 리팩토링`)은 호출부 선클리어로 우회함
+상태: **해결 (라이브러리, 2026-07-14)** - 처방 B를 기본값 반전으로 채택(§6). 소비측
+(`지출 리팩토링`)의 호출부 선클리어 우회는 새 UnivDB 벤더링 시 잉여가 됨(그쪽 몫).
 심각도: 중 (silent data corruption 가능 - 오류 없이 옛 데이터가 되살아남)
 
 ## 1. 증상
@@ -74,3 +75,24 @@ tUnproc.DumpToSheet wsUnproc.Range("A1"), True
 
 `ClearContents`(값만)로 충분: 빈 셀이 `CurrentRegion`을 끊어 유령행 재유입을 차단.
 `BuildToSheet` 경유 출력(미처리건 뷰·처리결과·반납필요)은 이미 내부 클리어가 있어 무영향.
+
+## 6. 라이브러리 해결 (2026-07-14)
+
+**채택: 처방 B, 단 기본값을 True로 반전** (원안 B는 기본 False 옵트인이었음).
+
+- `clsTable.DumpToSheet`에 `Optional bClearRegion As Boolean = True` 추가. 쓰기 전
+  `rngStart.CurrentRegion.ClearContents`로 옛 extent 선클리어. 이 선클리어를
+  `If m_lRowCount = 0 Then Exit Sub` **앞에** 배치해 빈 결과 덤프도 영역을 비운다.
+- `clsReportBuilder.BuildToSheet`는 이미 자체 선클리어(옛 extent)·NumberFormat 리셋을
+  하므로 유일 내부 호출을 `bClearRegion:=False`로 옵트아웃 → 기존 동작 바이트 동일 유지.
+- 회귀 테스트 3종(`TestDumpLeadingZero.bas`): `Test_DumpToSheet_ShrinkClearsGhostRows`
+  (유령행 제거+CurrentRegion 미흡수), `Test_DumpToSheet_ClearOptOut_PreservesGhost`
+  (옵트아웃이 외과적 쓰기 보존), `Test_DumpToSheet_EmptyClearsRegion`(빈 덤프 클리어).
+- Reference §5 계약 노트를 "클리어 안 함/호출자 책임" → "기본 클리어"로 재작성.
+
+**근거 (왜 B-반전이고 A/C가 아닌가)**: 유령행 재유입은 오류 없이 옛 레코드를 살아있는
+데이터로 되살리는 silent data corruption — 프로젝트가 스스로 정의한 최악의 실패 양식이다.
+A(문서화)는 이 함정을 "정상 계약"으로 승격시켜 무장 해제된 채 방치한다. 원안 B(기본 False)도
+문서 안 읽는 소비처엔 함정이 그대로 무장 — 이번 버그를 맞은 바로 그 집단. 반면 과다클리어
+위험(인접 열)은 `BuildToSheet`가 이미 감수 중인 동일 위험이라 새 위험 클래스 도입이 아니다.
+C(무인자 파괴적 전환)와 달리 기본 True + 옵트아웃은 외과적 쓰기 소비처에 명시적 탈출구를 남긴다.
