@@ -166,9 +166,16 @@ UnivDB.Report("SalesData") _
 ```vb
 .LoadFromSheet(Range)         ' 시트에서 로드
 .LoadFromArray(Array)         ' 배열에서 로드
-.DumpToSheet(Range, [bAutoFit])  ' 시트로 출력
+.DumpToSheet(Range, [bAutoFit])  ' 시트로 출력 (새 크기 사각형만 덮어씀 - 클리어 안 함)
 .RawArray                     ' 내부 2D 배열 접근 (읽기 전용 권장)
 ```
+
+> **DumpToSheet 클리어 계약 (비대칭 주의)**: `DumpToSheet`는 `Resize(새크기)` 사각형만
+> 덮어쓰고 대상 영역을 클리어하지 않는다. 같은 시작셀에 반복 덤프 시 이번 데이터가 더
+> 작으면 옛 초과행이 잔존하고, 하위가 `CurrentRegion`으로 읽으면 유령행이 재유입된다.
+> 영역 축소 가능성이 있으면 호출자가 덤프 직전 `rng.CurrentRegion.ClearContents`로 선클리어할 것.
+> (`clsReportBuilder.BuildToSheet`는 내부에서 선클리어하므로 이 문제 없음.)
+> 상세: `src/docs/tasks/2026-07-14_dumptosheet_no_clear_footgun.md`
 
 ### Data Operations
 
