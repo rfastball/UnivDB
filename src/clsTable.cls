@@ -10,12 +10,11 @@ Attribute VB_Exposed = True
 Option Explicit
 
 ' ==============================================================================
-' Class Name: clsTable
-' Description: 엑셀 시트 데이터를 메모리화하여 관리하는 고속 데이터 컨테이너
-' Features:
-'   1. Lazy Indexing: 검색이 필요한 시점에 인덱스 생성 (메모리 절약)
-'   2. Row-ID Mapping: 중복 데이터 허용 (Key -> Collection of RowIDs)
-'   3. Direct Access: 2D 배열 기반의 초고속 데이터 접근
+' clsTable
+' @desc 시트·배열을 2D 배열로 물질화해 rowID 조회·인덱싱 제공
+' @depends modIndexKey, modOperators, DbHashIndex, DictHashIndex, CoreHashIndex, DbRowList, DbIndexCursor, DbColumnReader
+' 특징: (1) Lazy Indexing - 검색 시점에 인덱스 생성 (2) rowID 매핑으로 중복 데이터 허용
+'       (3) 2D 배열 기반 직접 접근
 ' ==============================================================================
 
 ' [저장소]
@@ -96,7 +95,7 @@ Public Sub LoadFromSheet(ByVal vSource As Variant)
     LoadFromArray vData
 End Sub
 ' ==============================================================================
-' [Best Practice] Find 메서드를 이용한 고속 범위 탐색
+' Find(xlPrevious) 기반 실사용 범위 탐색 - 중간 공백행에 흔들리지 않음
 ' ==============================================================================
 Private Function GetRealUsedRange(ByVal ws As Worksheet, Optional ByVal rngStart As Range = Nothing) As Range
     Dim lLastRow As Long, lLastCol As Long
@@ -148,16 +147,17 @@ End Function
 ' 1-2. 배열에서 직접 로드 (데이터 정규화 포함 버전)
 Public Sub LoadFromArray(ByVal vArr As Variant, Optional ByVal bHasHeader As Boolean = True)
     Dim i As Long, j As Long
-    Dim sColName As String
-    
+
+    ' 입력 검증은 Clear 앞에서 - 잘못된 입력이 기존 테이블 상태를 파괴하지 않도록 fail-fast
+    Require2DArray vArr, "clsTable.LoadFromArray"
+
     Clear ' 기존 데이터 초기화
-    
+
     m_vData = vArr
     m_lRowCount = UBound(m_vData, 1)
     m_lColCount = UBound(m_vData, 2)
-    
-    ' [전처리] 전체 데이터 영역 초고속 트리밍
-    ' * 문자열 타입(vbString)인 경우에만 Trim$ 수행하여 속도 최적화
+
+    ' [전처리] 전체 데이터 트림 (문자열 셀만 - vbString에만 Trim$ 수행)
     For i = LBound(m_vData, 1) To UBound(m_vData, 1)
         For j = LBound(m_vData, 2) To UBound(m_vData, 2)
             If VarType(m_vData(i, j)) = vbString Then
@@ -165,25 +165,9 @@ Public Sub LoadFromArray(ByVal vArr As Variant, Optional ByVal bHasHeader As Boo
             End If
         Next j
     Next i
-    
-    ' 헤더 매핑 생성
-    If bHasHeader Then
-        Dim lHeadRow As Long: lHeadRow = LBound(m_vData, 1)
-        For j = LBound(m_vData, 2) To UBound(m_vData, 2)
-            ' 헤더 자체도 다시 한번 Trim (이미 위에서 처리되었지만 명시적 유지)
-            sColName = CStr(m_vData(lHeadRow, j))
-            If Len(sColName) > 0 Then
-                m_dicHeaders(UCase(sColName)) = j
-            End If
-        Next j
-        m_lHeaderRowIndex = lHeadRow
-    Else
-        ' 헤더가 없는 경우
-        For j = LBound(m_vData, 2) To UBound(m_vData, 2)
-            m_dicHeaders("COLUMN" & j) = j
-        Next j
-        m_lHeaderRowIndex = LBound(m_vData, 1) - 1
-    End If
+
+    ' 헤더 매핑 생성 - 사용자 입력 경계이므로 중복 헤더명은 fail-fast 거부
+    BuildHeaders bHasHeader, True
 End Sub
 
 ' 1-3. [Internal] 이미 정규화된 배열 입양 (내부 물질화 전용)
@@ -191,8 +175,8 @@ End Sub
 ' 원본이 이미 트리밍된 테이블 셀/집계값인 내부 결과(조인, GroupBy, 쿼리 재구축)에서만 쓸 것.
 ' 사용자 입력이 섞이는 경로(RegisterTable, Insert, TableBuilder)는 LoadFromArray를 유지한다.
 Friend Sub AdoptArray(ByRef vArr As Variant, Optional ByVal bHasHeader As Boolean = True)
-    Dim j As Long
-    Dim sColName As String
+    ' 입력 검증은 Clear 앞에서 - LoadFromArray와 동일 계약
+    Require2DArray vArr, "clsTable.AdoptArray"
 
     Clear ' 기존 데이터 초기화 (세대 증가 포함 - 파생 구조 실효)
 
@@ -200,8 +184,42 @@ Friend Sub AdoptArray(ByRef vArr As Variant, Optional ByVal bHasHeader As Boolea
     m_lRowCount = UBound(m_vData, 1)
     m_lColCount = UBound(m_vData, 2)
 
+    ' 내부 신뢰 경로 - 중복 헤더는 last-wins 유지 (조인/SelectColumns가 정당하게
+    ' 동명 열을 낼 수 있어 거부하지 않음. 사용자 입력 경계 검증은 LoadFromArray 담당)
+    BuildHeaders bHasHeader, False
+End Sub
+
+' 1-4. [Internal] 입력이 2차원 할당 배열인지 검증 - 로드 경계 fail-fast
+' 스칼라/비배열, 미할당 배열, 1차원 배열을 난해한 오류 9 대신 명확한 메시지로 거부한다.
+' (단일 셀 LoadFromSheet가 빈 시트에서 스칼라 Value2를 흘려보내는 경로도 여기서 잡힌다)
+Private Sub Require2DArray(ByRef vArr As Variant, ByVal sCtx As String)
+    Dim lTmp As Long
+
+    If Not IsArray(vArr) Then
+        Err.Raise 9999, sCtx, "2차원 배열이 필요합니다 (스칼라/비배열 입력)."
+    End If
+
+    On Error Resume Next
+    lTmp = UBound(vArr, 1)
+    If Err.Number <> 0 Then
+        Err.Clear: On Error GoTo 0
+        Err.Raise 9999, sCtx, "미할당(빈) 배열입니다."
+    End If
+    lTmp = UBound(vArr, 2)
+    If Err.Number <> 0 Then
+        Err.Clear: On Error GoTo 0
+        Err.Raise 9999, sCtx, "1차원 배열입니다 (2차원 배열 필요)."
+    End If
+    On Error GoTo 0
+End Sub
+
+' 1-5. [Internal] 헤더 행을 열 매핑(m_dicHeaders)으로 등록
+' LoadFromArray/AdoptArray 공통. bRejectDup=True면 중복 헤더명(UCase 기준)을 Err.Raise 9999로
+' 거부(사용자 입력 경계), False면 last-wins 유지(내부 신뢰 경로). 헤더 셀은 여기서 Trim$된다.
+Private Sub BuildHeaders(ByVal bHasHeader As Boolean, ByVal bRejectDup As Boolean)
+    Dim j As Long, sColName As String, sKey As String
+
     If bHasHeader Then
-        ' 헤더 행만 Trim (헤더 이름 의미론은 LoadFromArray와 동일 유지)
         Dim lHeadRow As Long: lHeadRow = LBound(m_vData, 1)
         For j = LBound(m_vData, 2) To UBound(m_vData, 2)
             If VarType(m_vData(lHeadRow, j)) = vbString Then
@@ -209,7 +227,12 @@ Friend Sub AdoptArray(ByRef vArr As Variant, Optional ByVal bHasHeader As Boolea
             End If
             sColName = CStr(m_vData(lHeadRow, j))
             If Len(sColName) > 0 Then
-                m_dicHeaders(UCase(sColName)) = j
+                sKey = UCase(sColName)
+                If bRejectDup And m_dicHeaders.exists(sKey) Then
+                    Err.Raise 9999, "clsTable.LoadFromArray", _
+                        "중복 헤더명 '" & sColName & "' (열 " & m_dicHeaders(sKey) & " 와 " & j & ")"
+                End If
+                m_dicHeaders(sKey) = j
             End If
         Next j
         m_lHeaderRowIndex = lHeadRow
@@ -220,8 +243,6 @@ Friend Sub AdoptArray(ByRef vArr As Variant, Optional ByVal bHasHeader As Boolea
         m_lHeaderRowIndex = LBound(m_vData, 1) - 1
     End If
 End Sub
-
-
 
 ' 초기화
 Public Sub Clear()
