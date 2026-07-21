@@ -237,3 +237,10 @@ Public Sub Test_Load_AdoptArray_DuplicateHeader_LastWins()
     ' 거부 없이 로드되고, 동명 헤더는 마지막 열(2)이 이긴다
     LogShim.AssertEq "adopt_dup_lastwins_col", 2, T.Headers("K")
 End Sub
+
+' --- 라이브러리 식별: 소비 측이 버전을 물어볼 수 있어야 한다(애드인은 버전 강제 불가) ---
+Public Sub Test_LibVersion_Reports_Something()
+    Dim sVer As String
+    sVer = UnivDB.LibVersion()
+    LogShim.AssertEq "libversion_nonempty", True, Len(sVer) > 0
+End Sub

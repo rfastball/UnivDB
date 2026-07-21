@@ -5,6 +5,35 @@ Option Explicit
 Private m_dicTables As Object
 
 ' ==============================================================================
+' [0] 라이브러리 식별
+' ==============================================================================
+
+' @desc 이 라이브러리의 빌드 스탬프 반환, 배포 산출물이 아니면 "dev"
+' 애드인 참조는 버전을 강제할 수단이 없다(이름/GUID 바인딩뿐). 소비 측이 구버전을
+' 물고 있어도 조용히 다르게 동작할 뿐이므로, 최소한 "어느 빌드인지 물어볼 수 있게" 한다.
+' 소비 측은 반드시 늦은 바인딩으로 부를 것 - 조기 바인딩하면 이 함수가 없는 구버전에서
+' 컴파일 오류가 나 프로젝트 전체가 멈춘다:
+'   On Error Resume Next
+'   sVer = Application.Run("UnivDB.xlam!UnivDB.LibVersion")   ' Err면 구버전
+' 스탬프는 vbaflow dist가 산출물에 심는 CustomDocumentProperties에서 읽는다
+' (BUILD_* 상수는 합성 모듈 modBuildInfo에만 있어 src에서 직접 참조할 수 없다).
+Public Function LibVersion() As String
+    Dim sVer As String, sRev As String, sAt As String
+
+    On Error Resume Next
+    sVer = CStr(ThisWorkbook.CustomDocumentProperties("vbaflow_BuildVersion").Value)
+    sRev = CStr(ThisWorkbook.CustomDocumentProperties("vbaflow_BuildRev").Value)
+    sAt = CStr(ThisWorkbook.CustomDocumentProperties("vbaflow_BuiltAt").Value)
+    On Error GoTo 0
+
+    If Len(sVer) = 0 Then
+        LibVersion = "dev"
+    Else
+        LibVersion = sVer & "+" & sRev & " (" & sAt & ")"
+    End If
+End Function
+
+' ==============================================================================
 ' [1] 데이터베이스 초기화 및 테이블 등록
 ' ==============================================================================
 
