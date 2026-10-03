@@ -58,14 +58,14 @@ Public Function JoinTable(ByVal tLeft As clsTable, _
     ' 1. [Validation & Hoisting] 컬럼 인덱스 1회 확보
     ' 키 컬럼 오타는 문장 수준 오류 - fail-fast (audit 추보 F25). 이전 MsgBox는
     ' 헤드리스에서 모달 행 + 호출자에 Nothing 반환으로 조용한 91 전이를 일으켰다.
-    If Not tLeft.Headers.exists(UCase(sLeftKey)) Then
+    If Not tLeft.HasColumn(sLeftKey) Then
         Err.Raise 9999, "modEngine.JoinTable", "Column not found (left join key): " & sLeftKey
     End If
-    If Not tRight.Headers.exists(UCase(sRightKey)) Then
+    If Not tRight.HasColumn(sRightKey) Then
         Err.Raise 9999, "modEngine.JoinTable", "Column not found (right join key): " & sRightKey
     End If
-    lLeftKeyCol = tLeft.Headers(UCase(sLeftKey))
-    lRightKeyCol = tRight.Headers(UCase(sRightKey))
+    lLeftKeyCol = tLeft.ColumnIndex(sLeftKey)
+    lRightKeyCol = tRight.ColumnIndex(sRightKey)
     
     ' 2. [Hash Index] 내부 실행용 인덱스 확보
     Set idxLeft = tLeft.GetHashIndexByIndex(lLeftKeyCol)

@@ -739,7 +739,7 @@ End Sub
 
 
 Private Sub RequireColumn(ByVal name As String, ByVal source As String)
-    If Not m_SourceTable.Headers.exists(UCase$(Trim$(name))) Then
+    If Not m_SourceTable.HasColumn(name) Then
         Err.Raise 9999, source, "Column not found: " & name
     End If
 End Sub

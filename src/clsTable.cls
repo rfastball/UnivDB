@@ -34,6 +34,7 @@ End Enum
 Private m_lRowCount As Long
 Private m_lColCount As Long
 Private m_lHeaderRowIndex As Long   ' 헤더가 위치한 행 번호 (기본 1)
+Private m_vColumnVersions As Variant ' 현재 구조 세대 내 열별 값 버전, 첫 쓰기 때 Long 배열 할당
 Private m_lGeneration As Long       ' 구조 변경(행 수/순서/컬럼 배치)마다 증가하는 세대 번호
 
 ' [초기화]
@@ -87,7 +88,7 @@ Public Sub LoadFromSheet(ByVal vSource As Variant)
     End If
     
     ' 3. 메모리 적재 (배열로 변환)
-    ' * Value2가 Value보다 속도가 빠름 (통화/날짜 변환 오버헤드 없음)
+    ' Value2 계약: 서식과 무관하게 날짜/통화는 Double. ISO 키는 vbDate 입력에만 적용.
     Dim vData As Variant
     vData = rngTarget.Value2
     
@@ -267,6 +268,7 @@ End Sub
 ' 세대를 올리지 않고 per-column 무효화만 수행한다.
 Private Sub BumpGeneration()
     m_lGeneration = m_lGeneration + 1
+    m_vColumnVersions = Empty
     InvalidateAllIndices
 End Sub
 
@@ -293,6 +295,8 @@ Private Sub InvalidateIndexByColumnName(ByVal sColName As String)
 
     If m_dicHeaders.exists(sColName) Then
         lCol = m_dicHeaders(sColName)
+        If IsEmpty(m_vColumnVersions) Then ReDim m_vColumnVersions(1 To m_lColCount) As Long
+        m_vColumnVersions(lCol) = m_vColumnVersions(lCol) + 1
         If m_dicHashIndices.exists(lCol) Then
             Set idx = m_dicHashIndices(lCol)
             idx.Invalidate
@@ -505,7 +509,7 @@ Public Function GetColumnReaderByIndex(ByVal lCol As Long) As DbColumnReader
     If lCol < 1 Or lCol > m_lColCount Then Exit Function
 
     Set rdr = New DbColumnReader
-    rdr.BindData CopyColumn1D(lCol), ObjPtr(Me), m_lGeneration
+    rdr.BindData CopyColumn1D(lCol), ObjPtr(Me), m_lGeneration, lCol, ColumnValueVersion(lCol)
     Set GetColumnReaderByIndex = rdr
 End Function
 
@@ -555,9 +559,35 @@ Public Property Get ColCount() As Long
     ColCount = m_lColCount
 End Property
 
+' @desc 컬럼명-열 번호 매핑 사본 반환, 사본 수정은 원본 스키마에 영향 없음
 Public Property Get Headers() As Object
-    Set Headers = m_dicHeaders
+    Dim snapshot As Object, key As Variant
+    Set snapshot = CreateObject("Scripting.Dictionary")
+    snapshot.CompareMode = m_dicHeaders.CompareMode
+    For Each key In m_dicHeaders
+        snapshot.Add key, m_dicHeaders(key)
+    Next key
+    Set Headers = snapshot
 End Property
+
+' @desc 컬럼명 받아 존재 여부 반환, 대소문자와 앞뒤 공백 무시
+Public Function HasColumn(ByVal sColName As String) As Boolean
+    HasColumn = m_dicHeaders.exists(UCase$(Trim$(sColName)))
+End Function
+
+' @desc 컬럼명 받아 열 번호 반환, 미존재 시 9999 에러
+Public Function ColumnIndex(ByVal sColName As String) As Long
+    sColName = UCase$(Trim$(sColName))
+    If Not m_dicHeaders.exists(sColName) Then
+        Err.Raise 9999, "clsTable.ColumnIndex", "Column not found: " & sColName
+    End If
+    ColumnIndex = m_dicHeaders(sColName)
+End Function
+
+' reader는 구조 세대를 먼저 검증한 뒤 저장된 열 번호로 값 버전을 비교한다.
+Friend Function ColumnValueVersion(ByVal lCol As Long) As Long
+    If Not IsEmpty(m_vColumnVersions) Then ColumnValueVersion = m_vColumnVersions(lCol)
+End Function
 
 Public Property Get RawArray() As Variant
     RawArray = m_vData
@@ -1036,8 +1066,8 @@ Public Function UpsertFrom(ByVal tSource As clsTable, ByVal sKeyCol As String) A
     
     ' 키 컬럼 인덱스 확보
     Dim lKeyColSource As Long
-    If tSource.Headers.exists(UCase(sKeyCol)) Then
-        lKeyColSource = tSource.Headers(UCase(sKeyCol))
+    If tSource.HasColumn(sKeyCol) Then
+        lKeyColSource = tSource.ColumnIndex(sKeyCol)
     Else
         Err.Raise 9999, , "Upsert Error: Source table missing key column [" & sKeyCol & "]"
     End If

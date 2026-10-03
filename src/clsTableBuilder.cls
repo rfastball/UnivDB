@@ -43,14 +43,8 @@ Public Property Let KeyColumn(ByVal sKey As String)
 End Property
 
 Public Sub InitFromTable(ByVal T As clsTable)
-    Dim vKey As Variant
-    
-    m_dicHeaders.RemoveAll
-    ' 원본 테이블의 Headers 딕셔너리를 안전하게 복제
-    For Each vKey In T.Headers.Keys
-        m_dicHeaders.Add UCase(Trim(CStr(vKey))), T.Headers(vKey)
-    Next vKey
-    
+    ' Headers는 호출자 소유 사본이므로 빌더가 그대로 사용한다.
+    Set m_dicHeaders = T.Headers
     ' 키 컬럼이 누락된 경우 강제 추가
     If Len(m_sKeyColumn) > 0 And Not m_dicHeaders.exists(m_sKeyColumn) Then
         m_dicHeaders.Add m_sKeyColumn, m_dicHeaders.Count + 1

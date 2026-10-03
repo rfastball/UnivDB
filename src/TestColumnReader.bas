@@ -119,3 +119,33 @@ Private Function NewBigTable(ByVal lRows As Long) As clsTable
     T.LoadFromArray vData
     Set NewBigTable = T
 End Function
+
+' 같은 열의 값 변경만 reader 현재성을 깨뜨린다. 배열 사본 자체는 보존한다.
+Public Sub Test_ColumnReader_ValueChanges_FailFast()
+    Dim T As clsTable, rdr As DbColumnReader, other As DbColumnReader, fresh As DbColumnReader
+    Dim mutation As Long, gen As Long, n As Long
+    For mutation = 0 To 3
+        Set T = NewReaderTable()
+        Set rdr = T.GetColumnReader("Score")
+        Set other = T.GetColumnReader("Dept")
+        gen = T.Generation
+        Select Case mutation
+            Case 0: T.Value(2, "Score") = 9999
+            Case 1: T.UpdateBatch "Score", 9999, "ID", 1
+            Case 2: T.CopyColumn "ID", "Score"
+            Case 3: T.Compute "Score", "ID", "*", 2
+        End Select
+        LogShim.AssertEq "rdr_value_generation_" & mutation, gen, T.Generation
+        LogShim.AssertEq "rdr_snapshot_preserved_" & mutation, 10, rdr.ValueAt(2)
+        On Error Resume Next
+        Err.Clear
+        rdr.EnsureCurrent T
+        n = Err.Number
+        On Error GoTo 0
+        LogShim.AssertEq "rdr_value_stale_" & mutation, 9998, n
+        other.EnsureCurrent T
+        Set fresh = T.GetColumnReaderByIndex(3)
+        fresh.EnsureCurrent T
+        LogShim.AssertEq "rdr_value_fresh_" & mutation, T.Value(2, "Score"), fresh.ValueAt(2)
+    Next mutation
+End Sub

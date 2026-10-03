@@ -19,14 +19,18 @@ Private mLastDataRow As Long
 ' 세대 계약 결속 (ObjPtr 스냅샷 - 객체 참조 아님, 순환 참조 방지)
 Private mOwnerPtr As LongPtr
 Private mGeneration As Long
+Private mColumnIndex As Long
+Private mValueVersion As Long
 
 ' clsTable 팩토리 전용 - 컬럼 사본과 결속 스냅샷 주입
-' 일회용(생성-스캔-폐기) 전제. 값 변경은 세대를 올리지 않으므로
-' 향후 clsTable이 reader를 캐시하려면 InvalidateIndexByColumnName에 축출 훅이 필요함
-Friend Sub BindData(ByVal vColumn As Variant, ByVal ownerPtr As LongPtr, ByVal gen As Long)
+' 값 접근은 스냅샷 읽기. EnsureCurrent는 구조 세대와 해당 열의 값 버전을 함께 검증한다.
+Friend Sub BindData(ByVal vColumn As Variant, ByVal ownerPtr As LongPtr, ByVal gen As Long, _
+                    ByVal columnIndex As Long, ByVal valueVersion As Long)
     mValues = vColumn
     mOwnerPtr = ownerPtr
     mGeneration = gen
+    mColumnIndex = columnIndex
+    mValueVersion = valueVersion
 
     If IsEmpty(mValues) Then
         mFirstDataRow = 1
@@ -55,9 +59,14 @@ Public Property Get LastDataRow() As Long
     LastDataRow = mLastDataRow
 End Property
 
-' @desc 테이블을 받아 결속 세대와 일치 검증함, stale 시 9998 에러
+' @desc 테이블의 구조 세대와 열 값 버전 검증함, 불일치 시 9998 에러
 Public Sub EnsureCurrent(ByVal tbl As clsTable)
     modDbContract.AssertCurrentGeneration mOwnerPtr, mGeneration, tbl, "DbColumnReader.EnsureCurrent"
+    If mOwnerPtr = 0 Then Exit Sub
+    If tbl.ColumnValueVersion(mColumnIndex) <> mValueVersion Then
+        Err.Raise modDbContract.DB_ERR_STALE_GENERATION, "DbColumnReader.EnsureCurrent", _
+            "Stale column snapshot: column values changed"
+    End If
 End Sub
 
 Friend Property Get OwnerPtr() As LongPtr

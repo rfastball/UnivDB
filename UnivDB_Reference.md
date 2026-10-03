@@ -206,7 +206,9 @@ T.AddColumn("Bonus", 0).Compute("Total", "Amt", "+", "Bonus").OrderBy "Total", T
 
 ### Properties
 ```vb
-.headers    ' Dictionary — 컬럼명→인덱스 매핑
+.Headers             ' Dictionary 사본 — 컬럼명→인덱스 매핑, 수정해도 원본에 영향 없음
+.HasColumn("Name")   ' 존재 여부, 대소문자/앞뒤 공백 무시
+.ColumnIndex("Name") ' 열 번호, 미존재 시 9999
 .data       ' 2D Array (내부 데이터)
 ```
 
@@ -240,6 +242,16 @@ Where/Join/GroupBy 키는 전부 단일 정규화 계약을 탄다:
   증가했다(저중복/고중복, 동일 세션 실측). 기본 Dict는 49/32ms에서 50/32ms였다.
 - 복합 키(GroupBy 다중 컬럼)는 길이 접두 인코딩 `len:value|len:value|...` — 길이가 파싱 권위라 값에 구분자(`|`, `:`)가 있어도 충돌 없음
 - GroupBy 결과의 그룹 컬럼 값은 정규화 키 문자열 그대로 렌더된다 (Date면 ISO 표기)
+
+**시트 로드의 날짜 경계**: ISO 규칙은 Variant의 실제 타입이 `vbDate`일 때만 적용된다.
+`LoadFromSheet`는 [Range.Value2](https://learn.microsoft.com/en-us/office/vba/api/excel.range.value2)를
+사용하므로 날짜/통화 서식의 셀도 Double로 읽는다. 날짜 서식이나 컬럼명으로 타입을 추론하지 않는다.
+이 경로의 날짜 인덱스 키는 숫자 일련값의 `CStr`이고, Date/ISO 키와 자동 병합되지 않는다.
+
+Excel의 서식 기반 Date 타입이 필요하면 호출자가 명시적으로
+`T.LoadFromArray ws.Range("A1:D10").Value`를 사용할 수 있다.
+`Range.Value`는 Currency 타입도 사용하므로 숫자 정밀도 정책까지 함께 선택하는 입력 경계다.
+서식에 의존하지 않으려면 업무 스키마에 따라 Date Variant 배열을 구성해 `LoadFromArray`에 전달한다.
 
 ### 6.2 NULL/타입 계약 (Empty / Error)
 
@@ -307,6 +319,11 @@ v2.8.0에서 추가된 문장 수준 raise: `FilterAny`의 0개 arm/3요소 아�
 
 값만 바꾸면 rowID Generation은 유지되지만, 해당 열의 캐시에서 폐기된 인덱스 객체는
 `EnsureCurrent` 및 조회에서 9998로 실패한다. 인덱스는 테이블에서 다시 취득해야 한다.
+`DbColumnReader` 역시 값 사본이지만 `EnsureCurrent(T)`는 구조 세대와 해당 열의 값 버전을
+함께 검사한다. `Value`/`UpdateBatch`/`CopyColumn`/`Compute`가 그 열을 변경하면 9998로 실패한다.
+다른 열만 바뀌면 통과한다. `Values`/`ValueAt`은 자동 갱신되지 않는 사본 읽기이므로,
+현재 값이 필요한 호출자는 `EnsureCurrent`로 확인하거나 reader를 다시 취득한다.
+
 이미 얻은 RowList/RowSet/커서는 기존 선택의 스냅샷이다. 세대 검사는 행 좌표의 유효성만
 검증하며 변경된 값으로 조건을 다시 평가하지 않는다.
 

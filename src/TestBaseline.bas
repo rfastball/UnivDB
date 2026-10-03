@@ -257,3 +257,32 @@ Public Sub Test_LibVersion_Reports_Something()
     sVer = UnivDB.LibVersion()
     LogShim.AssertEq "libversion_nonempty", True, Len(sVer) > 0
 End Sub
+
+' Headers 사본을 수정해도 원본 스키마/인덱스/값은 영향을 받지 않는다.
+Public Sub Test_Headers_SnapshotIsolation()
+    Dim T As clsTable, headers As Object, result As clsTable, gen As Long, n As Long, col As Long
+    Set T = NewBaseTable()
+    Set headers = T.Headers
+    gen = T.Generation
+    headers("NAME") = 999
+    headers.RemoveAll
+    T.Headers("NAME") = 999
+    T.Headers.RemoveAll
+    LogShim.AssertEq "headers_original_count", 4, T.Headers.Count
+    LogShim.AssertEq "headers_original_name_col", 2, T.ColumnIndex(" name ")
+    LogShim.AssertEq "headers_has_column_normalized", True, T.HasColumn(" name ")
+    LogShim.AssertEq "headers_missing_column", False, T.HasColumn("__bad__")
+    On Error Resume Next
+    Err.Clear
+    col = T.ColumnIndex("__bad__")
+    n = Err.Number
+    On Error GoTo 0
+    LogShim.AssertEq "headers_bad_index_failfast", 9999, n
+    LogShim.AssertEq "headers_original_generation", gen, T.Generation
+    Set result = UnivDB.Query(T).Where("Name", "Ann").ToTable()
+    LogShim.AssertEq "headers_query_unaffected", "Ann", result.Value(2, "Name")
+
+    Set headers = T.Headers
+    T.AddColumn "Extra"
+    LogShim.AssertEq "headers_snapshot_no_new_column", False, headers.exists("EXTRA")
+End Sub

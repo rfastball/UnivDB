@@ -104,20 +104,23 @@ End Sub
 
 ' BuildToSheet 리포트 경로: 텍스트 열 보존 + 숫자 열은 진짜 숫자로 유지되어 DefineColumn 서식 적용
 Public Sub Test_BuildToSheet_PreservesTextAndNumbers()
-    Dim T As clsTable
+    Dim T As clsTable, loaded As New clsTable, typed As New clsTable
     Dim ws As Worksheet
-    Dim vData(1 To 3, 1 To 3) As Variant
+    Dim vData(1 To 3, 1 To 4) As Variant, n As Long
 
     vData(1, 1) = "ID": vData(1, 2) = "Acct": vData(1, 3) = "Amt"
     vData(2, 1) = "007": vData(2, 2) = "1234567890123456": vData(2, 3) = 12345
     vData(3, 1) = "012": vData(3, 2) = "9876543210987654": vData(3, 3) = 67890
 
+    vData(1, 4) = "Day"
+    vData(2, 4) = DateSerial(2026, 10, 3)
+    vData(3, 4) = DateSerial(2026, 10, 4)
     Set T = UnivDB.CreateTable()
     T.LoadFromArray vData
 
     Set ws = NewTempSheet()
     On Error GoTo Clean
-    UnivDB.Report(T).DefineColumn("Amt", , "#,##0").BuildToSheet ws, "A1"
+    UnivDB.Report(T).DefineColumn("Amt", , "#,##0").DefineColumn("Day", , "yyyy-mm-dd").BuildToSheet ws, "A1"
 
     ' ID: leading-zero 텍스트 보존
     LogShim.AssertEq "b2s_id_preserved", "007", CStr(ws.Range("A2").Value)
@@ -127,8 +130,21 @@ Public Sub Test_BuildToSheet_PreservesTextAndNumbers()
     LogShim.AssertEq "b2s_amt_isnum", 5, VarType(ws.Range("C2").Value)
     LogShim.AssertEq "b2s_amt_val", 12345, ws.Range("C2").Value
 
+    ' LoadFromSheet uses Value2: date format does not turn a Double into a Date.
+    loaded.LoadFromSheet ws.Range("A1:D3")
+    LogShim.AssertEq "sheet_date_value2_type", vbDouble, VarType(loaded.Value(2, "Day"))
+    LogShim.AssertEq "sheet_date_serial_lookup", 1, loaded.SelectRows("Day", ws.Range("D2").Value2).Count
+    LogShim.AssertEq "sheet_date_not_iso_lookup", 0, loaded.SelectRows("Day", "2026-10-03").Count
+
+    ' Explicit Range.Value input preserves Excel's Date subtype.
+    typed.LoadFromArray ws.Range("A1:D3").Value
+    LogShim.AssertEq "sheet_date_value_type", vbDate, VarType(typed.Value(2, "Day"))
+    LogShim.AssertEq "sheet_date_iso_lookup", 1, typed.SelectRows("Day", "2026-10-03").Count
+
 Clean:
+    n = Err.Number
     KillSheet ws
+    LogShim.AssertEq "sheet_roundtrip_no_error", 0, n
 End Sub
 
 ' 축소 재덤프: 큰 덤프 뒤 작은 덤프가 기본 선클리어로 옛 초과행을 제거해 유령행이 안 남는다.
