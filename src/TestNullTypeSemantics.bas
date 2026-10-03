@@ -203,6 +203,10 @@ Public Sub Test_NullSem_ErrorOrderBySortsLast()
     LogShim.AssertEq "nullsem_err_orderby_r3", 10, T.Value(3, "N")
     ' Error 행은 텍스트로 맨 뒤 (locale-무관: 숫자가 문자보다 앞서 정렬)
     LogShim.AssertEq "nullsem_err_orderby_r4_iserr", True, IsError(T.Value(4, "N"))
+    T.OrderBy "N", True
+    LogShim.AssertEq "nullsem_err_desc_first", 10, T.Value(2, "N")
+    LogShim.AssertEq "nullsem_err_desc_second", 5, T.Value(3, "N")
+    LogShim.AssertEq "nullsem_err_desc_last", True, IsError(T.Value(4, "N"))
 End Sub
 
 ' D2 계약 (Error=skip): 집계 컬럼의 Error 셀은 COUNT 포함 어느 집계에도 불참한다.
@@ -293,28 +297,60 @@ Public Sub Test_NullSem_NumericStringMerge()
     LogShim.AssertEq "nullsem_numstr_agg_sum", 91, tG.Value(2, "Score_SUM")
 End Sub
 
-' 매트릭스: OrderBy는 문자 우선 규칙 - 한쪽이 String이면 문자 비교로 강제
-' 숫자 9와 문자 "10"의 문자 비교: "9" > "10" 이므로 오름차순에서 "10"이 앞선다
-Public Sub Test_NullSem_NumericStringOrderByStringWins()
-    Dim T As clsTable
-    Dim vData(1 To 3, 1 To 1) As Variant
-
+' 숫자와 문자열의 비교 순서는 입력 순열과 무관하다.
+Public Sub Test_NullSem_MixedOrderByPermutation()
+    Dim T As New clsTable
+    Dim vData(1 To 4, 1 To 1) As Variant
+    Dim vals As Variant, a As Long, b As Long, c As Long, d As Long
+    vals = Array(2, 10, "15")
     vData(1, 1) = "N"
-    vData(2, 1) = 9
-    vData(3, 1) = "10"
+    For a = 0 To 2
+        For b = 0 To 2
+            If a <> b Then
+                c = 3 - a - b
+                vData(2, 1) = vals(a): vData(3, 1) = vals(b): vData(4, 1) = vals(c)
+                For d = 0 To 1
+                    T.LoadFromArray vData
+                    T.OrderBy "N", CBool(d)
+                    LogShim.AssertEq "sort_perm_first", vals(2 * d), T.Value(2, "N")
+                    LogShim.AssertEq "sort_perm_middle", vals(1), T.Value(3, "N")
+                    LogShim.AssertEq "sort_perm_last", vals(2 - 2 * d), T.Value(4, "N")
+                Next d
+            End If
+        Next b
+    Next a
+End Sub
 
-    Set T = UnivDB.CreateTable()
-    T.LoadFromArray vData
-
-    T.OrderBy "N"
-    LogShim.AssertEq "nullsem_numstr_orderby_first", "10", T.Value(2, "N")
-    LogShim.AssertEq "nullsem_numstr_orderby_last", 9, T.Value(3, "N")
+' 문자열부터 누적해도 단일/복합 그룹의 SUM/AVG는 순서 불변이다.
+Public Sub Test_NullSem_AggregatePermutation()
+    Dim T As New clsTable, result As clsTable
+    Dim vData(1 To 4, 1 To 3) As Variant
+    Dim vals As Variant, groupCols As Variant, a As Long, b As Long, c As Long, i As Long
+    vals = Array("10", "20", 30)
+    vData(1, 1) = "Dept": vData(1, 2) = "Tag": vData(1, 3) = "Amt"
+    For i = 2 To 4
+        vData(i, 1) = "IT": vData(i, 2) = "X"
+    Next i
+    For a = 0 To 2
+        For b = 0 To 2
+            If a <> b Then
+                c = 3 - a - b
+                vData(2, 3) = vals(a): vData(3, 3) = vals(b): vData(4, 3) = vals(c)
+                T.LoadFromArray vData
+                For Each groupCols In Array("Dept", "Dept,Tag")
+                    Set result = T.GroupBy(CStr(groupCols), "Amt:SUM,Amt:AVG")
+                    LogShim.AssertEq "agg_perm_sum", 60, result.Value(2, "Amt_SUM")
+                    LogShim.AssertEq "agg_perm_avg", 20, result.Value(2, "Amt_AVG")
+                    LogShim.AssertEq "agg_perm_numeric_type", vbDouble, VarType(result.Value(2, "Amt_SUM"))
+                Next groupCols
+            End If
+        Next b
+    Next a
 End Sub
 
 ' ==============================================================================
 ' [4] 날짜
 ' ==============================================================================
-
 ' D2 계약: 숫자 필터에서 날짜는 제외(IsNumeric(Date)=False), 집계에선 SUM 불참·COUNT 포함이나
 ' AVG 분모는 숫자 셀 수라 희석되지 않는다 (D1 이전엔 AVG 희석의 세 번째 경로였음)
 Public Sub Test_NullSem_DateNumericExcludedButCounted()

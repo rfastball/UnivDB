@@ -111,7 +111,11 @@ Public Sub IntersectWithRowList(ByVal rows As DbRowList)
 
     AdoptOrVerifyBinding rows
     If mCount = 0 Then Exit Sub
-    If rows Is Nothing Or rows.Count = 0 Then
+    If rows Is Nothing Then
+        Clear
+        Exit Sub
+    End If
+    If rows.Count = 0 Then
         Clear
         Exit Sub
     End If

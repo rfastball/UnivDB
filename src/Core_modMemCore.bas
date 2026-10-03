@@ -10,12 +10,6 @@ Option Explicit
 ' 오버플로(에러 6) 없이 순수 Long 연산만 사용. 결과는 항상 [0, 2^24) 비음수.
 Private Const HASH_SEED_L As Long = 5381
 
-' UCase 폴딩 테이블: 코드포인트별 AscW(UCase$(ChrW$(cp))) 캐시 (세션 1회 지연 구축).
-' 해시 경로에서 문자열 할당(UCase$)을 완전히 제거한다. 키 등가 판정은 여전히
-' StrComp(vbTextCompare)이므로 폴딩 차이는 해시 품질 문제일 뿐 정확성에 무관.
-Private mFoldTable() As Integer
-Private mFoldReady As Boolean
-
 ' LSet UDT 비트캐스트용: Double의 8바이트를 DLL 호출 없이 Long 두 개로 읽는다
 Private Type TDblBits
     d As Double
@@ -26,6 +20,9 @@ Private Type TLngPair
 End Type
 
 #If VBA7 Then
+
+Private Declare PtrSafe Function LCMapStringW Lib "kernel32" (ByVal locale As Long, ByVal flags As Long, ByVal src As LongPtr, ByVal srcLen As Long, ByVal dest As LongPtr, ByVal destLen As Long) As Long
+Private Declare PtrSafe Function GetThreadLocale Lib "kernel32" () As Long
 
 Private Declare PtrSafe Sub RtlMoveMemory Lib "kernel32" (ByVal pDest As LongPtr, ByVal pSrc As LongPtr, ByVal byteLen As LongPtr)
 
@@ -75,6 +72,9 @@ Public Sub Core_BlitDoubleToLongs(ByVal d As Double, ByRef lo As Long, ByRef hi 
 End Sub
 
 #Else
+
+Private Declare Function LCMapStringW Lib "kernel32" (ByVal locale As Long, ByVal flags As Long, ByVal src As Long, ByVal srcLen As Long, ByVal dest As Long, ByVal destLen As Long) As Long
+Private Declare Function GetThreadLocale Lib "kernel32" () As Long
 
 Private Declare Sub RtlMoveMemory Lib "kernel32" (ByVal pDest As Long, ByVal pSrc As Long, ByVal byteLen As Long)
 
@@ -126,30 +126,31 @@ End Sub
 #End If
 
 ' ----- 해시 함수 (인스턴스 무관 순수 함수 - 엔진 간 키 이동 시 일관성 보장) -----
-' 측정 근거로 단일 경로 채택: b()=s 네이티브 바이트 복사가 CopyMemory(DLL 고정비용)와
-' AscW/Mid$ 루프(문자당 함수 호출 2회)를 모든 길이에서 이김. CopyMemory는 해시 핫패스 제외.
+' StrComp(vbTextCompare)의 동등 키는 같은 해시여야 한다.
+' 문자별 UCase/길이 해시는 합성 문자, 전각 문자, 무시되는 문자에서 이 불변식을 깬다.
+' Windows sort key는 대소문자/문자 폭/가나 종류를 무시한다. 추가 충돌은 KeysEqual이 판별한다.
 
-' @desc 키 문자열 받아 대소문자 무시 해시 반환 (폴딩 테이블, Trim 없음)
+' @desc 키 문자열 받아 로캘 텍스트 동등성에 맞는 해시 반환, API 실패 시 9999
 Public Function Core_HashKeyText(ByRef s As String) As Long
-    Dim b() As Byte
-    Dim i As Long
-    Dim n As Long
-    Dim h As Long
-    Dim cu As Long
+    Const SORT_FLAGS As Long = &H30401 ' SORTKEY | IGNORECASE | IGNOREKANATYPE | IGNOREWIDTH
+    Dim bytes() As Byte, source As String
+    Dim n As Long, i As Long, h As Long, locale As Long
 
-    If Not mFoldReady Then EnsureFoldTable
-    h = HASH_SEED_L
-    If LenB(s) > 0 Then
-        b = s
-        n = UBound(b)
-        For i = 0 To n Step 2
-            cu = b(i) Or (b(i + 1) * &H100&)
-            h = ((h * 33) Xor (mFoldTable(cu) And &HFFFF&)) And &HFFFFFF
-        Next i
+    source = s
+    If Len(source) = 0 Then source = vbNullChar
+    locale = GetThreadLocale()
+    n = LCMapStringW(locale, SORT_FLAGS, StrPtr(source), Len(source), 0, 0)
+    If n = 0 Then Err.Raise 9999, "Core_HashKeyText", "Cannot size text sort key"
+    ReDim bytes(0 To n - 1)
+    If LCMapStringW(locale, SORT_FLAGS, StrPtr(source), Len(source), VarPtr(bytes(0)), n) = 0 Then
+        Err.Raise 9999, "Core_HashKeyText", "Cannot create text sort key"
     End If
-    Core_HashKeyText = ((h * 33) Xor Len(s)) And &HFFFFFF
+    h = HASH_SEED_L
+    For i = 0 To n - 1
+        h = ((h * 33) Xor bytes(i)) And &HFFFFFF
+    Next i
+    Core_HashKeyText = h
 End Function
-
 ' @desc 숫자 키 받아 해시 반환, -0은 +0으로 정규화 후 계산
 Public Function Core_HashKeyNumber(ByVal d As Double) As Long
     Dim dbits As TDblBits
@@ -164,12 +165,3 @@ Public Function Core_HashKeyNumber(ByVal d As Double) As Long
     h = ((h * 33) Xor (pair.hi And &HFFFF&)) And &HFFFFFF
     Core_HashKeyNumber = ((h * 33) Xor ((pair.hi \ &H10000) And &HFFFF&)) And &HFFFFFF
 End Function
-
-Private Sub EnsureFoldTable()
-    Dim i As Long
-    ReDim mFoldTable(0 To 65535)
-    For i = 0 To 65535
-        mFoldTable(i) = AscW(UCase$(ChrW$(i)))
-    Next i
-    mFoldReady = True
-End Sub

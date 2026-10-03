@@ -20,6 +20,7 @@ Private mPayload As DbCsrPayload
 ' 세대 계약 결속 (ObjPtr 스냅샷 - 객체 참조 아님, 순환 참조 방지)
 Private mOwnerPtr As LongPtr
 Private mGeneration As Long
+Private mInvalidated As Boolean
 
 Private Sub Class_Initialize()
     Set mDict = CreateObject("Scripting.Dictionary")
@@ -33,6 +34,7 @@ Private Sub Class_Terminate()
 End Sub
 
 Public Sub AddRow(ByVal key As Variant, ByVal rowId As Long)
+    RequireValid
     Dim sKey As String
     Dim keyId As Long
 
@@ -51,17 +53,20 @@ End Sub
 
 ' @desc 테이블을 받아 현재 세대에 결속함
 Public Sub BindTo(ByVal tbl As clsTable)
+    RequireValid
     mOwnerPtr = ObjPtr(tbl)
     mGeneration = tbl.Generation
 End Sub
 
 ' @desc 테이블을 받아 결속 세대와 일치 검증함, stale 시 9998 에러
 Public Sub EnsureCurrent(ByVal tbl As clsTable)
+    RequireValid
     modDbContract.AssertCurrentGeneration mOwnerPtr, mGeneration, tbl, "DictHashIndex.EnsureCurrent"
 End Sub
 
 ' 반환 리스트는 세대 결속을 탑재한 fresh 복사본 (인덱스 내부 상태와 분리)
 Public Function TryGetRows(ByVal key As Variant, ByRef outRows As DbRowList) As Boolean
+    RequireValid
     Dim sKey As String
 
     If IsError(key) Then
@@ -82,6 +87,7 @@ End Function
 
 ' @desc 키의 rowId span을 버퍼에 복사 여부 반환, 미존재/Error 키 시 False에 0건
 Public Function TryGetRowIdSpan(ByVal key As Variant, ByRef outRowIds() As Long, ByRef outCount As Long) As Boolean
+    RequireValid
     Dim sKey As String
 
     outCount = 0
@@ -96,6 +102,7 @@ End Function
 
 ' @desc 키의 행 수만 반환 여부 반환(복사 없음), 미존재/Error 키 시 False에 0건
 Public Function TryGetRowCount(ByVal key As Variant, ByRef outCount As Long) As Boolean
+    RequireValid
     Dim sKey As String
 
     outCount = 0
@@ -110,6 +117,7 @@ End Function
 
 ' @desc 키의 첫 rowId 반환 여부 반환, 미존재/Error 키 시 False
 Public Function TryGetFirstRowId(ByVal key As Variant, ByRef outRowId As Long) As Boolean
+    RequireValid
     Dim sKey As String
 
     If IsError(key) Then Exit Function
@@ -122,15 +130,18 @@ Public Function TryGetFirstRowId(ByVal key As Variant, ByRef outRowId As Long) A
 End Function
 
 Public Property Get CountKeys() As Long
+    RequireValid
     CountKeys = mDict.Count
 End Property
 
 Public Sub Clear()
+    RequireValid
     mDict.RemoveAll
     mPayload.Clear
 End Sub
 
 Public Function Cursor() As DbIndexCursor
+    RequireValid
     Dim cur As New DbIndexCursor
     Dim vKeys As Variant
 
@@ -185,4 +196,14 @@ End Function
 
 Private Sub DbHashIndex_EnsureCurrent(ByVal tbl As clsTable)
     EnsureCurrent tbl
+End Sub
+
+Private Sub DbHashIndex_Invalidate()
+    mInvalidated = True
+End Sub
+
+Private Sub RequireValid()
+    If mInvalidated Then
+        Err.Raise modDbContract.DB_ERR_STALE_GENERATION, "DbHashIndex", "Index invalidated: reacquire from table"
+    End If
 End Sub

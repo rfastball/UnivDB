@@ -229,6 +229,15 @@ Where/Join/GroupBy 키는 전부 단일 정규화 계약을 탄다:
 | 그 외 | `CStr` 문자열화 — 숫자 `42`와 문자 `"42"`는 **같은 키로 병합** |
 
 - 키 비교는 대소문자 무시 (`vbTextCompare`)
+- **Unicode 한계 (2026-10-03 실측)**: 기본 Dictionary 및 복합 GroupBy의 Dictionary는
+  `StrComp(..., vbTextCompare)`와 모든 Unicode 입력에서 동치가 아니다.
+  이 Windows/Excel 환경에서 U+00E9와 U+0065 U+0301, `"ab"`와 `"a" & ChrW(0) & "b"`는
+  StrComp에서는 같지만 Dictionary 키에서는 분리됐다. Core의 텍스트 해시는 Windows sort key를
+  사용해 자기 비교기와의 불일치를 수정했으며, 기본 백엔드/복합 키의 Unicode 통일은 미해결이다.
+  백엔드 간 동치 보장은 이 입력들에 적용되지 않는다. 자동 백엔드 전환은 없다.
+  Core는 [LCMapStringW sort key](https://learn.microsoft.com/en-us/windows/win32/api/winnls/nf-winnls-lcmapstringw)의
+  바이트열을 해싱한다. 기존 2만 행 벤치의 3회 중앙값은 수정 전 23/25ms에서 수정 후 102/103ms로
+  증가했다(저중복/고중복, 동일 세션 실측). 기본 Dict는 49/32ms에서 50/32ms였다.
 - 복합 키(GroupBy 다중 컬럼)는 길이 접두 인코딩 `len:value|len:value|...` — 길이가 파싱 권위라 값에 구분자(`|`, `:`)가 있어도 충돌 없음
 - GroupBy 결과의 그룹 컬럼 값은 정규화 키 문자열 그대로 렌더된다 (Date면 ISO 표기)
 
@@ -253,13 +262,23 @@ Where/Join/GroupBy 키는 전부 단일 정규화 계약을 탄다:
 
 ### 6.4 OrderBy 비교 규칙 (`clsTable.CompareValues`)
 
-우선순위 순서대로:
+비교 상대와 무관한 타입 순서를 사용한다. 오름차순은 다음 순서다.
 
-1. **Error** → 맨 뒤 (결정적, locale 무관)
-2. **Date + Date** → 직렬값(CDbl) 수치 비교 — 시간순 보장, locale 무관
-3. **한쪽이 String** → 텍스트 비교(`vbTextCompare`) — 숫자 `9` vs 문자 `"10"`이면 `"10"`이 앞선다
-4. **둘 다 IsNumeric** → CDbl 수치 비교 — Empty는 0 취급
-5. **그 외** → 텍스트 fallback
+1. **숫자와 Empty** → CDbl 수치 비교 (Empty는 0)
+2. **Date** → CDbl 직렬값 비교
+3. **Boolean** → False/True의 CDbl 값 비교
+4. **String** → `vbTextCompare` 텍스트 비교 (숫자 문자열도 String 그룹)
+5. **Null**
+6. **Error**
+
+내림차순은 일반 값의 순서를 뒤집으며 **Error는 양방향 모두 마지막**이다.
+기존의 "한쪽이 String이면 문자 비교" 정책은 비교 순환을 만들므로 폐기했다.
+따라서 숫자 `2`, 숫자 `10`, 문자열 `"15"`의 오름차순은 언제나 `2, 10, "15"`다.
+동등 키 사이의 안정 정렬은 보장하지 않는다.
+
+쿼리는 조건 후보의 원본 rowID를 정렬한 뒤 Top과 열 선택을 적용한다.
+정렬 키를 출력 열에서 제외할 수 있고, 원본 데이터/Generation은 바뀌지 않는다.
+0행 결과 정렬은 헤더만 유지한다. 존재하지 않는 정렬 열은 9999로 거부한다.
 
 ### 6.5 연산자 화이트리스트와 fail-fast (`modOperators`)
 
@@ -281,6 +300,15 @@ Where/Join/GroupBy 키는 전부 단일 정규화 계약을 탄다:
 v2.8.0에서 추가된 문장 수준 raise: `FilterAny`의 0개 arm/3요소 아닌 arm/비스칼라 arm 요소
 (전체 arm이 평가 앞에서 검증 - 부분 축소 없음), `Compute`의 비String 비숫자 피연산자
 (Empty/Null/Date/배열/객체)와 상수 0 나눗셈 (컬럼 셀의 0 나눗셈은 기존 데이터 수준 관용 유지).
+
+`Where`/`Filter`의 컬럼과 `Filter`의 비교값 검증은 후보 0행에서도 생략하지 않는다.
+`Update`는 모든 SET 컬럼을 첫 쓰기 전에 검증하며, 컬럼 오타로 일부 값만 변경되지 않는다.
+이는 실행 중 발생하는 모든 오류를 롤백하는 트랜잭션 보장은 아니다.
+
+값만 바꾸면 rowID Generation은 유지되지만, 해당 열의 캐시에서 폐기된 인덱스 객체는
+`EnsureCurrent` 및 조회에서 9998로 실패한다. 인덱스는 테이블에서 다시 취득해야 한다.
+이미 얻은 RowList/RowSet/커서는 기존 선택의 스냅샷이다. 세대 검사는 행 좌표의 유효성만
+검증하며 변경된 값으로 조건을 다시 평가하지 않는다.
 
 ### 6.6 표현력 공백 (명시적 비지원)
 

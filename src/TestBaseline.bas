@@ -221,6 +221,19 @@ Public Sub Test_Load_FailPreservesState()
     ' 예외 후에도 기존 데이터/헤더가 그대로 보존됨
     LogShim.AssertEq "load_preserve_postcount", 3, T.RowCount
     LogShim.AssertEq "load_preserve_header", True, T.Headers.exists("NAME")
+
+    Dim duplicate(1 To 1, 1 To 2) As Variant, gen As Long, n As Long
+    duplicate(1, 1) = " Dept ": duplicate(1, 2) = "DEPT"
+    gen = T.Generation
+    On Error Resume Next
+    Err.Clear
+    T.LoadFromArray duplicate
+    n = Err.Number
+    On Error GoTo 0
+    LogShim.AssertEq "load_duplicate_preflight", 9999, n
+    LogShim.AssertEq "load_duplicate_preserve_generation", gen, T.Generation
+    LogShim.AssertEq "load_duplicate_preserve_rows", 3, T.RowCount
+    LogShim.AssertEq "load_duplicate_preserve_value", "Ann", T.Value(2, "Name")
 End Sub
 
 ' 내부 신뢰 경로(AdoptArray)는 중복 헤더를 거부하지 않고 last-wins 유지 (비대칭 회귀 고정)

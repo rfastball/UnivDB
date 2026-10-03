@@ -653,3 +653,77 @@ Public Sub Test_Chain_ComputeConstConcatAndNullSkip()
     LogShim.AssertEq "chain_c2_skip_cell", True, IsEmpty(T.Value(3, "R"))
     LogShim.AssertEq "chain_c2_skip_ok2", 31, T.Value(4, "R")
 End Sub
+
+' 정렬 키가 투영에 없어도 정렬/Top 의미를 보존하며 원본은 바뀌지 않는다.
+Public Sub Test_Chain_SortProjectionAndEmpty()
+    Dim T As clsTable, result As clsTable, gen As Long
+    Set T = NewOrGroupTable()
+    gen = T.Generation
+    Set result = UnivDB.Query(T).Where("Active", "Y").OrderBy("Amt", True).SelectColumns("Dept").Top(1).ToTable()
+    LogShim.AssertEq "sort_projection_top", "IT", result.Value(2, "Dept")
+    LogShim.AssertEq "sort_projection_cols", 1, result.ColCount
+    LogShim.AssertEq "sort_projection_rows", 2, result.RowCount
+    LogShim.AssertEq "sort_source_generation", gen, T.Generation
+    LogShim.AssertEq "sort_source_first", 500, T.Value(2, "Amt")
+
+    Set result = UnivDB.Query(T).Where("Dept", "__none__").OrderBy("Amt").Top(1).ToTable()
+    LogShim.AssertEq "sort_empty_rows", 1, result.RowCount
+    result.OrderBy "Amt", True
+    LogShim.AssertEq "sort_empty_direct", 1, result.RowCount
+End Sub
+
+' 문장 오류는 후보 0행에서도 동일하게 실패한다.
+Public Sub Test_Chain_ValidationBeforeEmpty()
+    Dim T As clsTable, q As clsQuery, result As clsTable
+    Dim emptyFirst As Long, n As Long
+    Set T = NewOrGroupTable()
+    For emptyFirst = 0 To 1
+        Set q = UnivDB.Query(T)
+        If emptyFirst = 1 Then q.Where "Dept", "__none__"
+        On Error Resume Next
+        Err.Clear
+        q.Where "__bad__", "IT"
+        n = Err.Number
+        On Error GoTo 0
+        LogShim.AssertEq "where_bad_column", 9999, n
+
+        On Error Resume Next
+        Err.Clear
+        q.Filter "__bad__", "IS", "IT"
+        n = Err.Number
+        On Error GoTo 0
+        LogShim.AssertEq "filter_bad_column", 9999, n
+
+        On Error Resume Next
+        Err.Clear
+        q.Filter "Amt", ">", "abc"
+        n = Err.Number
+        On Error GoTo 0
+        LogShim.AssertEq "filter_bad_value", 9999, n
+
+        On Error Resume Next
+        Err.Clear
+        Set result = q.OrderBy("__bad__").ToTable()
+        n = Err.Number
+        On Error GoTo 0
+        LogShim.AssertEq "sort_bad_column", 9999, n
+    Next emptyFirst
+End Sub
+
+' 모든 SET 컬럼을 쓰기 전에 검증한다.
+Public Sub Test_Chain_UpdateValidatesAllColumns()
+    Dim T As clsTable, q As clsQuery, n As Long, emptyFirst As Long
+    For emptyFirst = 0 To 1
+        Set T = NewOrGroupTable()
+        Set q = UnivDB.Query(T)
+        If emptyFirst = 1 Then q.Where "Dept", "__none__"
+        q.SetVal("Amt", 111).SetVal "__bad__", 1
+        On Error Resume Next
+        Err.Clear
+        q.Update
+        n = Err.Number
+        On Error GoTo 0
+        LogShim.AssertEq "update_bad_column", 9999, n
+        LogShim.AssertEq "update_no_partial_write", 500, T.Value(2, "Amt")
+    Next emptyFirst
+End Sub

@@ -67,6 +67,7 @@ Public Function Where(ByVal sColName As String, ByVal vValue As Variant) As clsQ
     EnsureCandidatesCurrent
 
     ' 1. 내부 HashIndex에서 행 번호 추출 (O(1))
+    RequireColumn sColName, "clsQuery.Where"
     Set idx = m_SourceTable.GetHashIndex(sColName)
 
     ' 2. DbRowList를 후보 RowSet에 반영
@@ -110,6 +111,7 @@ Public Function Filter(ByVal sColName As String, ByVal sOp As String, ByVal vVal
     ' 연산자 화이트리스트 검증 (audit F1, V1/V2): 미지 연산자는 후보 유무와 무관하게
     ' 즉시 raise - 컬럼명 오타(아래 9999)와 오류 처리 대칭. 정규화도 이 단일 지점에서.
     sOp = modOperators.NormalizeFilterOp(sOp)
+    ValidateFilterArm sColName, sOp, vValue, "clsQuery.Filter"
 
     EnsureCandidatesCurrent
     If m_bIsFirstCondition Then InitializeAllRows
@@ -152,11 +154,6 @@ Private Function EvaluateArm(ByVal sColName As String, ByVal sOp As String, _
             Dim dTarget As Double
             Dim vCell As Variant
 
-            ' 수치 연산자에 비숫자 비교값은 문장 수준 오류 - fail-fast (audit F6, V1)
-            If Not IsNumeric(vValue) Then
-                Err.Raise 9999, sSource, _
-                    "Numeric operator '" & sOp & "' requires a numeric compare value: '" & CStr(vValue) & "'"
-            End If
             dTarget = CDbl(vValue)
             
             ' 최적화된 루프
@@ -230,7 +227,7 @@ End Function
 ' arm 형식: Array(컬럼, 연산자, 값) 3요소. 연산자는 Filter와 같은 화이트리스트.
 '   개별 arm 인자 외에 arm 배열 1개(동적 목록, KeepAny 위임)도 허용 - 재귀 평탄화.
 ' 검증: 전체 arm을 평가 전에 문장 수준 검증 (audit F3 교훈 - 부분 축소 없이 9999).
-'   Filter와 달리 후보 0행 early-out보다 검증이 앞선다 (의도된 비대칭 - 더 엄격).
+'   Filter와 동일하게 후보 0행 early-out보다 검증이 앞선다.
 ' 성능: arm당 컬럼 사본 1회 (Filter N회 체인과 동일 비용 프로파일).
 ' ==============================================================================
 
@@ -241,7 +238,6 @@ Public Function FilterAny(ParamArray vArms() As Variant) As clsQuery
     Dim k As Long, lb As Long
     Dim lArmCount As Long
     Dim sCols() As String, sOps() As String, vVals() As Variant
-    Dim dicHeaders As Object
     Dim vCandidates As Variant
     Dim setUnion As DbRowSet
     Dim setArm As DbRowSet
@@ -260,8 +256,6 @@ Public Function FilterAny(ParamArray vArms() As Variant) As clsQuery
 
     ' 2. 문장 수준 검증 - 전체 arm을 평가 앞에서 (미지 연산자/컬럼 오타/비숫자 비교값)
     ReDim sCols(1 To lArmCount): ReDim sOps(1 To lArmCount): ReDim vVals(1 To lArmCount)
-    Set dicHeaders = m_SourceTable.Headers
-
     k = 0
     For Each vArm In colArms
         k = k + 1
@@ -276,16 +270,7 @@ Public Function FilterAny(ParamArray vArms() As Variant) As clsQuery
         sOps(k) = modOperators.NormalizeFilterOp(CStr(vArm(lb + 1)))
         vVals(k) = vArm(lb + 2)
 
-        If Not dicHeaders.exists(UCase(sCols(k))) Then
-            Err.Raise 9999, "clsQuery.FilterAny", "Column not found: " & sCols(k)
-        End If
-        Select Case sOps(k)
-            Case "=", "<>", ">", "<", ">=", "<="
-                If Not IsNumeric(vVals(k)) Then
-                    Err.Raise 9999, "clsQuery.FilterAny", _
-                        "Numeric operator '" & sOps(k) & "' requires a numeric compare value: '" & CStr(vVals(k)) & "'"
-                End If
-        End Select
+        ValidateFilterArm sCols(k), sOps(k), vVals(k), "clsQuery.FilterAny"
     Next vArm
 
     ' 3. 실행: 같은 후보 스냅샷에 arm별 독립 스캔 -> 합집합 (중복 행은 비트맵이 무계수)
@@ -455,7 +440,8 @@ End Sub
 ' 활용: 기존 clsTable의 QuickSort 엔진을 재사용합니다.
 ' ==============================================================================
 Public Function OrderBy(ByVal sColName As String, Optional ByVal bDesc As Boolean = False) As clsQuery
-    m_sSortColumn = sColName
+    RequireColumn sColName, "clsQuery.OrderBy"
+    m_sSortColumn = Trim$(sColName)
     m_bSortDesc = bDesc
     Set OrderBy = Me
 End Function
@@ -499,10 +485,13 @@ Public Function Update() As Long
 
     EnsureCandidatesCurrent
     If m_setCandidates Is Nothing Then InitializeAllRows
+    For Each vCol In m_dicUpdates
+        RequireColumn CStr(vCol), "clsQuery.Update"
+    Next vCol
     If m_dicUpdates.Count = 0 Or m_setCandidates.Count = 0 Then Update = 0: Exit Function
     
     For Each vRowID In m_setCandidates.ToArray
-        For Each vCol In m_dicUpdates.Keys
+        For Each vCol In m_dicUpdates
             m_SourceTable.Value(CLng(vRowID), CStr(vCol)) = m_dicUpdates(vCol)
         Next vCol
         lCount = lCount + 1
@@ -631,8 +620,12 @@ Public Function SelectTable() As clsTable
     End If
     lResultRows = m_setCandidates.Count
     
-    ' [Optimized Limit] 정렬이 없는 경우, 미리 개수를 제한하여 성능 최적화 (Early Exit)
-    If Len(m_sSortColumn) = 0 And m_lLimit > 0 Then
+    ' 후보 rowID 정렬 -> Top -> projection. 출력에 정렬 열이 없어도 의미를 보존한다.
+    vRowIDs = m_setCandidates.ToArray
+    If Len(m_sSortColumn) > 0 Then m_SourceTable.SortRowIds vRowIDs, m_sSortColumn, m_bSortDesc
+
+    ' 출력 크기는 정렬 여부와 무관하게 Top으로 제한한다.
+    If m_lLimit > 0 Then
         If lResultRows > m_lLimit Then lResultRows = m_lLimit
     End If
     
@@ -674,7 +667,6 @@ Public Function SelectTable() As clsTable
     
     ' 5. [Data Fetch] 데이터 고속 복사
     If lResultRows > 0 Then
-        vRowIDs = m_setCandidates.ToArray
         
         ' [핵심] lResultRows만큼만 루프 수행 (정렬 없는 경우 Limit까지만 돎)
         ' vRowIDs는 0-based array이므로 0부터 시작
@@ -688,33 +680,6 @@ Public Function SelectTable() As clsTable
     
     ' 결과 로드 (원본 셀 프로젝션이라 이미 정규화됨 - 입양 경로)
     tResult.AdoptArray vResultData, True
-    
-    ' 6. [Post-Process] 정렬 및 정렬 후 Limit 처리
-    If Len(m_sSortColumn) > 0 Then
-        ' (1) 정렬 수행 (전체 데이터 대상)
-        If tResult.Headers.exists(UCase(m_sSortColumn)) Then
-            tResult.OrderBy m_sSortColumn, m_bSortDesc
-        End If
-        
-        ' (2) 정렬 후 잘라내기 (Slicing) - 정렬이 있을 때만 수행되는 후처리
-        If m_lLimit > 0 And tResult.RowCount > m_lLimit Then
-            Dim vSliced As Variant
-            Dim vSorted As Variant
-            
-            vSorted = tResult.RawArray
-            ReDim vSliced(1 To m_lLimit + 1, 1 To lTargetCols)
-            
-            ' 헤더 + 상위 N개 복사
-            For i = 1 To m_lLimit + 1
-                For j = 1 To lTargetCols
-                    vSliced(i, j) = vSorted(i, j)
-                Next j
-            Next i
-            
-            ' 잘라낸 데이터로 다시 로드 (정렬 결과 슬라이스 - 입양 경로)
-            tResult.AdoptArray vSliced, True
-        End If
-    End If
     
     Set SelectTable = tResult
 End Function
@@ -772,3 +737,22 @@ Public Sub DebugPrint()
     Next i
 End Sub
 
+
+Private Sub RequireColumn(ByVal name As String, ByVal source As String)
+    If Not m_SourceTable.Headers.exists(UCase$(Trim$(name))) Then
+        Err.Raise 9999, source, "Column not found: " & name
+    End If
+End Sub
+
+Private Sub ValidateFilterArm(ByVal column As String, ByVal op As String, ByVal value As Variant, ByVal source As String)
+    RequireColumn column, source
+    If IsObject(value) Or IsArray(value) Then
+        Err.Raise 9999, source, "Filter compare value must be scalar"
+    End If
+    Select Case op
+        Case "=", "<>", ">", "<", ">=", "<="
+            If Not IsNumeric(value) Then
+                Err.Raise 9999, source, "Numeric operator requires a numeric compare value"
+            End If
+    End Select
+End Sub

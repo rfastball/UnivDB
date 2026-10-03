@@ -85,24 +85,10 @@ Private Sub Test_OrderBy_StrComp()
     Dim vResult As Variant
     vResult = T.RawArray
     
-    ' Validation: CompareValues should treat them all as strings as some are not numeric
-    ' Correct string sort order: 50, "1000", "300" (Incorrect: this would be if it was numeric)
-    ' Correct StrComp order: "1000", "300", 50 (Incorrect: this is also not right)
-    ' The logic is: if both are numeric, compare as numbers. Otherwise, as string.
-    ' So, 50 vs "300" -> string compare. "300" vs "1000" -> string compare.
-    ' Expected order: "1000", "300", 50. Let's trace CompareValues.
-    ' v1="300", v2=50. IsNumeric(v1)=False. String compare. "300" > "50".
-    ' v1="1000", v2="300". String compare. "1000" < "300".
-    ' Expected Ascending: "1000", 50, "300" is also wrong.
-    ' Let's re-verify StrComp behavior.
-    ' StrComp("50", "300", vbTextCompare) is 1 (>0). So 50 comes after 300.
-    ' StrComp("1000", "300", vbTextCompare) is -1 (<0). So 1000 comes before 300.
-    ' Expected Ascending with StrComp: "1000", "300", 50
-    
-    AssertEqual CStr(vResult(2, 2)), "1000", "OrderBy_Mixed_1"
-    AssertEqual CStr(vResult(3, 2)), "300", "OrderBy_Mixed_2"
-    AssertEqual CStr(vResult(4, 2)), "50", "OrderBy_Mixed_3"
-    
+    ' Numeric types precede text; strings retain text ordering.
+    AssertEqual CStr(vResult(2, 2)), "50", "OrderBy_Mixed_1"
+    AssertEqual CStr(vResult(3, 2)), "1000", "OrderBy_Mixed_2"
+    AssertEqual CStr(vResult(4, 2)), "300", "OrderBy_Mixed_3"
     Debug.Print " Passed!"
 End Sub
 

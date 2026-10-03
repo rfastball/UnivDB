@@ -87,3 +87,34 @@ Private Function NewUpsertSource() As clsTable
     T.LoadFromArray vData
     Set NewUpsertSource = T
 End Function
+
+' 값 변경은 rowID 세대를 유지하되 보관된 인덱스의 현재성 검사는 실패한다.
+Public Sub Test_IndexInvalidation_RetainedIndex_Parametric()
+    Dim T As clsTable, idx As DbHashIndex, other As DbHashIndex, rows As DbRowList
+    Dim backend As Long, gen As Long, n As Long
+    For backend = 0 To 1
+        Set T = NewIndexTable()
+        T.IndexBackend = backend
+        Set idx = T.GetHashIndex("Dept")
+        Set other = T.GetHashIndex("ID")
+        idx.TryGetRows "IT", rows
+        gen = T.Generation
+        T.Value(2, "Dept") = "HR"
+        LogShim.AssertEq "retained_index_row_generation", gen, T.Generation
+        rows.EnsureCurrent T
+        other.EnsureCurrent T
+        On Error Resume Next
+        Err.Clear
+        idx.EnsureCurrent T
+        n = Err.Number
+        On Error GoTo 0
+        LogShim.AssertEq "retained_index_stale", 9998, n
+        On Error Resume Next
+        Err.Clear
+        idx.TryGetRows "IT", rows
+        n = Err.Number
+        On Error GoTo 0
+        LogShim.AssertEq "retained_index_read_stale", 9998, n
+        LogShim.AssertEq "retained_index_rebuilt", 2, T.SelectRows("Dept", "HR").Count
+    Next backend
+End Sub

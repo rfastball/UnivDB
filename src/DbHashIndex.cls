@@ -53,3 +53,7 @@ End Function
 ' @desc 테이블을 받아 결속 세대와 일치 검증함, stale 시 9998 에러
 Public Sub EnsureCurrent(ByVal tbl As clsTable)
 End Sub
+
+' @desc 캐시에서 폐기된 인덱스를 무효화함, 이후 사용 시 9998 에러
+Public Sub Invalidate()
+End Sub
