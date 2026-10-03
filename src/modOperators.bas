@@ -1,5 +1,7 @@
 Attribute VB_Name = "modOperators"
 ' @desc 연산자/집계함수 문자열 화이트리스트 검증 담당
+' SPDX-License-Identifier: MIT
+' Copyright (c) 2026 JM - see LICENSE
 Option Explicit
 
 ' 검증 계약 (audit 2026-07-10, V1/V6): 연산자/집계함수 문자열을 받는 모든 표면은

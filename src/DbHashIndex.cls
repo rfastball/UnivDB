@@ -8,6 +8,8 @@ Attribute VB_Creatable = False
 Attribute VB_PredeclaredId = False
 Attribute VB_Exposed = True
 ' @desc 해시 인덱스 백엔드 교체용 인터페이스 표면 담당
+' SPDX-License-Identifier: MIT
+' Copyright (c) 2026 JM - see LICENSE
 Option Explicit
 
 ' 인터페이스 계약 (구현: DictHashIndex, 후속 후보: CoreHashIndex)

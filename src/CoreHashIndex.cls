@@ -9,6 +9,8 @@ Attribute VB_PredeclaredId = False
 Attribute VB_Exposed = True
 ' @desc FastHash 엔진 기반 실험 해시 인덱스 백엔드 담당
 ' @depends DbHashIndex, modDbContract, modIndexKey, Core_clsFastHash, Core_modMemCore
+' SPDX-License-Identifier: MIT
+' Copyright (c) 2026 JM - see LICENSE
 Option Explicit
 
 Implements DbHashIndex

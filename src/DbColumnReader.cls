@@ -9,6 +9,8 @@ Attribute VB_PredeclaredId = False
 Attribute VB_Exposed = True
 ' @desc 단일 컬럼 값을 세대 결속 1D 표면으로 제공 담당
 ' @depends modDbContract
+' SPDX-License-Identifier: MIT
+' Copyright (c) 2026 JM - see LICENSE
 Option Explicit
 
 ' 컬럼 값 물질화 사본 (rowId 인덱스: 헤더행+1 .. RowCount, 데이터 행 없으면 Empty)

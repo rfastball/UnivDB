@@ -1,6 +1,8 @@
 Attribute VB_Name = "TestDumpLeadingZero"
 ' @desc DumpToSheet/BuildToSheet 텍스트 가드(leading-zero/긴코드) + 기본 선클리어 계약 회귀 검증 담당
 ' @depends UnivDB
+' SPDX-License-Identifier: MIT
+' Copyright (c) 2026 JM - see LICENSE
 Option Explicit
 
 ' clsTable.DumpToSheet는 숫자꼴 문자열("007", 긴 코드)을 General 셀에 .Value2로 쓰면

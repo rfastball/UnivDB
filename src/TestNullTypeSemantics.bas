@@ -1,6 +1,8 @@
 Attribute VB_Name = "TestNullTypeSemantics"
 ' @desc NULL/타입 의미론 현행 동작 회귀 고정 담당
 ' @depends UnivDB, LogShim
+' SPDX-License-Identifier: MIT
+' Copyright (c) 2026 JM - see LICENSE
 Option Explicit
 
 ' 비결정 D Phase D0 (docs/tasks/2026-07-08_null_type_semantics.md):

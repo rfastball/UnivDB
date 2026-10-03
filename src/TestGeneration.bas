@@ -1,6 +1,8 @@
 Attribute VB_Name = "TestGeneration"
 ' @desc 세대 계약(구조 변경 bump, stale 파생 구조 fail-fast) 검증 담당
 ' @depends modDbContract, UnivDB
+' SPDX-License-Identifier: MIT
+' Copyright (c) 2026 JM - see LICENSE
 Option Explicit
 
 ' Phase 6.3 tests for the table generation contract.

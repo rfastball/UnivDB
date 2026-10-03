@@ -1,4 +1,6 @@
 Attribute VB_Name = "TestRowSet"
+' SPDX-License-Identifier: MIT
+' Copyright (c) 2026 JM - see LICENSE
 Option Explicit
 
 Public Sub Test_RowSet_FromAllRows_ToArray_Order()

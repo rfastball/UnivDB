@@ -1,5 +1,7 @@
 Attribute VB_Name = "modIndexKey"
 ' @desc 해시 인덱스 백엔드 공통 키 정규화 담당
+' SPDX-License-Identifier: MIT
+' Copyright (c) 2026 JM - see LICENSE
 Option Explicit
 
 ' 백엔드 독립 키 계약 (모든 DbHashIndex 구현이 공유):

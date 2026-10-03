@@ -1,6 +1,8 @@
 Attribute VB_Name = "Core_modMemCore"
 ' @desc 메모리 API 선언과 안전 래퍼 제공 담당
 ' @depends Core_Enums
+' SPDX-License-Identifier: MIT
+' Copyright (c) 2026 JM - see LICENSE
 Option Explicit
 
 ' 프로젝트에서 유일하게 메모리 API를 선언/실행하는 통제 모듈.

@@ -9,6 +9,8 @@ Attribute VB_PredeclaredId = False
 Attribute VB_Exposed = True
 ' @desc 인덱스 rowId 페이로드를 CSR 평탄 배열로 보관 담당
 ' @depends DbRowList
+' SPDX-License-Identifier: MIT
+' Copyright (c) 2026 JM - see LICENSE
 Option Explicit
 
 ' 키당 DbRowList 객체(수만 개 개별 소멸이 teardown 비용원)를 공유 Long 배열로 대체하는

@@ -1,4 +1,6 @@
 Attribute VB_Name = "UnivDB"
+' SPDX-License-Identifier: MIT
+' Copyright (c) 2026 JM - see LICENSE
 Option Explicit
 
 ' [Internal] 테이블 저장소 (Key: 테이블명, Value: clsTable 객체)
@@ -174,4 +176,3 @@ Public Sub ClearDB()
         Set m_dicTables = Nothing
     End If
 End Sub
-

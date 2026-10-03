@@ -1,6 +1,8 @@
 Attribute VB_Name = "TestHashIndex"
 ' @desc 해시 인덱스 백엔드 동치(키 의미론, 커서, 쿼리 경로) 검증 담당
 ' @depends modIndexKey, modDbContract, UnivDB
+' SPDX-License-Identifier: MIT
+' Copyright (c) 2026 JM - see LICENSE
 Option Explicit
 
 ' 백엔드 파라메트릭 스위트: 동일 케이스를 DictHashIndex/CoreHashIndex 양쪽에 실행해

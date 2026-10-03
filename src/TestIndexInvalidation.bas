@@ -1,4 +1,6 @@
 Attribute VB_Name = "TestIndexInvalidation"
+' SPDX-License-Identifier: MIT
+' Copyright (c) 2026 JM - see LICENSE
 Option Explicit
 
 ' Phase 1 tests for stale index prevention.

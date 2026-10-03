@@ -1,4 +1,6 @@
 Attribute VB_Name = "TestBaseline"
+' SPDX-License-Identifier: MIT
+' Copyright (c) 2026 JM - see LICENSE
 Option Explicit
 
 ' Phase 0 baseline tests discovered by the VBA harness.

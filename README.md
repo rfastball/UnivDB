@@ -2,7 +2,7 @@
 
 > Excel VBA를 위한 인메모리 관계 대수 엔진 — 테이블 위에서 조회·조인·집계·보고를 메서드 체인으로.
 
-![version](https://img.shields.io/badge/version-v2.8.0-blue) ![platform](https://img.shields.io/badge/platform-Excel%20VBA-217346) ![language](https://img.shields.io/badge/language-VBA-lightgrey)
+![version](https://img.shields.io/badge/version-v2.8.1-blue) ![platform](https://img.shields.io/badge/platform-Excel%20VBA-217346) ![language](https://img.shields.io/badge/language-VBA-lightgrey)
 
 UnivDB는 Excel 배치 워크로드(1만~10만 행 규모의 **적재 → 변환 → 보고**)를 위한 인메모리 관계 대수 엔진입니다. 시트 데이터를 메모리로 올려 선택·투영·조인·집합연산·집계한 뒤 시트로 되돌립니다. SQL이 아니라 **메서드 체인**으로 쓰고, 셀 단위 루프 대신 배열 기반으로 동작해 수만 행에서도 빠릅니다.
 
@@ -144,7 +144,8 @@ rowID는 **특정 테이블의 특정 세대 안에서만 유효한 물리 행 �
 
 ## 설치
 
-배포 라이브러리(`UnivDB.xlam`)를 참조로 추가해 사용합니다.
+[GitHub Releases](https://github.com/rfastball/UnivDB/releases/latest)의 ZIP을 내려받아 압축을 풉니다.
+라이선스와 문서를 함께 보관하고, 배포 라이브러리(`UnivDB.xlam`)를 참조로 추가해 사용합니다.
 
 1. `UnivDB.xlam`을 고정 경로에 둡니다.
 2. 내 워크북 VBE(Alt+F11) → **도구 > 참조 > 찾아보기**로 선택해 체크합니다.
@@ -189,4 +190,17 @@ src/
 
 ## 상태
 
-버전 **v2.8.0**. 공개 API는 안정적이며 레거시 이름은 영구 유지됩니다(어휘 지도는 Reference 6.7절 참조). 소스는 `src/*.bas`, `src/*.cls`가 진실이고, `UnivDB.xlsm`은 사람이 관리하는 런타임 아티팩트입니다.
+버전 **v2.8.1**. 공개 API는 안정적이며 레거시 이름은 영구 유지됩니다(어휘 지도는 Reference 6.7절 참조). 소스는 `src/*.bas`, `src/*.cls`가 진실이고, `UnivDB.xlsm`은 사람이 관리하는 런타임 아티팩트입니다.
+
+---
+
+## 라이선스
+
+[MIT License](LICENSE) © 2026 JM
+
+자유롭게 사용·수정·재배포(상업적 이용 포함)할 수 있습니다. 재배포 시 저작권 표시와
+라이선스 전문을 함께 포함해야 하며, 소프트웨어는 어떠한 보증 없이 "있는 그대로" 제공됩니다.
+
+- 각 VBA 모듈 헤더의 `SPDX-License-Identifier: MIT`는 모듈 단위 export·복사 시에도 라이선스를 식별합니다.
+- `src/LogShim.bas`는 vbaflow에서 벤더링한 사본입니다. vbaflow의 MIT 라이선스를 따르며 저작권자는 동일한 JM입니다.
+- 배포 ZIP에는 `UnivDB.xlam`, 사용자 가이드, API 명세, MIT 라이선스 전문을 포함합니다.

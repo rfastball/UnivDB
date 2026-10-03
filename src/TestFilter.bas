@@ -1,4 +1,6 @@
 Attribute VB_Name = "TestFilter"
+' SPDX-License-Identifier: MIT
+' Copyright (c) 2026 JM - see LICENSE
 Option Explicit
 
 ' ==============================================================================
@@ -124,4 +126,3 @@ Private Sub AssertEqual(ByVal actual As Variant, ByVal expected As Variant, ByVa
         Err.Raise 9999, "AssertEqual", "실패 [" & testName & "] -> 기대값: " & expected & " / 실제값: " & actual
     End If
 End Sub
-

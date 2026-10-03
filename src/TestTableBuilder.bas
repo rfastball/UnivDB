@@ -1,4 +1,6 @@
 Attribute VB_Name = "TestTableBuilder"
+' SPDX-License-Identifier: MIT
+' Copyright (c) 2026 JM - see LICENSE
 Option Explicit
 
 ' ==============================================================================
@@ -89,4 +91,3 @@ Private Sub Test_Facade_NewBuilder()
         Debug.Print "[OK] NewBuilder: 동적 테이블 완전 조립 성공"
     End If
 End Sub
-

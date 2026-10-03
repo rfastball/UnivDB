@@ -1,6 +1,8 @@
 Attribute VB_Name = "TestColumnReader"
 ' @desc 컬럼 reader 표면(값 패리티, stale fail-fast) 검증 담당
 ' @depends modDbContract, UnivDB
+' SPDX-License-Identifier: MIT
+' Copyright (c) 2026 JM - see LICENSE
 Option Explicit
 
 ' Phase 6.8 tests for the sealed column access surface.

@@ -11,6 +11,8 @@ Attribute VB_Exposed = True
 ' Class: clsReportBuilder
 ' 설명: UnivDB 기반의 리포트 생성 전용 빌더 (복잡한 로직 단순화)
 ' ==============================================================================
+' SPDX-License-Identifier: MIT
+' Copyright (c) 2026 JM - see LICENSE
 Option Explicit
 
 Private m_tWork As clsTable      ' 작업 중인 테이블
@@ -354,5 +356,3 @@ Public Sub BuildToSheet(ByVal ws As Worksheet, ByVal sAddr As String, Optional B
     
     Application.ScreenUpdating = True
 End Sub
-
-

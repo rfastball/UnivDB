@@ -1,5 +1,7 @@
 Attribute VB_Name = "Core_modNorm"
 ' @desc Variant 값을 안전한 문자열 키로 정규화
+' SPDX-License-Identifier: MIT
+' Copyright (c) 2026 JM - see LICENSE
 Option Explicit
 
 ' @desc Variant 값을 오류 없이 표시 문자열로 변환해 반환

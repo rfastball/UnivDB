@@ -1,6 +1,8 @@
 Attribute VB_Name = "TestCsrPayload"
 ' @desc CSR 페이로드 계약(누적/finalize/재적재/브리지) 검증 담당
 ' @depends LogShim
+' SPDX-License-Identifier: MIT
+' Copyright (c) 2026 JM - see LICENSE
 Option Explicit
 
 ' DbCsrPayload 단독 유닛 스위트. keyId는 백엔드가 1기반 밀집으로 부여한다는 전제를

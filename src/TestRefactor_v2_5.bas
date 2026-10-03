@@ -1,4 +1,6 @@
 Attribute VB_Name = "TestRefactor_v2_5"
+' SPDX-License-Identifier: MIT
+' Copyright (c) 2026 JM - see LICENSE
 Option Explicit
 
 ' ==============================================================================

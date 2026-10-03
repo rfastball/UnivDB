@@ -1,6 +1,8 @@
 Attribute VB_Name = "TestChainingSemantics"
 ' @desc 체이닝 API 조용한 실패 양식 회귀 고정 담당
 ' @depends UnivDB, LogShim
+' SPDX-License-Identifier: MIT
+' Copyright (c) 2026 JM - see LICENSE
 Option Explicit
 
 ' 체이닝 API 전수조사 (docs/tasks/2026-07-10_chaining_api_audit.md) Phase C0:

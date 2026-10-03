@@ -1,6 +1,8 @@
 Attribute VB_Name = "TestBenchDb"
 ' @desc DB 레이어 성능 baseline 측정 벤치마크 담당
 ' @depends UnivDB, modEngine, modIndexKey, LogShim
+' SPDX-License-Identifier: MIT
+' Copyright (c) 2026 JM - see LICENSE
 Option Explicit
 
 ' Phase 7 준비 벤치마크 스위트 (2026-07-05_next_direction.md 7.4 목록).
