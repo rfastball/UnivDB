@@ -5,7 +5,7 @@
 *.tmp
 ~$*
 
-# 에이전트/도구 인프라 (vbaflow 스킬, 워크트리 스냅샷 등). 추적 대상 아님.
+# 에이전트/도구 인프라 (vbaloop 스킬, 워크트리 스냅샷 등). 추적 대상 아님.
 .claude/
 
 # Binary Excel workbooks are human-managed runtime artifacts (churn every
@@ -25,7 +25,7 @@ releases/
 # (구) UnivCore Core_* 설치 산출물 gitignore 규칙은 폐기됨: UnivCore 동결 + UnivDB 원본화로
 # src/Core_* 는 이제 UnivDB의 1급 소스로 추적한다. (2026-07-10, CLAUDE.md "Core 커널" 참조)
 
-# vbaflow:managed:start
+# vbaloop:managed:start
 _dbg/
 dist/
-# vbaflow:managed:end
+# vbaloop:managed:end

@@ -1,24 +1,34 @@
 Attribute VB_Name = "LogShim"
-' @desc 디버그 로그와 테스트 어서션을 jsonl로 직접 기록 담당
+' @desc Writes debug logs and test assertions to jsonl
 Option Explicit
 
-' vbaflow 제공 self-contained 버전. 애드인 위임(_UnivDbg.xlam) 제거 (L-H10).
-' 경로: <워크북.Path>\_dbg\<워크북베이스명>.jsonl
-' 레코드 스키마: kind D/J/A/X (기존 유지). 기존 호출부 시그니처 무수정.
-' 기록은 진짜 append (Binary Access Read Write + LOF+1, L-H9).
+'============================================================
+' [vbaloop-managed vendored module] Do not edit. Not self-verifying.
+' If this shows up in diff/status/drift, it was not "my edit" -
+' vbaloop init refreshed it to the canonical copy. Verify outside the file:
+'   git diff              (against the committed copy)
+'   vbaloop init --check  (byte compare with the embedded canonical copy)
+' The canonical copy lives in vbaloop, not here. Once confirmed, commit as is.
+'============================================================
+
+' Self-contained version shipped by vbaloop. No add-in dependency.
+' Path: <Workbook.Path>\_dbg\<workbook base name>.jsonl
+' Record schema: kind D/J/A/X (unchanged). Existing call-site signatures unchanged.
+' Writes are true appends (Binary Access Read Write + LOF+1).
 
 Private Const DBG_FOLDER As String = "_dbg"
-' 롤링 누적 상한. Reset 시에만 오래된 앞줄부터 트림한다.
+' Rolling line cap. Trimmed oldest-first only on Reset.
 Private Const MAX_LINES As Long = 5000
 
-' 배포 무해화 스위치(설계 9.3). dist가 주입 텍스트에서만 True로 뒤집어 테스트/디버그 싱크를
-' no-op으로 만든다. 정본과 src는 항상 False(아티팩트는 빌드 산출물) - 직접 True로 두지 말 것.
-' 호출부(LogShim.LogD ...)는 그대로 남아 컴파일 안전, 런타임 비용은 상수 분기 1회.
-' 예외: 오류 계열 이벤트(IsErrorEvent)는 릴리스에서도 기록된다 - 현장 장애 진단 트레일 보존
-' (버그리포트 2026-07-10). LogD/AssertEq/Reset는 릴리스에서 전면 침묵.
+' Release neutralization switch (design 9.3). dist flips it to True only in the injected text,
+' turning the test/debug sinks into no-ops. Canonical copy and src are always False (the
+' artifact is a build output) - never set it to True by hand.
+' Call sites (LogShim.LogD ...) stay in place and still compile; runtime cost is one constant branch.
+' Exception: error-class events (IsErrorEvent) are still recorded in release builds to keep a
+' field diagnostic trail (bug report 2026-07-10). LogD/AssertEq/Reset are fully silent in release.
 Private Const IS_RELEASE As Boolean = False
 
-' @desc level과 msg를 D 레코드로 기록함
+' @desc Records level and msg as a D record
 Public Sub LogD(level As String, msg As String)
     If IS_RELEASE Then Exit Sub
     On Error GoTo Done
@@ -27,7 +37,7 @@ Public Sub LogD(level As String, msg As String)
 Done:
 End Sub
 
-' @desc eventName과 dataJson을 J 레코드로 기록함
+' @desc Records eventName and dataJson as a J record
 Public Sub LogJ(eventName As String, dataJson As String)
     If IS_RELEASE And Not IsErrorEvent(eventName) Then Exit Sub
     On Error GoTo Done
@@ -38,7 +48,7 @@ Public Sub LogJ(eventName As String, dataJson As String)
 Done:
 End Sub
 
-' @desc 이벤트명과 키/값 배열을 JSON으로 조립해 LogJ로 기록함
+' @desc Builds JSON from event name and key/value arrays, records via LogJ
 Public Sub LogEvent(eventName As String, keys As Variant, vals As Variant)
     If IS_RELEASE And Not IsErrorEvent(eventName) Then Exit Sub
     On Error GoTo Done
@@ -53,7 +63,7 @@ Public Sub LogEvent(eventName As String, keys As Variant, vals As Variant)
 Done:
 End Sub
 
-' @desc 단언 결과를 A 레코드로 기록함, 실패해도 raise하지 않음
+' @desc Records an assertion result as an A record; never raises on failure
 Public Sub AssertEq(name As String, expected As Variant, actual As Variant)
     If IS_RELEASE Then Exit Sub
     On Error GoTo Done
@@ -66,7 +76,7 @@ Public Sub AssertEq(name As String, expected As Variant, actual As Variant)
 Done:
 End Sub
 
-' @desc jsonl을 상한까지 트림하고 reset 마커를 추가함
+' @desc Trims jsonl to the cap and appends a reset marker
 Public Sub Reset()
     If IS_RELEASE Then Exit Sub
     On Error GoTo Done
@@ -107,11 +117,11 @@ Public Sub Reset()
 Done:
 End Sub
 
-' === 내부 구현 ===
+' === Internals ===
 
-' @desc 릴리스에서도 기록해야 하는 오류 계열 이벤트인지 판정 (배포본 진단 트레일 보존)
+' @desc Whether an error-class event must be recorded even in release (field diagnostics)
 Private Function IsErrorEvent(eventName As String) As Boolean
-    ' 운용 오류 계열만 화이트리스트. run_start/run_end는 필요 시 여기에 추가 가능.
+    ' Whitelist of operational error events only. Add run_start/run_end here if needed.
     Select Case eventName
         Case "cmd_error", "fatal_error", "param_guard"
             IsErrorEvent = True
@@ -119,7 +129,7 @@ Private Function IsErrorEvent(eventName As String) As Boolean
 End Function
 
 Private Function LogPath() As String
-    ' 미저장 워크북(Path 없음)은 조용히 무시
+    ' Unsaved workbook (no Path): silently ignored
     If LenB(ThisWorkbook.Path) = 0 Then Exit Function
     LogPath = ThisWorkbook.Path & "\" & DBG_FOLDER & "\" & BaseName(ThisWorkbook.Name) & ".jsonl"
 End Function
@@ -152,7 +162,7 @@ Private Sub AppendLine(line As String)
 
     Dim pos As Long
     pos = LOF(f) + 1
-    ' 외부 도구가 개행 없이 끝낸 파일에 한 줄로 붙는 것 방지
+    ' Avoid gluing onto the last line when an external tool left no trailing newline
     If pos > 1 Then
         Dim lastByte As Byte
         Get #f, pos - 1, lastByte
@@ -185,7 +195,7 @@ Private Function Utf8Bytes(s As String) As Byte()
     t.WriteText s
     t.Position = 0
     t.Type = 1
-    t.Position = 3 ' UTF-8 BOM 3바이트 스킵
+    t.Position = 3 ' skip the 3-byte UTF-8 BOM
     Utf8Bytes = t.Read
     t.Close
 End Function
@@ -217,7 +227,7 @@ Private Sub WriteFileUtf8(path As String, content As String)
     Set b = CreateObject("ADODB.Stream")
     b.Type = 1
     b.Open
-    t.Position = 3 ' UTF-8 BOM 3바이트 스킵
+    t.Position = 3 ' skip the 3-byte UTF-8 BOM
     t.CopyTo b
     t.Close
     b.SaveToFile path, 2 ' adSaveCreateOverWrite
@@ -230,7 +240,7 @@ Private Function NowTimestamp() As String
     NowTimestamp = Format$(Now, "yyyy-mm-dd hh:nn:ss") & "." & Format$(ms, "000")
 End Function
 
-' @desc 값 타입별 JSON 표현 생성 (문자열만 escape, 숫자/불린은 raw)
+' @desc JSON representation by value type (escape strings only; numbers/booleans raw)
 Private Function JsonVal(v As Variant) As String
     Select Case VarType(v)
         Case vbBoolean
