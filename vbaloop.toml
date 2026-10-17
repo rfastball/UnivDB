@@ -11,3 +11,7 @@ root = "src"
 [dist]
 version = "2.8.1"                 # UnivDB_Reference.md 버전과 동기
 exclude = ["Test*", "SmokeTest"]  # 테스트 모듈 제외 (LogShim은 dist가 무해화 - 제외 금지)
+
+[vbaloop]
+# 관리 파일을 마지막으로 쓴 vbaloop 버전. vbaloop init이 기록한다 - 직접 수정 금지
+managed_by = "0.1.0"
