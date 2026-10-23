@@ -122,6 +122,9 @@ UnivDB.Query("Emp") _
 .ConvertDates(Col1, Col2, ...)                    ' 텍스트→날짜 변환
 ```
 
+`FillFromMap`은 원천·대상 컬럼을 복사와 행 순회 전에 검증하며, 없는 컬럼이면 데이터 행이 없어도
+`Err 9999`로 실패합니다. 실제 `Empty` 셀만 기본값(생략 시 빈 문자열)으로 대체합니다.
+
 ### Filter & Update
 ```vb
 .Keep(Col, Op, Val)                                ' 조건 행 유지 (canonical, Exclude와 대칭)
@@ -203,6 +206,13 @@ UnivDB.Report("SalesData") _
 Set tTop = T.GroupBy("Dept", "Amt:SUM").OrderBy("Amt_SUM", True)
 T.AddColumn("Bonus", 0).Compute("Total", "Amt", "+", "Bonus").OrderBy "Total", True
 ```
+
+`UpsertFrom`과 `UnivDB.Upsert`는 대상에 쓰기 전에 소스의 중복 키를 `Err 9999`로 거부합니다.
+오류에는 키·키 컬럼·중복된 소스 행 번호(헤더 포함)가 표시되며, 대상 값·행 수·세대는 변경하지 않습니다.
+중복 판정은 인덱스와 같은 정규화 및 대소문자 무시 규칙을 사용합니다
+(숫자 42와 문자열 "42", `Empty`와 빈 문자열, Date와 대응 ISO 문자열은 같은 키).
+`Error` 셀은 비교 가능한 키가 아니므로 중복 검사에서 제외하며, 기존처럼 신규 행으로 추가됩니다.
+대상에 이미 중복 키가 있으면 첫 번째 행만 갱신하는 기존 동작은 유지됩니다.
 
 ### Properties
 ```vb

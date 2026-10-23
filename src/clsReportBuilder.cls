@@ -110,6 +110,8 @@ End Function
 
 ' [5] 매핑 값 채우기 (Map Value)
 Public Function FillFromMap(ByVal sTargetCol As String, ByVal sSrcCol As String, Optional ByVal vDefault As Variant = "") As clsReportBuilder
+    m_tWork.ColumnIndex sSrcCol
+    m_tWork.ColumnIndex sTargetCol
     EnsureSafeCopy ' 데이터 값 변경 전 복사
     Dim i As Long
     Dim vVal As Variant

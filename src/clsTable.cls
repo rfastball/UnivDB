@@ -1078,6 +1078,24 @@ Public Function UpsertFrom(ByVal tSource As clsTable, ByVal sKeyCol As String) A
     Set idxKey = Me.GetHashIndex(sKeyCol)
     If idxKey Is Nothing Then Err.Raise 9999, , "Upsert Error: Target table missing key column"
 
+    ' Validate the full source before any in-place update; use the index key contract.
+    Dim seenKeys As Object, normalizedKey As String
+    Set seenKeys = CreateObject("Scripting.Dictionary")
+    seenKeys.CompareMode = vbTextCompare
+    For lSourceRow = 2 To tSource.RowCount
+        vKey = vSourceData(lSourceRow, lKeyColSource)
+        If Not IsError(vKey) Then
+            normalizedKey = modIndexKey.NormalizeIndexKey(vKey)
+            If seenKeys.exists(normalizedKey) Then
+                Err.Raise 9999, "clsTable.UpsertFrom", _
+                    "Duplicate source key [" & normalizedKey & "] in column [" & sKeyCol & _
+                    "] at rows " & seenKeys(normalizedKey) & " and " & lSourceRow
+            End If
+            seenKeys.Add normalizedKey, lSourceRow
+        End If
+    Next lSourceRow
+    Set seenKeys = Nothing
+
     Set colNewRows = New Collection
 
     ' 3. Source 데이터 순회 및 분류 (Update vs Insert)

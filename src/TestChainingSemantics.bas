@@ -729,3 +729,123 @@ Public Sub Test_Chain_UpdateValidatesAllColumns()
         LogShim.AssertEq "update_no_partial_write", 500, T.Value(2, "Amt")
     Next emptyFirst
 End Sub
+
+' @desc 매핑 열 오타를 빈 테이블에서도 복사 전에 거부함
+Public Sub Test_Chain_FillFromMapValidatesBeforeCopy()
+    Dim T As clsTable, report As clsReportBuilder, result As clsTable
+    Dim data As Variant, dataRows As Long, badTarget As Long, n As Long
+    Dim src As String, dst As String, label As String
+
+    For dataRows = 0 To 1
+        ReDim data(1 To dataRows + 1, 1 To 2)
+        data(1, 1) = "Src": data(1, 2) = "Dst"
+        If dataRows = 1 Then
+            data(2, 1) = 10: data(2, 2) = 99
+        End If
+        For badTarget = 0 To 1
+            Set T = UnivDB.CreateTable()
+            T.LoadFromArray data
+            Set report = UnivDB.Report(T)
+            src = "Src": dst = "Dst"
+            If badTarget = 0 Then src = "Typo" Else dst = "Typo"
+            label = "fill_invalid_" & dataRows & "_" & badTarget
+            On Error Resume Next
+            Err.Clear
+            report.FillFromMap dst, src
+            n = Err.Number
+            On Error GoTo 0
+            LogShim.AssertEq label & "_errno", 9999, n
+            Set result = report.ToTable()
+            LogShim.AssertEq label & "_no_copy", True, result Is T
+            If dataRows = 1 Then LogShim.AssertEq label & "_unchanged", 99, result.Value(2, "Dst")
+        Next badTarget
+    Next dataRows
+End Sub
+
+' @desc 정상 매핑은 Empty에만 기본값을 적용하고 원본을 보존함
+Public Sub Test_Chain_FillFromMapDefaultsAndCopy()
+    Dim T As clsTable, result As clsTable
+    Dim data(1 To 5, 1 To 2) As Variant, i As Long
+    data(1, 1) = "Src": data(1, 2) = "Dst"
+    data(2, 1) = DateSerial(2026, 10, 23)
+    data(3, 1) = Empty
+    data(4, 1) = ""
+    data(5, 1) = 0
+    For i = 2 To 5
+        data(i, 2) = "original"
+    Next i
+    Set T = UnivDB.CreateTable()
+    T.LoadFromArray data
+    Set result = UnivDB.Report(T).FillFromMap(" dst ", " sRC ", "fallback").ToTable()
+    LogShim.AssertEq "fill_valid_copy", False, result Is T
+    LogShim.AssertEq "fill_date", data(2, 1), result.Value(2, "Dst")
+    LogShim.AssertEq "fill_empty_default", "fallback", result.Value(3, "Dst")
+    LogShim.AssertEq "fill_string_not_empty", "", result.Value(4, "Dst")
+    LogShim.AssertEq "fill_zero_not_empty", 0, result.Value(5, "Dst")
+    For i = 2 To 5
+        LogShim.AssertEq "fill_source_preserved_" & i, "original", T.Value(i, "Dst")
+    Next i
+    Set result = UnivDB.Report(T).FillFromMap("Dst", "Src").ToTable()
+    LogShim.AssertEq "fill_omitted_default", "", result.Value(3, "Dst")
+End Sub
+
+' @desc 소스 중복 키를 정규화 기준으로 거부하고 부분 쓰기를 방지함
+Public Sub Test_Chain_UpsertRejectsDuplicateSourceBeforeWrite()
+    Dim T As clsTable, source As clsTable, result As clsTable
+    Dim idx As DbHashIndex, pairs As Variant, pair As Variant
+    Dim targetData(1 To 3, 1 To 2) As Variant
+    Dim sourceData(1 To 5, 1 To 2) As Variant
+    Dim existing As Long, caseNo As Long, n As Long, gen As Long, label As String
+
+    pairs = Array(Array("A", "A"), Array("A", "a"), Array(42, "42"), _
+                  Array(Empty, ""), Array(DateSerial(2026, 10, 23), "2026-10-23"))
+    targetData(1, 1) = "ID": targetData(1, 2) = "Val"
+    targetData(2, 1) = "KEEP": targetData(2, 2) = 1
+    targetData(3, 2) = 2
+    sourceData(1, 1) = "ID": sourceData(1, 2) = "Val"
+    sourceData(2, 1) = "KEEP": sourceData(2, 2) = 99
+    sourceData(3, 1) = "NEW": sourceData(3, 2) = 88
+    sourceData(4, 2) = 10: sourceData(5, 2) = 20
+
+    For caseNo = LBound(pairs) To UBound(pairs)
+        pair = pairs(caseNo)
+        sourceData(4, 1) = pair(0): sourceData(5, 1) = pair(1)
+        Set source = UnivDB.CreateTable()
+        source.LoadFromArray sourceData
+        For existing = 0 To 1
+            targetData(3, 1) = "OTHER"
+            If existing = 1 Then targetData(3, 1) = pair(0)
+            Set T = UnivDB.CreateTable()
+            T.LoadFromArray targetData
+            Set idx = T.GetHashIndex("Val")
+            gen = T.Generation
+            label = "upsert_duplicate_" & caseNo & "_" & existing
+            On Error Resume Next
+            Err.Clear
+            UnivDB.Upsert T, source, "ID"
+            n = Err.Number
+            On Error GoTo 0
+            LogShim.AssertEq label & "_errno", 9999, n
+            LogShim.AssertEq label & "_no_update", 1, T.Value(2, "Val")
+            LogShim.AssertEq label & "_other_unchanged", 2, T.Value(3, "Val")
+            LogShim.AssertEq label & "_no_insert", 3, T.RowCount
+            LogShim.AssertEq label & "_generation", gen, T.Generation
+            On Error Resume Next
+            Err.Clear
+            idx.EnsureCurrent T
+            n = Err.Number
+            On Error GoTo 0
+            LogShim.AssertEq label & "_index_current", 0, n
+        Next existing
+    Next caseNo
+
+    ' Unique keys still update/insert; Error cells are not comparable keys.
+    sourceData(4, 1) = CVErr(xlErrNA): sourceData(5, 1) = CVErr(xlErrNA)
+    source.LoadFromArray sourceData
+    Set result = T.UpsertFrom(source, "ID")
+    LogShim.AssertEq "upsert_valid_chain", True, result Is T
+    LogShim.AssertEq "upsert_valid_update", 99, T.Value(2, "Val")
+    LogShim.AssertEq "upsert_valid_insert", 6, T.RowCount
+    LogShim.AssertEq "upsert_valid_new_value", 88, T.Value(4, "Val")
+    LogShim.AssertEq "upsert_error_key_preserved", True, IsError(T.Value(5, "ID"))
+End Sub
