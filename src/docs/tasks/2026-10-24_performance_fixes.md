@@ -198,3 +198,8 @@ tests-after.json, validation.json. 원래 baseline 파일은 보존했다.
 - 테스트/진단의 불필요한 중복 증거를 추가하지 않고 기존 benchmark/fixture를 재사용했다.
 - 버전은 공개 API 추가에 맞춰 Reference와 vbaloop.toml 모두 2.9.0.
   로컬 dist 컴파일 결과는 fix-02/distribution.json에 보존한다. 외부 게시/배포는 범위 밖이다.
+
+로컬 배포 빌드 완료: `dist/UnivDB-2.9.0.xlam`, 코드 revision `c380339`.
+VBE compile=compiled, 테스트 모듈 20개 제외, LogShim release 모드 전환,
+warnings 없음. SHA-256은 fix-02/distribution-sha256.json에 기록했다.
+별도 설치 또는 외부 업로드는 수행하지 않았다.
