@@ -126,7 +126,7 @@ End Function
 Public Sub Test_ColumnReader_ValueChanges_FailFast()
     Dim T As clsTable, rdr As DbColumnReader, other As DbColumnReader, fresh As DbColumnReader
     Dim mutation As Long, gen As Long, n As Long
-    For mutation = 0 To 3
+    For mutation = 0 To 4
         Set T = NewReaderTable()
         Set rdr = T.GetColumnReader("Score")
         Set other = T.GetColumnReader("Dept")
@@ -136,6 +136,7 @@ Public Sub Test_ColumnReader_ValueChanges_FailFast()
             Case 1: T.UpdateBatch "Score", 9999, "ID", 1
             Case 2: T.CopyColumn "ID", "Score"
             Case 3: T.Compute "Score", "ID", "*", 2
+            Case 4: UnivDB.Query(T).Where("ID", 1).SetVal("Score", 9999).Update
         End Select
         LogShim.AssertEq "rdr_value_generation_" & mutation, gen, T.Generation
         LogShim.AssertEq "rdr_snapshot_preserved_" & mutation, 10, rdr.ValueAt(2)

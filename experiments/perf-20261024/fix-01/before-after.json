@@ -1,0 +1,24 @@
+[
+  {
+    "ts": "2026-10-24 15:37:47.574",
+    "kind": "J",
+    "event": "bench_db_query_writes_or",
+    "data": {
+      "rows": 100000,
+      "arms": 100,
+      "update_warm_ms": 161.2599,
+      "numeric_or_ms": 1432.9024
+    }
+  },
+  {
+    "ts": "2026-10-24 15:39:48.891",
+    "kind": "J",
+    "event": "bench_db_query_writes_or",
+    "data": {
+      "rows": 100000,
+      "arms": 100,
+      "update_warm_ms": 21.5377,
+      "numeric_or_ms": 63.2213
+    }
+  }
+]

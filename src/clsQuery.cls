@@ -230,7 +230,7 @@ End Function
 '   개별 arm 인자 외에 arm 배열 1개(동적 목록, KeepAny 위임)도 허용 - 재귀 평탄화.
 ' 검증: 전체 arm을 평가 전에 문장 수준 검증 (audit F3 교훈 - 부분 축소 없이 9999).
 '   Filter와 동일하게 후보 0행 early-out보다 검증이 앞선다.
-' 성능: arm당 컬럼 사본 1회 (Filter N회 체인과 동일 비용 프로파일).
+' 성능: 동일 열 숫자 동등 arm은 집합 조회 1회 스캔, 그 외는 arm별 평가.
 ' ==============================================================================
 
 ' @desc 조건 arm들 받아 하나라도 맞는 행 유지 (OR 그룹, 체인 나머지와는 AND)
@@ -243,6 +243,7 @@ Public Function FilterAny(ParamArray vArms() As Variant) As clsQuery
     Dim vCandidates As Variant
     Dim setUnion As DbRowSet
     Dim setArm As DbRowSet
+    Dim bNumericSet As Boolean, lColumn As Long
 
     ' 1. arm 평탄화 (개별 Array 인자 / arm 배열 혼용 허용)
     If UBound(vArms) < LBound(vArms) Then
@@ -258,6 +259,7 @@ Public Function FilterAny(ParamArray vArms() As Variant) As clsQuery
 
     ' 2. 문장 수준 검증 - 전체 arm을 평가 앞에서 (미지 연산자/컬럼 오타/비숫자 비교값)
     ReDim sCols(1 To lArmCount): ReDim sOps(1 To lArmCount): ReDim vVals(1 To lArmCount)
+    bNumericSet = (lArmCount > 1)
     k = 0
     For Each vArm In colArms
         k = k + 1
@@ -273,6 +275,8 @@ Public Function FilterAny(ParamArray vArms() As Variant) As clsQuery
         vVals(k) = vArm(lb + 2)
 
         ValidateFilterArm sCols(k), sOps(k), vVals(k), "clsQuery.FilterAny"
+        If k = 1 Then lColumn = m_SourceTable.ColumnIndex(sCols(k))
+        If sOps(k) <> "=" Or m_SourceTable.ColumnIndex(sCols(k)) <> lColumn Then bNumericSet = False
     Next vArm
 
     ' 3. 실행: 같은 후보 스냅샷에 arm별 독립 스캔 -> 합집합 (중복 행은 비트맵이 무계수)
@@ -281,18 +285,42 @@ Public Function FilterAny(ParamArray vArms() As Variant) As clsQuery
     If m_setCandidates.Count = 0 Then Set FilterAny = Me: Exit Function
 
     vCandidates = m_setCandidates.ToArray
-    For k = 1 To lArmCount
-        Set setArm = EvaluateArm(sCols(k), sOps(k), vVals(k), vCandidates, "clsQuery.FilterAny")
-        If setUnion Is Nothing Then
-            Set setUnion = setArm
-        Else
-            setUnion.UnionWith setArm
-        End If
-    Next k
+    If bNumericSet Then
+        Set setUnion = EvaluateNumericSet(sCols(1), vVals, vCandidates)
+    Else
+        For k = 1 To lArmCount
+            Set setArm = EvaluateArm(sCols(k), sOps(k), vVals(k), vCandidates, "clsQuery.FilterAny")
+            If setUnion Is Nothing Then
+                Set setUnion = setArm
+            Else
+                setUnion.UnionWith setArm
+            End If
+        Next k
+    End If
 
     Set m_setCandidates = setUnion
     m_bIsFirstCondition = False
     Set FilterAny = Me
+End Function
+
+' 숫자 비교는 인덱스 문자열 키가 아닌 EvaluateArm과 같은 CDbl로 맞춘다.
+Private Function EvaluateNumericSet(ByVal sColumn As String, ByRef values() As Variant, _
+                                    ByRef candidates As Variant) As DbRowSet
+    Dim targets As Object, survivors As New DbRowSet
+    Dim column As Variant, cell As Variant, i As Long
+    Set targets = CreateObject("Scripting.Dictionary")
+    For i = LBound(values) To UBound(values)
+        targets(CDbl(values(i))) = True
+    Next i
+    column = m_SourceTable.GetColumnReader(sColumn).Values
+    survivors.BindTo m_SourceTable
+    For i = LBound(candidates) To UBound(candidates)
+        cell = column(candidates(i))
+        If Not IsEmpty(cell) And IsNumeric(cell) Then
+            If targets.exists(CDbl(cell)) Then survivors.AddRow candidates(i)
+        End If
+    Next i
+    Set EvaluateNumericSet = survivors
 End Function
 
 ' arm 인자 재귀 평탄화: 첫 요소가 배열이면 arm 목록으로 보고 내부로 재귀
@@ -482,8 +510,7 @@ End Function
 ' 반환: 변경된 행의 개수
 ' ------------------------------------------------------------------------------
 Public Function Update() As Long
-    Dim vRowID As Variant, vCol As Variant
-    Dim lCount As Long
+    Dim vCol As Variant
 
     EnsureCandidatesCurrent
     If m_setCandidates Is Nothing Then InitializeAllRows
@@ -492,14 +519,7 @@ Public Function Update() As Long
     Next vCol
     If m_dicUpdates.Count = 0 Or m_setCandidates.Count = 0 Then Update = 0: Exit Function
     
-    For Each vRowID In m_setCandidates.ToArray
-        For Each vCol In m_dicUpdates
-            m_SourceTable.Value(CLng(vRowID), CStr(vCol)) = m_dicUpdates(vCol)
-        Next vCol
-        lCount = lCount + 1
-    Next vRowID
-    
-    Update = lCount
+    Update = m_SourceTable.UpdateRows(m_setCandidates, m_dicUpdates)
 End Function
 
 ' ------------------------------------------------------------------------------

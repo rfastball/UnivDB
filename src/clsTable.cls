@@ -1166,6 +1166,37 @@ Public Function UpsertFrom(ByVal tSource As clsTable, ByVal sKeyCol As String) A
     Set UpsertFrom = Me
 End Function
 
+' Query 전용: 세대/열/행을 선검증하고 변경 열만 한 번씩 무효화한다.
+Friend Function UpdateRows(ByVal rows As DbRowSet, ByVal updates As Object) As Long
+    Dim writes As Object, key As Variant, name As String, col As Long
+    Dim rowIds As Variant, rowId As Variant, value As Variant
+    rows.EnsureCurrent Me
+    Set writes = CreateObject("Scripting.Dictionary")
+    For Each key In updates
+        name = UCase$(Trim$(CStr(key)))
+        col = ColumnIndex(name)
+        writes(name) = updates(key)
+    Next key
+    If writes.Count = 0 Or rows.Count = 0 Then Exit Function
+    rowIds = rows.ToArray
+    For Each rowId In rowIds
+        If rowId <= m_lHeaderRowIndex Or rowId > m_lRowCount Then
+            Err.Raise 9999, "clsTable.UpdateRows", "Row out of range: " & rowId
+        End If
+    Next rowId
+    For Each key In writes
+        name = CStr(key)
+        col = ColumnIndex(name)
+        value = writes(key)
+        ' 쓰기 도중 오류가 나더라도 기존 인덱스/reader로 잘못 읽지 못하게 한다.
+        InvalidateIndexByColumnName name
+        For Each rowId In rowIds
+            m_vData(CLng(rowId), col) = value
+        Next rowId
+    Next key
+    UpdateRows = rows.Count
+End Function
+
 ' 8-2. Batch Update: 조건에 맞는 행의 특정 값을 일괄 변경
 ' 예: UpdateBatch "Status", "Inactive", "LastLogin", "< 2023-01-01" (현재는 Equal 조건만 지원)
 Public Function UpdateBatch(ByVal sSetCol As String, ByVal vSetVal As Variant, _

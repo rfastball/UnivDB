@@ -46,6 +46,9 @@ UnivDB.EditTable(TableName, KeyCol) -> clsTableBuilder ' 기존 테이블 스키
 > 3요소이고 연산자는 `Filter`와 같은 화이트리스트를 쓴다. 동일 컬럼 arm을 나열하면
 > SQL IN 의미론이 된다. arm 배열 하나(`FilterAny(vArmList)`)를 넘기는 동적 목록 형태도
 > 허용. 전체 arm이 평가 전에 문장 수준 검증된다 (arm 하나가 틀리면 부분 축소 없이 9999).
+> 동일 열의 숫자 `=` arm만 있는 그룹은 값들을 CDbl로 변환해 한 번 스캔한다.
+> 숫자 문자열/Boolean 비교, Empty·Error·Date·Null 제외, 기존 행 순서는 유지된다.
+> 문자 `IS`, 교차 컬럼, 혼합 연산자 그룹은 기존 arm별 평가를 사용한다.
 >
 > (v2.8.0 정정: 이전 문서의 `FilterIn`/`FilterNotIn`/`FilterLike`/`FilterNotLike`는
 > 구현된 적 없는 유령 표기였다 - IN은 `FilterAny`의 동일 컬럼 arm으로 표현한다.)
@@ -82,6 +85,29 @@ UnivDB.EditTable(TableName, KeyCol) -> clsTableBuilder ' 기존 테이블 스키
 .Update() -> Long             ' Where/Filter 조건 매칭 행 일괄 수정
 .Delete() -> Long
 ```
+
+`Update`는 모든 대상 컬럼을 먼저 검증하고 후보 행을 일괄 수정한다. 같은 실제 열을
+다른 대소문자/공백 표기로 여러 번 지정하면 기존처럼 마지막 값이 적용된다.
+변경 열의 인덱스와 컬럼 reader는 무효화되지만 행 세대와 후보 rowID는 유지된다.
+
+대량 입력에서 단건 `Insert`를 반복하면 매번 기존 테이블 전체를 복사한다.
+**고유 키 기준 병합**이 목적이면 기존 Builder로 행들을 모아 `UpsertFrom`을 한 번 호출한다:
+
+```vb
+Dim target As clsTable, batch As clsTableBuilder, delta As clsTable
+Set target = UnivDB.GetTable("Emp")
+Set batch = UnivDB.Builder("ID")
+batch.InitFromTable target                       ' 스키마만 복제, 기존 행은 가져오지 않음
+batch.Row("E1001").SetVal "Name", "Kim"
+batch.Row("E1002").SetVal "Name", "Lee"
+Set delta = batch.ToTable()                      ' 빌더는 소비되어 초기화됨
+target.UpsertFrom delta, "ID"                    ' 기존 키는 수정, 신규 키는 추가
+```
+
+Builder에서 같은 Row ID는 같은 행을 편집하며, InitFromTable로 가져온 열 중 설정하지 않은
+셀은 Empty다. 기존 키를 병합하면 그 Empty도 덮어쓰므로, 기존 행 수정에는 전체 행 값을
+준비해야 한다. 중복 키를 별도 행으로 보존하는 append에는 이 경로를 사용하지 않는다.
+키가 없는 단순 신규 테이블 구성은 배열을 한 번 `LoadFromArray`하는 경로를 사용한다.
 
 ### Example
 ```vb

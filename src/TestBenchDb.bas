@@ -470,6 +470,40 @@ End Sub
 ' 데이터 생성 헬퍼
 ' ==============================================================================
 
+' @desc 10만 행 Update와 동일 열 숫자 OR의 실행 비용을 기록함
+Public Sub Test_BenchDb_QueryWritesAndNumericOr()
+    Const NROWS As Long = 100000
+    Dim T As clsTable, source As clsTable, result As clsTable, q As clsQuery
+    Dim arms(0 To 99) As Variant, r As Long, i As Long, changed As Long
+    Dim msUpdate(0 To 2) As Double, msOr(0 To 2) As Double, elapsed As Double
+
+    Set source = BuildJoinTable(NROWS, 1000, 0)
+    For i = 0 To 99: arms(i) = Array("K", "=", i + 1): Next i
+    For r = -1 To 2
+        Set T = BuildJoinTable(NROWS, 2, 0)
+        T.GetHashIndex "K"
+        TicStart
+        changed = UnivDB.Query(T).Where("K", 1).SetVal("K", 3).Update()
+        elapsed = TicMs
+        If r >= 0 Then msUpdate(r) = elapsed
+        LogShim.AssertEq "bench_batch_update_count_" & r, NROWS \ 2, changed
+        LogShim.AssertEq "bench_batch_update_index_" & r, NROWS \ 2, T.SelectRows("K", 3).Count
+
+        TicStart
+        Set q = UnivDB.Query(source).FilterAny(arms)
+        elapsed = TicMs
+        If r >= 0 Then msOr(r) = elapsed
+        Set result = q.ToTable()
+        LogShim.AssertEq "bench_numeric_or_count_" & r, 10001, result.RowCount
+        LogShim.AssertEq "bench_numeric_or_first_" & r, 1, result.Value(2, "Val")
+        LogShim.AssertEq "bench_numeric_or_last_" & r, 99100, result.Value(result.RowCount, "Val")
+    Next r
+    LogShim.LogEvent "bench_db_query_writes_or", _
+        Array("rows", "arms", "update_warm_ms", "numeric_or_ms"), _
+        Array(NROWS, 100, Median3(msUpdate(0), msUpdate(1), msUpdate(2)), _
+              Median3(msOr(0), msOr(1), msOr(2)))
+End Sub
+
 Private Function GetBench20k() As clsTable
     If mT20k Is Nothing Then Set mT20k = BuildBenchTable(BENCH_ROWS)
     Set GetBench20k = mT20k

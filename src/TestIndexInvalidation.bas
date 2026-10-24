@@ -93,7 +93,8 @@ End Function
 ' 값 변경은 rowID 세대를 유지하되 보관된 인덱스의 현재성 검사는 실패한다.
 Public Sub Test_IndexInvalidation_RetainedIndex_Parametric()
     Dim T As clsTable, idx As DbHashIndex, other As DbHashIndex, rows As DbRowList
-    Dim backend As Long, gen As Long, n As Long
+    Dim backend As Long, gen As Long, n As Long, changed As Long
+    Dim labelIdx As DbHashIndex, q As clsQuery
     For backend = 0 To 1
         Set T = NewIndexTable()
         T.IndexBackend = backend
@@ -118,5 +119,34 @@ Public Sub Test_IndexInvalidation_RetainedIndex_Parametric()
         On Error GoTo 0
         LogShim.AssertEq "retained_index_read_stale", 9998, n
         LogShim.AssertEq "retained_index_rebuilt", 2, T.SelectRows("Dept", "HR").Count
+
+        Set T = NewIndexTable()
+        T.IndexBackend = backend
+        T.AddColumn "Label", "before"
+        Set idx = T.GetHashIndex("Dept")
+        Set labelIdx = T.GetHashIndex("Label")
+        Set other = T.GetHashIndex("ID")
+        Set q = UnivDB.Query(T).Where("Dept", "IT")
+        gen = T.Generation
+        changed = q.SetVal("Dept", "ignored").SetVal("Label", "after").SetVal(" dept ", "Sales").Update()
+        LogShim.AssertEq "query_batch_count", 2, changed
+        LogShim.AssertEq "query_batch_generation", gen, T.Generation
+        LogShim.AssertEq "query_batch_alias_last_wins", 2, T.SelectRows("Dept", "Sales").Count
+        LogShim.AssertEq "query_batch_second_column", 2, T.SelectRows("Label", "after").Count
+        LogShim.AssertEq "query_batch_unselected", "before", T.Value(4, "Label")
+        other.EnsureCurrent T
+        On Error Resume Next
+        Err.Clear
+        idx.EnsureCurrent T
+        n = Err.Number
+        On Error GoTo 0
+        LogShim.AssertEq "query_batch_first_index_stale", 9998, n
+        On Error Resume Next
+        Err.Clear
+        labelIdx.EnsureCurrent T
+        n = Err.Number
+        On Error GoTo 0
+        LogShim.AssertEq "query_batch_second_index_stale", 9998, n
+        LogShim.AssertEq "query_batch_candidates_reusable", 2, q.Update()
     Next backend
 End Sub

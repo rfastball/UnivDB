@@ -477,6 +477,8 @@ End Sub
 Public Sub Test_Chain_FilterAnySameColumnIn()
     Dim T As clsTable
     Dim tR As clsTable
+    Dim fallback As clsTable, data() As Variant, values As Variant, expected As Variant
+    Dim i As Long, seeded As Long
 
     Set T = NewOrGroupTable()
 
@@ -484,6 +486,33 @@ Public Sub Test_Chain_FilterAnySameColumnIn()
         .FilterAny(Array("Dept", "IS", "IT"), Array("Dept", "IS", "HR")) _
         .ToTable()
     LogShim.AssertEq "chain_c1_in_rows", 4, tR.RowCount
+
+    values = Array(Empty, CVErr(xlErrNA), DateSerial(2026, 1, 1), Null, False, _
+                   0, "0", -1, "001", CCur(1.5), CDec("9007199254740993"))
+    ReDim data(1 To UBound(values) + 2, 1 To 2)
+    data(1, 1) = "ID": data(1, 2) = "N"
+    For i = 0 To UBound(values)
+        data(i + 2, 1) = i: data(i + 2, 2) = values(i)
+    Next i
+    T.LoadFromArray data
+    For seeded = 0 To 1
+        ' ID=-1 arm은 비매칭이지만 교차 열 일반 경로를 강제한다.
+        Set tR = UnivDB.Query(T).Filter("ID", ">=", seeded * 7) _
+            .FilterAny(Array("N", "=", 0), Array(" n ", " = ", "1.0"), _
+                       Array("N", "=", 1.5), Array("N", "=", CCur(1)), _
+                       Array("N", "=", 9007199254740992#)).ToTable()
+        Set fallback = UnivDB.Query(T).Filter("ID", ">=", seeded * 7) _
+            .FilterAny(Array("N", "=", 0), Array("N", "=", 1), _
+                       Array("N", "=", 1.5), Array("N", "=", 9007199254740992#), _
+                       Array("ID", "=", -1)).ToTable()
+        If seeded = 0 Then expected = Array(4, 5, 6, 8, 9, 10) Else expected = Array(8, 9, 10)
+        LogShim.AssertEq "numeric_in_count_" & seeded, UBound(expected) + 2, tR.RowCount
+        LogShim.AssertEq "numeric_in_fallback_count_" & seeded, tR.RowCount, fallback.RowCount
+        For i = 0 To UBound(expected)
+            LogShim.AssertEq "numeric_in_order_" & seeded & "_" & i, expected(i), tR.Value(i + 2, "ID")
+            LogShim.AssertEq "numeric_in_fallback_" & seeded & "_" & i, expected(i), fallback.Value(i + 2, "ID")
+        Next i
+    Next seeded
 End Sub
 
 ' 동적 arm 목록 (arm 배열 1개) = ParamArray 개별 인자와 동일 결과
