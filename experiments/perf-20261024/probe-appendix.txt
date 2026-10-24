@@ -1,0 +1,305 @@
+' Measurement-only appendix to TestBenchDb; never injected into the original workbook.
+' @desc 성능 후보를 복제 워크북에서 측정함
+Public Sub ProbeFast()
+    ProbeRowSets
+    ProbeUpdates
+    ProbeFilters
+    ProbeJoins
+    ProbeReports
+    ProbeOr
+End Sub
+
+' @desc 넓은 테이블의 복사와 투영 비용을 측정함
+Public Sub ProbeWide()
+    Dim a As clsTable, b As clsTable, x As clsTable, y As clsTable
+    Dim r As Long, i As Long, ms As Double, raw As Variant
+    Dim drops As String, keeps As String
+    LogShim.LogEvent "perf_environment", Array("excel", "os", "backend"), Array(Application.Version, Application.OperatingSystem, "DictHashIndex")
+    For i = 10 To 29
+        If Len(drops) > 0 Then drops = drops & ","
+        drops = drops & "Val" & i
+    Next i
+    keeps = "K,Val1,Val2,Val3,Val4,Val5,Val6,Val7,Val8,Val9"
+    For r = -1 To 2
+        Set a = BuildWideJoinTable(20000, 30): Set b = BuildWideJoinTable(20000, 30)
+        Call TicStart: a.RemoveColumns drops: ms = TicMs
+        ProbeLog "remove_20_of_30_columns", r, ms
+        Call TicStart: b.SelectColumns keeps: ms = TicMs
+        ProbeLog "select_10_of_30_columns", r, ms
+        ProbeEqual "column_removal_equivalent", a, b
+        Set a = BuildWideJoinTable(20000, 30): Set b = BuildWideJoinTable(20000, 30)
+        Call TicStart
+        Set x = JoinTable(a, b, "K", "K", jtInner, "R_")
+        x.SelectColumns "K", "Val1", "R_Val1"
+        ms = TicMs: ProbeLog "wide_join_late_projection_cold", r, ms
+        Call TicStart
+        Set x = JoinTable(a, b, "K", "K", jtInner, "R_")
+        x.SelectColumns "K", "Val1", "R_Val1"
+        ms = TicMs: ProbeLog "wide_join_late_projection_warm", r, ms
+        Set a = BuildWideJoinTable(20000, 30): Set b = BuildWideJoinTable(20000, 30)
+        Call TicStart
+        a.SelectColumns "K", "Val1": b.SelectColumns "K", "Val1"
+        Set y = JoinTable(a, b, "K", "K", jtInner, "R_")
+        y.SelectColumns "K", "Val1", "R_Val1"
+        ms = TicMs: ProbeLog "wide_join_early_projection_cold", r, ms
+        ProbeEqual "early_projection_equivalent", x, y
+        Set a = BuildWideJoinTable(20000, 30)
+        Call TicStart
+        For i = 1 To 10: raw = a.RawArray: Next i
+        ms = TicMs: ProbeLog "rawarray_20k_30cols_10x", r, ms
+        ProbeCheck "raw_copy_value", raw(20001, 30) = 200000 + 30
+        Set a = ProbeData(100000)
+        Call TicStart: a.AddColumns "A,B,C,D,E,F,G,H": ms = TicMs
+        ProbeLog "add_8_columns_100k", r, ms
+        ProbeCheck "add_columns_shape", a.ColCount = 12 And a.RowCount = 100001
+    Next r
+    Set a = BuildJoinTable(6, 3, 0): Set b = BuildJoinTable(2, 2, 1)
+    Set x = JoinTable(a, b, "K", "K", jtLeftSemi)
+    Set y = ProbeSemi(a, b, False)
+    LogShim.LogEvent "perf_join_order", Array("current_values", "single_scan_values"), Array(ProbeOrder(x), ProbeOrder(y))
+End Sub
+
+Private Function ProbeOrder(ByVal t As clsTable) As String
+    Dim i As Long, s As String
+    For i = 2 To t.RowCount
+        If Len(s) > 0 Then s = s & ","
+        s = s & CStr(t.GetValue(i, "Val"))
+    Next i
+    ProbeOrder = s
+End Function
+
+Private Sub ProbeLog(ByVal label As String, ByVal sample As Long, ByVal ms As Double)
+    LogShim.LogEvent "perf_probe", Array("case", "sample", "ms"), Array(label, sample, ms)
+End Sub
+
+Private Sub ProbeCheck(ByVal label As String, ByVal ok As Boolean)
+    LogShim.AssertEq label, True, ok
+    If Not ok Then Err.Raise 9999, "Probe", label
+End Sub
+
+Private Sub ProbeEqual(ByVal label As String, ByVal a As clsTable, ByVal b As clsTable)
+    Dim x As Variant, y As Variant, r As Long, c As Long, ok As Boolean
+    ProbeCheck label & "_shape", a.RowCount = b.RowCount And a.ColCount = b.ColCount
+    x = a.RawArray: y = b.RawArray: ok = True
+    For r = 1 To a.RowCount
+        For c = 1 To a.ColCount
+            If VarType(x(r, c)) <> VarType(y(r, c)) Then ok = False
+            If CStr(x(r, c)) <> CStr(y(r, c)) Then ok = False
+        Next c
+    Next r
+    ProbeCheck label & "_all_cells_types", ok
+End Sub
+
+Private Function ProbeData(ByVal n As Long, Optional ByVal selected As Long = 50000) As clsTable
+    Dim v() As Variant, i As Long, t As New clsTable
+    ReDim v(1 To n + 1, 1 To 4)
+    v(1, 1) = "ID": v(1, 2) = "GRP": v(1, 3) = "AMOUNT": v(1, 4) = "STATUS"
+    For i = 1 To n
+        v(i + 1, 1) = i
+        v(i + 1, 2) = CLng(IIf(i <= selected, 1, 0))
+        v(i + 1, 3) = i Mod 1000
+        v(i + 1, 4) = "Pending"
+    Next i
+    t.LoadFromArray v
+    Set ProbeData = t
+End Function
+
+Private Sub ProbeRowSets()
+    Dim s As DbRowSet, g As ProbeRowSet, r As Long, i As Long, n As Variant
+    Dim a As Variant, b As Variant, ok As Boolean, t As Double
+    For Each n In Array(10000&, 100000&)
+        For r = -1 To 2
+            Set s = New DbRowSet: Set g = New ProbeRowSet
+            TicStart
+            For i = 2 To n + 1: s.AddRow i: Next i
+            t = TicMs: ProbeLog "rowset_exact_" & n, r, t
+            TicStart
+            For i = 2 To n + 1: g.AddRow i: Next i
+            t = TicMs: ProbeLog "rowset_double_" & n, r, t
+            a = s.ToArray: b = g.ToArray: ok = s.Count = g.Count
+            For i = 0 To n - 1
+                If a(i) <> b(i) Or a(i) <> i + 2 Then ok = False
+            Next i
+            ProbeCheck "rowset_equivalent", ok
+            Set s = New DbRowSet
+            Call TicStart: s.FromAllRows n + 1: t = TicMs
+            ProbeLog "rowset_fromall_" & n, r, t
+            ProbeCheck "fromall_count", s.Count = n
+        Next r
+    Next n
+    For r = -1 To 2
+        Set s = New DbRowSet: s.AddRow 100001
+        TicStart
+        For i = 1 To 100: a = s.ToArray: Next i
+        t = TicMs: ProbeLog "sparse_toarray_100x", r, t
+        ProbeCheck "sparse_id", a(0) = 100001
+    Next r
+End Sub
+
+Private Sub ProbeUpdates()
+    Dim a As clsTable, b As clsTable, r As Long, n As Long, t As Double, warm As Variant
+    For Each warm In Array(False, True)
+        For r = -1 To 2
+            Set a = ProbeData(100000): Set b = ProbeData(100000)
+            If warm Then
+                a.GetHashIndex "GRP": b.GetHashIndex "GRP"
+                a.GetHashIndex "STATUS": b.GetHashIndex "STATUS"
+            End If
+            TicStart
+            n = UnivDB.Query(a).Where("GRP", 1).SetVal("STATUS", "Done").Update()
+            t = TicMs: ProbeLog "update_query_warm_" & warm, r, t
+            TicStart
+            b.UpdateBatch "STATUS", "Done", "GRP", 1
+            t = TicMs: ProbeLog "update_existing_batch_warm_" & warm, r, t
+            ProbeCheck "update_count", n = 50000
+            ProbeEqual "update_equivalent", a, b
+            ProbeCheck "updated_index", b.SelectRows("STATUS", "Done").Count = 50000
+        Next r
+    Next warm
+End Sub
+
+Private Sub ProbeFilters()
+    Dim t As clsTable, q As clsQuery, result As clsTable, k As Variant, r As Long, i As Long
+    Dim s As DbRowSet, ids As Variant, v As Variant, actual As Variant, col As Variant
+    Dim rdr As DbColumnReader, ms As Double, ok As Boolean
+    For Each k In Array(1&, 10&, 1000&, 10000&, 100000&)
+        Set t = ProbeData(100000, CLng(k)): t.GetHashIndex "GRP"
+        For r = -1 To 2
+            Set q = UnivDB.Query(t).Where("GRP", k / k)
+            Call TicStart: q.Filter "AMOUNT", ">=", 0: ms = TicMs
+            ProbeLog "filter_only_" & k, r, ms
+            Set result = q.ToTable: actual = result.RawArray
+            Set s = New DbRowSet: s.BindTo t
+            TicStart
+            For i = 2 To k + 1
+                v = t.GetValue(i, "AMOUNT")
+                If Not IsEmpty(v) And IsNumeric(v) Then
+                    If CDbl(v) >= 0 Then s.AddRow i
+                End If
+            Next i
+            ms = TicMs: ProbeLog "filter_direct_" & k, r, ms
+            ids = s.ToArray: ok = result.RowCount = s.Count + 1
+            For i = 0 To s.Count - 1
+                If actual(i + 2, 1) <> ids(i) - 1 Then ok = False
+            Next i
+            ProbeCheck "filter_equivalent", ok
+            Call TicStart: Set rdr = t.GetColumnReader("AMOUNT"): col = rdr.Values: ms = TicMs
+            ProbeLog "column_reader_values_" & k, r, ms
+        Next r
+    Next k
+End Sub
+
+Private Function ProbeSemi(ByVal left As clsTable, ByVal right As clsTable, ByVal anti As Boolean) As clsTable
+    Dim idx As DbHashIndex, x As Variant, y() As Variant, ids() As Long
+    Dim i As Long, c As Long, n As Long, hits As Long, found As Boolean, result As New clsTable
+    Set idx = right.GetHashIndex("K")
+    x = left.RawArray: ReDim ids(1 To left.RowCount)
+    For i = 2 To left.RowCount
+        found = idx.TryGetRowCount(x(i, 1), hits)
+        If found <> anti Then n = n + 1: ids(n) = i
+    Next i
+    ReDim y(1 To n + 1, 1 To left.ColCount)
+    For c = 1 To left.ColCount: y(1, c) = x(1, c): Next c
+    For i = 1 To n
+        For c = 1 To left.ColCount: y(i + 1, c) = x(ids(i), c): Next c
+    Next i
+    Dim adopted As Variant
+    adopted = y: result.AdoptArray adopted, True
+    Set ProbeSemi = result
+End Function
+
+Private Sub ProbeJoins()
+    Dim a As clsTable, b As clsTable, x As clsTable, y As clsTable
+    Dim r As Long, ms As Double, anti As Variant, jt As joinType
+    For Each anti In Array(False, True)
+        If anti Then jt = jtLeftAnti Else jt = jtLeftSemi
+        For r = -1 To 2
+            Set a = BuildJoinTable(100000, 100000, 0): Set b = BuildJoinTable(5000, 5000, 0)
+            Call TicStart: Set x = JoinTable(a, b, "K", "K", jt): ms = TicMs
+            ProbeLog "join_current_cold_anti_" & anti, r, ms
+            Call TicStart: Set x = JoinTable(a, b, "K", "K", jt): ms = TicMs
+            ProbeLog "join_current_warm_anti_" & anti, r, ms
+            Set a = BuildJoinTable(100000, 100000, 0): Set b = BuildJoinTable(5000, 5000, 0)
+            Call TicStart: Set y = ProbeSemi(a, b, CBool(anti)): ms = TicMs
+            ProbeLog "join_single_cold_anti_" & anti, r, ms
+            ProbeEqual "join_equivalent", x, y
+            Call TicStart: Set y = ProbeSemi(a, b, CBool(anti)): ms = TicMs
+            ProbeLog "join_single_warm_anti_" & anti, r, ms
+            ProbeEqual "join_warm_equivalent", x, y
+        Next r
+    Next anti
+End Sub
+
+Private Sub ProbeReports()
+    Dim t As clsTable, a As clsTable, b As clsTable, r As Long, ms As Double
+    Set t = ProbeData(100000)
+    For r = -1 To 2
+        TicStart
+        Set a = UnivDB.Report(t).Keep("STATUS", "IS", "Pending").Keep("GRP", "=", 1).SelectColumns("ID", "AMOUNT").ToTable()
+        ms = TicMs: ProbeLog "report_two_keep_project", r, ms
+        TicStart
+        Set b = UnivDB.Query(t).Filter("STATUS", "IS", "Pending").Filter("GRP", "=", 1).SelectColumns("ID", "AMOUNT").ToTable()
+        ms = TicMs: ProbeLog "query_two_filter_project", r, ms
+        ProbeEqual "report_equivalent", a, b
+    Next r
+End Sub
+
+Private Sub ProbeOr()
+    Dim t As clsTable, q As clsQuery, r As Long, i As Long, arms(0 To 99) As Variant
+    Dim d As Object, v As Variant, s As DbRowSet, a As clsTable, ids As Variant, ms As Double, ok As Boolean
+    Set t = ProbeData(100000)
+    For i = 0 To 99: arms(i) = Array("AMOUNT", "=", i): Next i
+    For r = -1 To 2
+        Call TicStart: Set q = UnivDB.Query(t).FilterAny(arms): ms = TicMs
+        ProbeLog "filterany_100_numeric", r, ms
+        Set a = q.ToTable
+        TicStart
+        Set d = CreateObject("Scripting.Dictionary")
+        For i = 0 To 99: d.Add CDbl(i), True: Next i
+        v = t.GetColumnReader("AMOUNT").Values
+        Set s = New DbRowSet: s.BindTo t
+        For i = 2 To t.RowCount
+            If Not IsEmpty(v(i)) And IsNumeric(v(i)) Then
+                If d.Exists(CDbl(v(i))) Then s.AddRow i
+            End If
+        Next i
+        ms = TicMs: ProbeLog "filterany_numeric_set_control", r, ms
+        ids = s.ToArray: v = a.RawArray: ok = s.Count = a.RowCount - 1
+        For i = 0 To s.Count - 1
+            If ids(i) - 1 <> v(i + 2, 1) Then ok = False
+        Next i
+        ProbeCheck "filterany_equivalent", ok
+    Next r
+End Sub
+
+' @desc 단건 Insert 소규모 실행 시간을 측정함
+Public Sub ProbeInsertPilot()
+    ProbeInsertSize 100
+End Sub
+
+' @desc 5만 행에 1만 행 추가하는 두 경로를 측정함
+Public Sub ProbeInsertFull()
+    ProbeInsertSize 10000, 0, 0
+End Sub
+
+Private Sub ProbeInsertSize(ByVal n As Long, Optional ByVal firstSample As Long = -1, Optional ByVal lastSample As Long = 2)
+    Dim a As clsTable, b As clsTable, delta As clsTable, builder As clsTableBuilder
+    Dim q As clsQuery, i As Long, r As Long, ms As Double, count As Long
+    For r = firstSample To lastSample
+        Set a = ProbeData(50000): Set b = ProbeData(50000)
+        TicStart
+        Set q = UnivDB.Query(a)
+        For i = 50001 To 50000 + n
+            count = q.SetVal("ID", i).SetVal("GRP", 0&).SetVal("AMOUNT", i Mod 1000).SetVal("STATUS", "Pending").Insert()
+        Next i
+        ms = TicMs: ProbeLog "insert_repeat_" & n, r, ms
+        TicStart
+        Set builder = UnivDB.Builder("ID"): builder.InitFromTable b
+        For i = 50001 To 50000 + n
+            builder.Row(CStr(i)).SetVal("ID", i).SetVal("GRP", 0&).SetVal("AMOUNT", i Mod 1000).SetVal "STATUS", "Pending"
+        Next i
+        Set delta = builder.ToTable: b.UpsertFrom delta, "ID"
+        ms = TicMs: ProbeLog "insert_builder_upsert_" & n, r, ms
+        ProbeEqual "insert_equivalent", a, b
+    Next r
+End Sub

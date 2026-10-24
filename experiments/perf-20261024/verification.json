@@ -1,0 +1,15 @@
+{
+  "commit": "06f5efe800444aca6c23fd93ab1fdd15ebba78e0",
+  "original_workbook_unchanged": true,
+  "original_workbook_sha256": "93D7885097A1D42884A3B2FD40EA24A6DBF91E880EB7565F44F27645C404D319",
+  "copied_modules_checked": 48,
+  "copied_modules_identical": true,
+  "compile": "compiled",
+  "test_summary": {
+    "pass": 125,
+    "fail": 0,
+    "skipped": 0
+  },
+  "measured_assertions": 150,
+  "measured_assertion_failures": 0
+}

@@ -1,0 +1,179 @@
+UnivDB 성능 후보 실증 보고서 - 2026-10-24
+
+결론: 반복 Insert, 대량 Query.Update, 동일 열 다중 FilterAny가 우선 검토 대상이다.
+RowSet 배수 확장은 10만 행에서 약 4ms 절감으로, 제안서의 최우선 순위는 낮추는 편이 타당하다.
+실제 제품 최적화는 적용하지 않았다. 원본 워크북 해시 및 제품 소스 보존 확인 완료.
+
+범위와 보존
+기준 커밋: 06f5efe800444aca6c23fd93ab1fdd15ebba78e0
+작업 시작 시 추적 파일 변경 없음. 제품 src와 원본 UnivDB.xlsm은 변경하지 않는다.
+복제 프로젝트: _dbg/perf-20261024. 비교용 코드는 이 복제본에서만 실행한다.
+실험 코드는 experiments/perf-20261024에 보존하며 자동 Test_* 수집 대상에 추가하지 않는다.
+인터넷의 '최신 공개 소스' 대신 이 체크아웃의 정확한 커밋을 측정 대상으로 삼았다.
+
+측정 방법
+기본 DictHashIndex, VBA QPC, warm-up 1회(sample=-1 제외), 본 측정 3회 중앙값.
+행 수는 헤더 제외. Fixture 생성과 결과 대조는 시간에서 제외한다.
+결과 객체 반환/배열 할당/직전 결과 해제는 해당 호출 경계의 비용에 포함될 수 있다.
+후보를 먼저 실행한 뒤 대조군을 실행하는 고정 순서이며 무작위 교차 실험은 아니다.
+100건 Insert는 위 규칙. 1만 건 Insert는 장시간 비용 때문에 전체 규모 1회 실측한다.
+Cold join/update는 매번 새 테이블, warm은 명시적으로 준비된 인덱스를 재사용한다.
+Excel 16.0, Application.OperatingSystem=Windows (64-bit) NT 10.00.
+시간은 로컬 합성 데이터의 실측이며 실제 업무 빈도나 다른 PC 성능의 추정치가 아니다.
+한 번에 한 Excel 성능 실험만 실행하며 워크시트 I/O는 측정하지 않는다.
+
+측정 범위별 동치 검증
+- RowSet: Count와 정렬된 전체 rowID를 대조한다. 증가 순서 AddRow/ToArray만 대조한다.
+- Update/Insert/Report/Join/컬럼 투영: 전체 셀의 VarType과 문자열화 값을 대조한다.
+- Filter/FilterAny: 전체 출력 ID 및 개수를 대조한다. 고유 ID가 원본 행과 일대일이다.
+- 이 fixture들은 일반 숫자/문자열이다. Error/Empty/Date/혼합 키, 세대 무효화,
+  원자적 오류 처리에 대한 대조군의 일반 호환성을 증명하지 않는다.
+- 모든 측정용 AssertEq는 실패 시 Err.Raise도 수행하여 run 성공으로 감춰지지 않게 한다.
+
+핵심 관측 (최종 수치는 summary.json 참조)
+1. RowSet: 10만 행 AddRow는 약 14.6ms, 배수 확장 대조군은 약 10.6ms.
+   1만 행은 약 1.5ms/1.0ms. 이번 환경에서는 10배 행 수에 약 10배 시간이었고,
+   제안서가 우려한 큰 이차적 시간 증가가 관측되지 않았다. ReDim의 내부 복사량을
+   직접 측정한 것은 아니므로 '항상 O(n)'이라고 단정할 수는 없다.
+   FromAllRows는 이미 1회 할당하며 약 8.1ms. P0 최우선으로 볼 근거는 약하다.
+   관련: src/DbRowSet.cls 69, 81, 93, 171, 191; src/clsQuery.cls 131.
+
+2. Update: 10만 행 중 5만 행, STATUS 1열 수정.
+   Cold Query 약 310ms vs 기존 UpdateBatch 약 154ms.
+   Warm Query 약 171ms vs 기존 UpdateBatch 약 10ms.
+   이미 있는 UpdateBatch가 유력한 재사용 근거다. 단독 무효화 함수의 시간은 아니다.
+   Query의 rowset, 셀별 컬럼명 정규화/해시조회/스테이징 dictionary 순회/버전 증가가
+   함께 포함된다. 새로운 API가 꼭 필요한지 먼저 판단해야 한다.
+   UpdateBatch는 Collection 호환 경로이며 이를 쿼리 엔진에 그대로 재도입하면
+   프로젝트의 실행 경로 제약과 충돌한다. 직접 호출과 내부 엔진 변경은 구분할 것.
+   관련: src/clsQuery.cls 484; src/clsTable.cls 287, 1171, 1261.
+
+3. Insert: 초기 5만 행, 4열, 추가 행의 ID는 서로 다른 신규 숫자 키.
+   100건 단건 반복 약 3269ms vs Builder+Upsert 약 192ms.
+   1만 건 전체 실측: 362887.21ms vs 345.90ms (각 1회, 약 1049배).
+   최종 60001행(헤더 포함) 전체 4열의 값과 타입 대조 통과.
+   Builder 경로에는 builder 생성/행 조립/ToTable/UpsertFrom 전부 포함한다.
+   Builder.InitFromTable은 스키마만 가져오므로 ToTable만으로 기존 행을 보존할 수 없다.
+   이 비교는 반드시 기존 테이블에 UpsertFrom까지 수행하여 최종 데이터가 동일하다.
+   중복 ID에서는 Insert의 append와 Builder의 키 기반 병합 의미가 다르다.
+   따라서 모든 Insert를 Builder로 치환해도 된다는 결론이 아니다.
+   LoadFromArray의 전량 정규화까지 반복되므로 비용을 단순 배열 복사만으로 해석하지 않는다.
+   관련: src/clsQuery.cls 553; src/clsTableBuilder.cls InitFromTable/Row/ToTable;
+   src/clsTable.cls 151, 1040.
+
+4. Semi/Anti: 왼쪽 10만 고유 키, 오른쪽 첫 5천 고유 키, 각 2열.
+   Left Semi: cold 기존 약 581ms vs 단일 오른쪽 인덱스 대조 약 128ms.
+   Left Semi: warm 기존 약 78ms vs 단일 오른쪽 인덱스 대조 약 117ms (기존이 빠름).
+   Left Anti: cold 약 868ms vs 145ms, warm 약 372ms vs 132ms.
+   한쪽 인덱스 경로의 이득은 조인 종류/선택도/캐시 상태에 따라 다르다.
+   대조군은 기존 DbHashIndex.TryGetRowCount를 쓰고 raw 왼쪽 배열을 1회 복사한다.
+   결과 배열을 구성/입양하는 비용도 포함하지만 일반 조인의 검증/출력 순서 전체를
+   구현한 배포용 경로가 아니다. 자동 백엔드 선택은 제안하거나 적용하지 않는다.
+   별도 중복 키 순서 진단: 기존 결과 Val=2,5,3,6 / 단일 스캔=2,3,5,6.
+   즉 이 대조군은 일반 입력에서 순서까지 동치가 아님을 실제로 확인했다.
+   관련: src/modEngine.bas 73, 132, 180.
+
+5. 선택적 Filter: 10만 행 중 후보 1/10/1000/10000/100000개, AMOUNT>=0.
+   Where는 warm 인덱스로 시간 측정 전에 끝낸다. Filter 이후 물질화는 시간에서 제외.
+   기존 약 8.3/8.4/8.7/11.0/35.0ms.
+   직접 GetValue+동일 숫자 검사+RowSet 대조 약 <0.1/<0.1/1.1/10.7/105.7ms.
+   직접 대조군은 fixture의 후보 rowID를 이미 안다고 가정하며 전체 Query 대체물이 아니다.
+   Reader 획득+Values 복사는 약 8.2~8.5ms: 희소 후보에서는 고정 비용이 지배적이다.
+   후보가 많으면 기존 경로가 유리하다. 이 PC의 교차점으로 임계값을 하드코딩할 근거는 없다.
+   GetColumnReader의 CopyColumn1D 외에 BindData/Values의 Variant 배열 복사도 남는다.
+   캐시를 도입해도 이 모든 비용이 사라진다고 계산하면 안 된다.
+   관련: src/clsQuery.cls 131; src/clsTable.cls 508, 520; src/DbColumnReader.cls 28, 53.
+   과거 R4 보류 근거: src/docs/tasks/2026-07-05_next_direction.md 249 이후.
+
+6. FilterAny: 10만 행, 같은 숫자 열의 동등 조건 100개, 결과 1만 행.
+   기존 약 1472ms vs 숫자 집합 1회 스캔 대조 약 53ms.
+   대조군은 CDbl로 정규화한 숫자 Dictionary와 같은 numeric guard를 사용한다.
+   IS/문자열 비교와 인덱스 키 정규화를 이 숫자 '=' 경로와 혼합하면 안 된다.
+   서로 다른 열이나 혼합 연산자는 이번 대조 대상이 아니다.
+   관련: src/clsQuery.cls 237, 283.
+
+7. Report: 10만 행, Pending 전체 Keep -> GRP=1 절반 Keep -> ID/AMOUNT 투영.
+   Report 약 210ms vs 기존 Query.Filter 두 번 후 ToTable 1회 약 123ms.
+   두 실행의 최종 테이블은 같지만 Report의 즉시 실행, 중간 Table 관찰,
+   오류 발생 시점까지 동치라는 뜻은 아니다. 전체 lazy pipeline 재설계에 앞서
+   실제 호출부에서 기존 Query로 표현 가능한 업무인지 확인할 가치가 있다.
+   관련: src/clsReportBuilder.cls 162, 262; src/clsQuery.cls 604.
+
+8. Sparse RowSet: rowID=100001 한 건의 ToArray를 100회 호출하면 약 60ms.
+   1회 약 0.6ms. max row까지 선형 스캔함은 확인되지만, 1회 비용만으로 P0 승격할
+   정도는 아니다. 반복 OR/후보 집합 재변환에서 누적될 때 검토한다.
+
+9. 넓은 테이블 (숫자 값 2만 행 x 30열)
+   RemoveColumns로 20열 삭제: 323.49ms. SelectColumns로 같은 10열 유지: 10.62ms.
+   최종 값/타입 전체 동치. 기존 API로도 반복 삭제 비용을 피할 수 있는 사례다.
+   다만 중간 단계 관찰, 세대 증가 횟수, 누락 열의 오류 계약은 동일하지 않다.
+   1:1 inner join 후 3열 선택: cold 302.71ms, warm 193.80ms.
+   입력을 각 2열로 먼저 줄인 뒤 join/최종 3열 선택: cold 242.18ms.
+   조기 투영 시간에는 두 입력의 투영과 필요한 인덱스 재구축을 모두 포함한다.
+   이미 캐시된 넓은 조인과 조기 투영 cold를 같은 조건인 것처럼 비교하지 않는다.
+   RawArray 10회 복사 70.61ms (1회 약 7.06ms). 이것만으로 복사 제거의 안전성이나
+   최종 사용자 작업의 그만큼 단축을 증명하지는 않는다.
+   별도 10만 행 x 4열에 8열 AddColumns: 16.29ms. 이 fixture에서는 반복 삭제에
+   비해 비용이 작으므로 Add/Remove를 같은 우선순위로 묶을 근거가 약하다.
+
+판단과 권고 순서 (구현 승인이 아님)
+P0: 대량 단건 Insert 사용처, 대량 Query.Update, 동일 열 숫자 FilterAny 다중 조건.
+    실제 업무에서 이 호출이 있는지 확인하면 절대 시간 절감이 가장 크다.
+    Insert는 기존 Builder+Upsert, 단일 동등 조건 Update는 기존 UpdateBatch를
+    호출부에서 쓸 수 있는지 먼저 검토한다. 조건/중복 키 계약 차이는 유지해야 한다.
+P1: 여러 열의 반복 삭제, 희소 후보 Filter, cold Semi 및 본 fixture의 Anti 경로.
+    기존 API로 처리 가능한 범위를 먼저 검토하고, 인덱스 재사용/순서/선택도를 구분한다.
+P2: Report 중간 물질화, 조기 투영, RowSet 배수 확장, 희소 ToArray 반복.
+    RowSet 확장은 국소적으로 빨라졌지만 10만 건에서 약 4ms 절감이므로 최우선은 아니다.
+보류: 전역 컬럼 캐시와 CSR 버퍼 해제. 캐시 반환 복사와 세대 계약, CSR 재최종화 및
+    실측 peak 메모리 증거 없이 전체 설계 변경에 들어갈 근거는 부족하다.
+
+이 순서는 측정한 합성 workload의 비용/구현 위험에 따른 검토 순서다.
+실제 고객 작업 빈도나 데이터 분포를 반영한 제품 로드맵 우선순위는 아니다.
+제품 최적화, API 추가, 백엔드 자동 선택, 쿼리 실행 계획 변경은 수행하지 않았다.
+
+아직 구분해야 할 근거
+- RawArray 호출은 값 사본이며 JoinTable은 이미 루프 밖에서 각 입력을 1회 복사한다.
+  '루프마다 RawArray 전체 복사'는 이 조인 구현에는 해당하지 않는다.
+- AddColumns는 마지막 차원의 ReDim Preserve, RemoveColumns는 명시적 전체 재작성이다.
+  둘을 동일한 복사 비용이라고 가정하지 않는다.
+- CSR EnsureFinalized는 mEntryKeyId/mEntryRowId를 계속 보유한다. AddEntry로 재최종화할
+  수 있는 현재 계약을 고려해야 한다. 실제 peak/RSS 및 안전한 해제 대조는 측정하지 않았다.
+  따라서 메모리 병목 '확정'이 아니라 코드상 보유 비용 후보로만 남긴다.
+
+Test delta brief
+- Unique risk: 비교 대조군이 다른 행/값을 반환해 허위 속도 향상으로 판단하는 위험.
+- Existing owner: TestBenchDb (QPC/fixture/log), TestRowSet/TestIndexInvalidation/
+  TestChainingSemantics/TestTableBuilder (정합성). 제품 회귀 테스트를 중복 추가하지 않는다.
+- Selected layer: 실제 VBA/Excel 복제 프로젝트. 다른 언어로 번역한 시간은 쓰지 않는다.
+- Expected cost delta: 평소 Test_* 수집/실행 +0; 명시적 진단 실행에만 비용 발생.
+- Evidence to retire: 없음. 일반 제품 수정 없이 보관용 일회 실험; 최적화 구현 시
+  필요한 사례만 기존 TestBenchDb에 통합하고 이 대조군을 운영 코드로 승격하지 않는다.
+
+최종 검증 / Test delta
+- 복제 워크북 VBE compile: compiled.
+- 성능 진단 4개 run: 전부 ok, 측정용 단언 150개, 실패 0개.
+- 기존 전체 테스트: 125 pass / 0 fail / 0 skipped, sessionDied=false.
+- 기존 정합성 테스트 추가/수정/삭제 0개, 자동 수집 Test_* 증감 0개.
+- 복제 TestBenchDb에만 명시적 진단 진입점을 추가하고 QPC/fixture를 재사용했다.
+- 평소 테스트 runtime delta: not measured (원본 테스트 변경 없음; 전후 짝 측정 불필요).
+  명시적 진단 4개 run의 elapsed 합계 약 414.7초. Excel 시작/주입/compile/기존 suite 제외.
+- Heavy-resource launch delta: 명시적 진단용 Excel 4회 + 전체 테스트 1회,
+  별도의 복제본 push/compile 세션. 기본 테스트 경로의 추가 실행은 0회.
+- Coverage-floor impact: 변경 없음, coverage 수치는 측정하지 않았다.
+- 원본 워크북 SHA-256: 93D7885097A1D42884A3B2FD40EA24A6DBF91E880EB7565F44F27645C404D319.
+- TestBenchDb 이외 복제 모듈 48개는 원본과 파일 해시 동일.
+- verification.json, tests.json, measurements.jsonl, summary.json에 원본 증거 보존.
+
+재현
+1. PowerShell 7에서 .\experiments\perf-20261024\prepare.ps1 실행.
+   이 명령은 _dbg/perf-20261024의 복제본과 source를 현재 제품 상태로 다시 만든다.
+2. vbaloop push --config _dbg\perf-20261024\vbaloop.toml --json
+3. vbaloop run TestBenchDb.ProbeFast --config _dbg\perf-20261024\vbaloop.toml --timeout 600 --json
+4. vbaloop run TestBenchDb.ProbeInsertPilot --config _dbg\perf-20261024\vbaloop.toml --timeout 120 --json
+5. vbaloop run TestBenchDb.ProbeInsertFull --config _dbg\perf-20261024\vbaloop.toml --timeout 900 --json
+6. vbaloop run TestBenchDb.ProbeWide --config _dbg\perf-20261024\vbaloop.toml --timeout 300 --json
+7. _dbg/perf-20261024/_dbg/UnivDB.jsonl을 증거로 보관. run JSON은 records가 200개로
+   잘리므로 전체 원본 JSONL을 통계의 기준으로 사용한다. sample=-1은 통계에서 제외.
+8. 보존한 measurements.jsonl에 대해 .\experiments\perf-20261024\summarize.ps1 실행.
+   같은 case를 여러 차례 재실행했다면 run_start/run_end별로 분리하여 집계할 것.
