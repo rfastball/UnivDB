@@ -70,11 +70,7 @@ End Function
 ' [NEW] 컬럼 삭제 (쉼표 구분 문자열 지원)
 Public Function RemoveColumns(ByVal sColList As String) As clsReportBuilder
     EnsureSafeCopy ' 데이터 구조 변경 전 복사
-    Dim vCol As Variant
-    For Each vCol In Split(sColList, ",")
-        ' m_tWork는 Builder 내부의 clsTable 객체입니다.
-        m_tWork.RemoveColumn Trim(vCol)
-    Next vCol
+    m_tWork.RemoveColumns sColList
     Set RemoveColumns = Me
 End Function
 

@@ -1,0 +1,53 @@
+' @desc 최종 성능 수정의 동일 fixture 비교를 실행함
+Public Sub ProbeFinal()
+    ProbeFilters
+    ProbeJoins
+    ProbeWide
+    Dim target As clsTable, batch As clsTable, expected As clsTable
+    Dim r As Long, i As Long, ms As Double
+    Set batch = ProbeData(10000, 0)
+    For i = 2 To batch.RowCount
+        batch.Value(i, "ID") = 50000 + i - 1
+    Next i
+    Set expected = ProbeData(60000)
+    For r = -1 To 2
+        Set target = ProbeData(50000)
+        Call TicStart: target.AppendFrom batch: ms = TicMs
+        ProbeLog "append_50k_plus_10k_4cols", r, ms
+        ProbeEqual "append_full_equivalent", expected, target
+        Set target = ProbeData(50000)
+        TicStart
+        Set batch = ProbeData(10000, 0)
+        For i = 2 To batch.RowCount
+            batch.Value(i, "ID") = 50000 + i - 1
+        Next i
+        target.AppendFrom batch
+        ms = TicMs: ProbeLog "append_50k_plus_10k_with_prepare", r, ms
+        ProbeEqual "append_prepared_equivalent", expected, target
+    Next r
+End Sub
+
+' @desc 같은 프로세스에서 이전/현재 warm join을 교대로 비교함
+Public Sub ProbeJoinPair()
+    Dim a As clsTable, b As clsTable, oldResult As clsTable, newResult As clsTable
+    Dim kind As Variant, r As Long, ms As Double
+    Set a = BuildWideJoinTable(20000, 30)
+    Set b = BuildJoinTable(5000, 5000, 18000)
+    a.GetHashIndex "K": b.GetHashIndex "K"
+    For Each kind In Array(jtLeftSemi, jtLeftAnti, jtRightSemi, jtRightAnti)
+        For r = -1 To 2
+            If r Mod 2 = 0 Then
+                Call TicStart: Set oldResult = ProbeOriginalJoin(a, b, "K", "K", CLng(kind), "R_"): ms = TicMs
+                ProbeLog "paired_join_old_" & kind, r, ms
+                Call TicStart: Set newResult = JoinTable(a, b, "K", "K", CLng(kind), "R_"): ms = TicMs
+                ProbeLog "paired_join_new_" & kind, r, ms
+            Else
+                Call TicStart: Set newResult = JoinTable(a, b, "K", "K", CLng(kind), "R_"): ms = TicMs
+                ProbeLog "paired_join_new_" & kind, r, ms
+                Call TicStart: Set oldResult = ProbeOriginalJoin(a, b, "K", "K", CLng(kind), "R_"): ms = TicMs
+                ProbeLog "paired_join_old_" & kind, r, ms
+            End If
+            ProbeEqual "paired_join_values_order_" & kind, oldResult, newResult
+        Next r
+    Next kind
+End Sub

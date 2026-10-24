@@ -130,8 +130,8 @@ Public Function JoinTable(ByVal tLeft As clsTable, _
     Set colHeaders = New Collection
 
     ' 원본 배열 1회 물질화 (RawArray는 호출마다 전체 복사 - 루프 안 호출 금지)
-    vLeftData = tLeft.RawArray
-    vRightData = tRight.RawArray
+    If jType <> jtRightSemi And jType <> jtRightAnti Then vLeftData = tLeft.RawArray
+    If jType <> jtLeftSemi And jType <> jtLeftAnti Then vRightData = tRight.RawArray
 
     ' --- (4-1) 왼쪽 헤더 등록 ---
     If jType <> jtRightAnti And jType <> jtRightSemi Then
@@ -182,7 +182,11 @@ Public Function JoinTable(ByVal tLeft As clsTable, _
         Set cur = idxRight.Cursor
         Do While cur.MoveNext
             vKey = cur.Key
-            If Not idxLeft.TryGetRowIdSpan(vKey, bufLeft, cntLeft) Then GoTo NextCommonKey
+            If jType = jtRightSemi Then
+                If Not idxLeft.TryGetRowCount(vKey, cntLeft) Then GoTo NextCommonKey
+            Else
+                If Not idxLeft.TryGetRowIdSpan(vKey, bufLeft, cntLeft) Then GoTo NextCommonKey
+            End If
 
             If jType = jtLeftSemi Then
                 For a = 1 To cntLeft

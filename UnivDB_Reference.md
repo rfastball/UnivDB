@@ -1,7 +1,7 @@
 # UnivDB Library Reference (Consolidated)
 
 > **For**: Claude Code agent context. Single-file reference replacing CheatSheet, Docs, Guide, Template.
-> **Version**: v2.8.1
+> **Version**: v2.9.0
 
 ---
 
@@ -213,6 +213,7 @@ UnivDB.Report("SalesData") _
 (in-place 변형이며 세대(Generation)는 규칙대로 증가한다):
 
 ```vb
+.AppendFrom(SourceTable)           ' 동일 스키마 행 일괄 추가 (중복/순서 보존)
 .UpsertFrom(SourceTable, KeyCol)    ' 키 기준 Insert or Update (Merge)
 .GroupBy(GroupCols, AggList)         ' 집계: "Col:SUM, Col:AVG, Col:COUNT, Col:MAX, Col:MIN"
                                      '   함수 생략 시 COUNT 기본 ("Col" == "Col:COUNT")
@@ -232,6 +233,31 @@ UnivDB.Report("SalesData") _
 Set tTop = T.GroupBy("Dept", "Amt:SUM").OrderBy("Amt_SUM", True)
 T.AddColumn("Bonus", 0).Compute("Total", "Amt", "+", "Bonus").OrderBy "Total", True
 ```
+
+`AppendFrom`은 대상의 스키마를 유지하면서 소스의 데이터 행을 한 번에 추가합니다.
+열 순서는 달라도 이름(대소문자 무시)으로 매핑하며, 양쪽 모두 모든 열 이름이 유일하고
+비어 있지 않은 동일 스키마여야 합니다. 불일치 또는 Nothing은 쓰기 전 `Err 9999`입니다.
+중복 키·행 순서·셀 타입/공백은 그대로 보존하며, 소스는 변경하지 않습니다.
+자기 자신을 추가할 수도 있습니다. 성공한 비어 있지 않은 추가는 세대를 한 번 증가시키므로
+기존 Query/Index/Reader는 다시 취득해야 합니다. 초기화되지 않은 빈 소스는 무동작이며,
+헤더만 있는 소스는 스키마 검증 후 무동작입니다. 대상 스키마는 먼저 초기화해야 합니다.
+
+```vb
+Dim batch As clsTable
+Set batch = UnivDB.CreateTable()
+batch.LoadFromArray rowsWithHeader
+T.AppendFrom batch
+```
+
+반복 단건 Insert 대신 위와 같이 모아 추가하면 기존 테이블의 반복 전체 복사를 피합니다.
+Builder의 같은 Row ID는 병합되므로, 중복을 보존할 입력에는 서로 다른 Row ID를 사용하거나
+위 2D 배열 경로를 사용하세요. 단건 Insert의 즉시 실행 계약은 그대로입니다.
+
+`RemoveColumns`는 요청 순서로 열 이름을 해석한 뒤 배열을 한 번만 재작성합니다.
+없는 이름은 무시하고, 변경이 있는 호출은 세대를 한 번만 증가시킵니다.
+마지막 열까지 모두 삭제하려는 호출은 **일부 삭제 없이 Err 9999**로 거부합니다.
+헤더 없는 테이블의 `COLUMNn`은 각 요청 뒤 재번호가 매겨집니다.
+`RemoveColumn`의 단일 이름은 쉼표를 포함해도 그대로 해석합니다.
 
 `UpsertFrom`과 `UnivDB.Upsert`는 대상에 쓰기 전에 소스의 중복 키를 `Err 9999`로 거부합니다.
 오류에는 키·키 컬럼·중복된 소스 행 번호(헤더 포함)가 표시되며, 대상 값·행 수·세대는 변경하지 않습니다.

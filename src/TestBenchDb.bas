@@ -504,6 +504,36 @@ Public Sub Test_BenchDb_QueryWritesAndNumericOr()
               Median3(msOr(0), msOr(1), msOr(2)))
 End Sub
 
+' @desc 일괄 추가와 복수 컬럼 삭제의 비용을 기록함
+Public Sub Test_BenchDb_BulkAppendAndDrop()
+    Dim T As clsTable, batch As clsTable, r As Long, i As Long, drops As String
+    Dim msAppend(0 To 2) As Double, msDrop(0 To 2) As Double, elapsed As Double
+    Set batch = BuildJoinTable(10000, 10000, 50000)
+    For i = 10 To 29
+        If Len(drops) > 0 Then drops = drops & ","
+        drops = drops & "Val" & i
+    Next i
+    For r = -1 To 2
+        Set T = BuildJoinTable(50000, 50000, 0)
+        TicStart
+        T.AppendFrom batch
+        elapsed = TicMs
+        If r >= 0 Then msAppend(r) = elapsed
+        LogShim.AssertEq "bench_append_rows_" & r, 60001, T.RowCount
+        LogShim.AssertEq "bench_append_first_" & r, 50001, T.Value(50002, "K")
+        LogShim.AssertEq "bench_append_last_" & r, 60000, T.Value(60001, "K")
+        Set T = BuildWideJoinTable(20000, 30)
+        TicStart
+        T.RemoveColumns drops
+        elapsed = TicMs
+        If r >= 0 Then msDrop(r) = elapsed
+        LogShim.AssertEq "bench_drop_cols_" & r, 10, T.ColCount
+        LogShim.AssertEq "bench_drop_value_" & r, 200010, T.Value(20001, "Val9")
+    Next r
+    LogShim.LogEvent "bench_db_bulk_append_drop", Array("append_ms", "drop_ms"), _
+        Array(Median3(msAppend(0), msAppend(1), msAppend(2)), Median3(msDrop(0), msDrop(1), msDrop(2)))
+End Sub
+
 Private Function GetBench20k() As clsTable
     If mT20k Is Nothing Then Set mT20k = BuildBenchTable(BENCH_ROWS)
     Set GetBench20k = mT20k

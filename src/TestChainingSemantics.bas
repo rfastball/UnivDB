@@ -247,6 +247,8 @@ End Sub
 Public Sub Test_Chain_TableAddRemoveColumns()
     Dim T As clsTable
     Dim vData(1 To 2, 1 To 1) As Variant
+    Dim generation As Long, n As Long, raw As Variant
+    Dim wide(1 To 2, 1 To 3) As Variant
 
     vData(1, 1) = "A"
     vData(2, 1) = 1
@@ -265,8 +267,36 @@ Public Sub Test_Chain_TableAddRemoveColumns()
     LogShim.AssertEq "chain_b_addcols_multi", 5, T.ColCount
 
     ' 제거: csv + 체인 + 멱등 drop (없는 X 무시)
+    generation = T.Generation
     T.RemoveColumns("D, E").RemoveColumns "X"
     LogShim.AssertEq "chain_b_removecols", 3, T.ColCount
+    LogShim.AssertEq "chain_b_remove_generation", generation + 1, T.Generation
+    generation = T.Generation
+    On Error Resume Next
+    Err.Clear: T.RemoveColumns "A", "B", "C": n = Err.Number
+    On Error GoTo 0
+    LogShim.AssertEq "chain_b_remove_all_rejected", 9999, n
+    LogShim.AssertEq "chain_b_remove_all_atomic", 3, T.ColCount
+    LogShim.AssertEq "chain_b_remove_all_generation", generation, T.Generation
+    LogShim.AssertEq "chain_b_remove_all_value", 1, T.Value(2, "A")
+    T.RemoveColumns "B", "B", "Missing"
+    LogShim.AssertEq "chain_b_remove_duplicate_arg", 2, T.ColCount
+    wide(1, 1) = "A": wide(1, 2) = "B": wide(1, 3) = "B"
+    wide(2, 1) = 10: wide(2, 2) = 20: wide(2, 3) = 30
+    raw = wide: T.AdoptArray raw
+    T.RemoveColumns "B", "B"
+    LogShim.AssertEq "chain_b_remove_duplicate_headers", 1, T.ColCount
+    LogShim.AssertEq "chain_b_remove_duplicate_value", 10, T.Value(2, "A")
+    T.LoadFromArray wide, False
+    T.RemoveColumns "COLUMN1", "COLUMN1"
+    LogShim.AssertEq "chain_b_remove_headerless_cols", 1, T.ColCount
+    LogShim.AssertEq "chain_b_remove_headerless_first", "B", T.Value(1, "COLUMN1")
+    LogShim.AssertEq "chain_b_remove_headerless_last", 30, T.Value(2, "COLUMN1")
+    wide(1, 2) = "B,C": wide(1, 3) = "C"
+    T.LoadFromArray wide
+    T.RemoveColumn "B,C"
+    LogShim.AssertEq "chain_b_remove_literal_comma", 2, T.ColCount
+    LogShim.AssertEq "chain_b_remove_literal_keeps_c", 30, T.Value(2, "C")
 End Sub
 
 ' F17 (계약): clsQuery.Join - 조인을 쿼리 체인에 합류. 물질화 장벽 의미론.

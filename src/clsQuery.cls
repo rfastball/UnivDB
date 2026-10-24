@@ -134,18 +134,9 @@ Private Function EvaluateArm(ByVal sColName As String, ByVal sOp As String, _
     Dim setSurvivors As New DbRowSet
     Dim i As Long
 
-    ' 1. [Hoisting] 루프 외부에서 모든 전처리 완료
-    Dim rdr As DbColumnReader
     Dim vCol As Variant
-
-    ' 1-1. 컬럼 접근 표면 획득 (Phase 6.8 밀봉 - 레이아웃 비의존)
-    Set rdr = m_SourceTable.GetColumnReader(sColName)
-    If rdr Is Nothing Then Err.Raise 9999, sSource, "Column not found: " & sColName
-
+    vCol = m_SourceTable.CopyCandidateColumn(m_SourceTable.ColumnIndex(sColName), vCandidates)
     setSurvivors.BindTo m_SourceTable
-
-    ' 1-2. 컬럼 1D 배열 로컬 변수에 할당 (루프 내부는 직접 인덱싱 유지)
-    vCol = rdr.Values
 
     ' 2. [Dual Path] 연산자 종류에 따라 실행 경로 분기 (sOp는 호출자에서 정규화 완료)
     Select Case sOp
@@ -160,7 +151,7 @@ Private Function EvaluateArm(ByVal sColName As String, ByVal sOp As String, _
             
             ' 최적화된 루프
             For i = LBound(vCandidates) To UBound(vCandidates)
-                vCell = vCol(vCandidates(i))
+                vCell = vCol(i)
                 ' Empty=NULL 계약(D1): IsNumeric(Empty)=True라 0으로 참여하던 것을 차단.
                 ' Error/Date는 이미 IsNumeric=False로 제외 - 인덱스 계약과 정합.
                 If Not IsEmpty(vCell) And IsNumeric(vCell) Then
@@ -188,14 +179,14 @@ Private Function EvaluateArm(ByVal sColName As String, ByVal sOp As String, _
             Select Case sOp
                 Case "IS" ' StrComp 기반의 대소문자 무시 비교 (=)
                     For i = LBound(vCandidates) To UBound(vCandidates)
-                        vCell = vCol(vCandidates(i))
+                        vCell = vCol(i)
                         If Not IsError(vCell) Then
                             If StrComp(FastNorm(vCell), sTarget, vbTextCompare) = 0 Then setSurvivors.AddRow vCandidates(i)
                         End If
                     Next i
                 Case "IS NOT" ' StrComp 기반의 대소문자 무시 비교 (<>)
                     For i = LBound(vCandidates) To UBound(vCandidates)
-                        vCell = vCol(vCandidates(i))
+                        vCell = vCol(i)
                         If Not IsError(vCell) Then
                             If StrComp(FastNorm(vCell), sTarget, vbTextCompare) <> 0 Then setSurvivors.AddRow vCandidates(i)
                         End If
@@ -203,7 +194,7 @@ Private Function EvaluateArm(ByVal sColName As String, ByVal sOp As String, _
                 Case "LIKE" ' VBA Like 연산자
                     sTarget = UCase(sTarget) ' Like는 vbTextCompare를 지원 안하므로 UCase 필요
                     For i = LBound(vCandidates) To UBound(vCandidates)
-                        vCell = vCol(vCandidates(i))
+                        vCell = vCol(i)
                         If Not IsError(vCell) Then
                             If UCase(FastNorm(vCell)) Like sTarget Then setSurvivors.AddRow vCandidates(i)
                         End If
@@ -211,7 +202,7 @@ Private Function EvaluateArm(ByVal sColName As String, ByVal sOp As String, _
                 Case "NOT LIKE"
                      sTarget = UCase(sTarget)
                      For i = LBound(vCandidates) To UBound(vCandidates)
-                        vCell = vCol(vCandidates(i))
+                        vCell = vCol(i)
                         If Not IsError(vCell) Then
                             If Not (UCase(FastNorm(vCell)) Like sTarget) Then setSurvivors.AddRow vCandidates(i)
                         End If
@@ -312,10 +303,10 @@ Private Function EvaluateNumericSet(ByVal sColumn As String, ByRef values() As V
     For i = LBound(values) To UBound(values)
         targets(CDbl(values(i))) = True
     Next i
-    column = m_SourceTable.GetColumnReader(sColumn).Values
+    column = m_SourceTable.CopyCandidateColumn(m_SourceTable.ColumnIndex(sColumn), candidates)
     survivors.BindTo m_SourceTable
     For i = LBound(candidates) To UBound(candidates)
-        cell = column(candidates(i))
+        cell = column(i)
         If Not IsEmpty(cell) And IsNumeric(cell) Then
             If targets.exists(CDbl(cell)) Then survivors.AddRow candidates(i)
         End If

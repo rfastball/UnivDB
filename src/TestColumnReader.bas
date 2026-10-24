@@ -29,6 +29,14 @@ Public Sub Test_ColumnReader_ValueParity()
     LogShim.AssertEq "rdr_values_ubound", T.RowCount, UBound(vCol)
     LogShim.AssertEq "rdr_first_row", 2, rdr.FirstDataRow
     LogShim.AssertEq "rdr_last_row", T.RowCount, rdr.LastDataRow
+    Dim candidates As Variant, compact As Variant, result As clsTable
+    candidates = Array(4, 2)
+    compact = T.CopyCandidateColumn(T.ColumnIndex("Score"), candidates)
+    LogShim.AssertEq "candidate_position_empty", True, IsEmpty(compact(0))
+    LogShim.AssertEq "candidate_position_value", 10, compact(1)
+    Set result = UnivDB.Query(T).Where("Dept", "IT").Filter("Score", ">", 0).ToTable()
+    LogShim.AssertEq "candidate_filter_rows", 2, result.RowCount
+    LogShim.AssertEq "candidate_filter_value", 1, result.Value(2, "ID")
 End Sub
 
 Public Sub Test_ColumnReader_MissingColumn_ReturnsNothing()

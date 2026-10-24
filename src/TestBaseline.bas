@@ -86,6 +86,91 @@ Public Sub Test_Baseline_GroupBy()
     LogShim.AssertEq "baseline_groupby_it_rows", 1, tResult.SelectRows("Dept", "IT").Count
 End Sub
 
+Public Sub Test_Baseline_AppendFrom_PreservesRows()
+    Dim T As clsTable, source As clsTable, emptyTable As New clsTable
+    Dim a(1 To 2, 1 To 2) As Variant, b(1 To 5, 1 To 2) As Variant
+    Dim idx As DbHashIndex, rdr As DbColumnReader, q As clsQuery
+    Dim backend As Long, generation As Long, n As Long, r As Long
+    a(1, 1) = "ID": a(1, 2) = "Value": a(2, 1) = 1: a(2, 2) = "old"
+    b(1, 1) = "value": b(1, 2) = "id"
+    b(2, 1) = CVErr(xlErrNA): b(2, 2) = 1
+    b(3, 1) = DateSerial(2026, 1, 2): b(3, 2) = 1
+    b(4, 2) = 2: b(5, 1) = "text": b(5, 2) = 3
+    For backend = dbBackendDict To dbBackendCore
+        Set T = New clsTable: T.LoadFromArray a: T.IndexBackend = backend
+        Set source = New clsTable: source.LoadFromArray b
+        source.Value(5, "Value") = "  exact  "
+        Set idx = T.GetHashIndex("ID"): Set rdr = T.GetColumnReader("Value")
+        Set q = UnivDB.Query(T).Where("ID", 1)
+        generation = T.Generation
+        T.AppendFrom source
+        LogShim.AssertEq "append_generation_" & backend, generation + 1, T.Generation
+        LogShim.AssertEq "append_rows_" & backend, 6, T.RowCount
+        LogShim.AssertEq "append_old_" & backend, "old", T.Value(2, "Value")
+        LogShim.AssertEq "append_duplicate_" & backend, 3, T.SelectRows("ID", 1).Count
+        LogShim.AssertEq "append_error_" & backend, True, IsError(T.Value(3, "Value"))
+        LogShim.AssertEq "append_date_" & backend, vbDate, VarType(T.Value(4, "Value"))
+        LogShim.AssertEq "append_empty_" & backend, True, IsEmpty(T.Value(5, "Value"))
+        LogShim.AssertEq "append_exact_" & backend, "  exact  ", T.Value(6, "Value")
+        LogShim.AssertEq "append_source_" & backend, 5, source.RowCount
+        On Error Resume Next
+        Err.Clear: idx.EnsureCurrent T: n = Err.Number
+        On Error GoTo 0
+        LogShim.AssertEq "append_stale_index_" & backend, 9998, n
+        On Error Resume Next
+        Err.Clear: rdr.EnsureCurrent T: n = Err.Number
+        On Error GoTo 0
+        LogShim.AssertEq "append_stale_reader_" & backend, 9998, n
+        On Error Resume Next
+        Err.Clear: q.Filter "ID", "=", 1: n = Err.Number
+        On Error GoTo 0
+        LogShim.AssertEq "append_stale_query_" & backend, 9998, n
+        T.AppendFrom T
+        LogShim.AssertEq "append_self_rows_" & backend, 11, T.RowCount
+        For r = 2 To 6
+            LogShim.AssertEq "append_self_order_" & backend & "_" & r, T.Value(r, "ID"), T.Value(r + 5, "ID")
+        Next r
+        generation = T.Generation
+        T.AppendFrom emptyTable
+        LogShim.AssertEq "append_empty_noop_" & backend, generation, T.Generation
+    Next backend
+End Sub
+
+Public Sub Test_Baseline_AppendFrom_ValidatesBeforeWrite()
+    Dim T As clsTable, source As clsTable, missing As clsTable
+    Dim a(1 To 2, 1 To 2) As Variant, b(1 To 2, 1 To 2) As Variant
+    Dim headerOnly(1 To 1, 1 To 2) As Variant, raw As Variant
+    Dim names As Variant, name As Variant, generation As Long, n As Long
+    a(1, 1) = "ID": a(1, 2) = "Value": a(2, 1) = 1: a(2, 2) = "old"
+    Set T = New clsTable: T.LoadFromArray a
+    generation = T.Generation
+    names = Array("Other", "ID", "")
+    For Each name In names
+        b(1, 1) = "ID": b(1, 2) = name: b(2, 1) = 2: b(2, 2) = "new"
+        raw = b: Set source = New clsTable: source.AdoptArray raw
+        On Error Resume Next
+        Err.Clear: T.AppendFrom source: n = Err.Number
+        On Error GoTo 0
+        LogShim.AssertEq "append_bad_schema_" & CStr(name), 9999, n
+        LogShim.AssertEq "append_bad_rows_" & CStr(name), 2, T.RowCount
+        LogShim.AssertEq "append_bad_generation_" & CStr(name), generation, T.Generation
+        LogShim.AssertEq "append_bad_value_" & CStr(name), "old", T.Value(2, "Value")
+    Next name
+    On Error Resume Next
+    Err.Clear: T.AppendFrom missing: n = Err.Number
+    On Error GoTo 0
+    LogShim.AssertEq "append_nothing", 9999, n
+    headerOnly(1, 1) = "Value": headerOnly(1, 2) = "ID"
+    Set source = New clsTable: source.LoadFromArray headerOnly
+    T.AppendFrom source
+    LogShim.AssertEq "append_header_only_noop", generation, T.Generation
+    Set T = New clsTable: T.LoadFromArray a, False
+    T.AppendFrom T
+    LogShim.AssertEq "append_headerless_rows", 4, T.RowCount
+    LogShim.AssertEq "append_headerless_first", "ID", T.Value(3, "COLUMN1")
+    LogShim.AssertEq "append_headerless_last", "old", T.Value(4, "COLUMN2")
+End Sub
+
 Private Function NewBaseTable() As clsTable
     Dim vData(1 To 6, 1 To 4) As Variant
     Dim T As clsTable

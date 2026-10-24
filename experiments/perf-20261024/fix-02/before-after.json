@@ -1,0 +1,226 @@
+[
+  {
+    "case": "add_8_columns_100k",
+    "samples": 3,
+    "before_ms": 16.2922,
+    "after_ms": 34.8402,
+    "speedup": 0.47
+  },
+  {
+    "case": "append_50k_plus_10k_4cols",
+    "samples": 3,
+    "before_ms": null,
+    "after_ms": 62.6759,
+    "speedup": null
+  },
+  {
+    "case": "append_50k_plus_10k_with_prepare",
+    "samples": 3,
+    "before_ms": null,
+    "after_ms": 146.1249,
+    "speedup": null
+  },
+  {
+    "case": "column_reader_values_1",
+    "samples": 3,
+    "before_ms": 8.4483,
+    "after_ms": 8.3629,
+    "speedup": 1.01
+  },
+  {
+    "case": "column_reader_values_10",
+    "samples": 3,
+    "before_ms": 8.3689,
+    "after_ms": 8.2686,
+    "speedup": 1.01
+  },
+  {
+    "case": "column_reader_values_1000",
+    "samples": 3,
+    "before_ms": 8.1612,
+    "after_ms": 7.7319,
+    "speedup": 1.06
+  },
+  {
+    "case": "column_reader_values_10000",
+    "samples": 3,
+    "before_ms": 8.4136,
+    "after_ms": 7.5081,
+    "speedup": 1.12
+  },
+  {
+    "case": "column_reader_values_100000",
+    "samples": 3,
+    "before_ms": 8.5247,
+    "after_ms": 8.0088,
+    "speedup": 1.06
+  },
+  {
+    "case": "filter_direct_1",
+    "samples": 3,
+    "before_ms": 0.0097,
+    "after_ms": 0.0188,
+    "speedup": 0.52
+  },
+  {
+    "case": "filter_direct_10",
+    "samples": 3,
+    "before_ms": 0.0201,
+    "after_ms": 0.0247,
+    "speedup": 0.81
+  },
+  {
+    "case": "filter_direct_1000",
+    "samples": 3,
+    "before_ms": 1.0851,
+    "after_ms": 1.0586,
+    "speedup": 1.03
+  },
+  {
+    "case": "filter_direct_10000",
+    "samples": 3,
+    "before_ms": 10.6781,
+    "after_ms": 13.1144,
+    "speedup": 0.81
+  },
+  {
+    "case": "filter_direct_100000",
+    "samples": 3,
+    "before_ms": 105.7274,
+    "after_ms": 109.7002,
+    "speedup": 0.96
+  },
+  {
+    "case": "filter_only_1",
+    "samples": 3,
+    "before_ms": 8.2676,
+    "after_ms": 0.017,
+    "speedup": 486.33
+  },
+  {
+    "case": "filter_only_10",
+    "samples": 3,
+    "before_ms": 8.3605,
+    "after_ms": 0.0204,
+    "speedup": 409.83
+  },
+  {
+    "case": "filter_only_1000",
+    "samples": 3,
+    "before_ms": 8.647,
+    "after_ms": 0.3552,
+    "speedup": 24.34
+  },
+  {
+    "case": "filter_only_10000",
+    "samples": 3,
+    "before_ms": 10.9477,
+    "after_ms": 3.1277,
+    "speedup": 3.5
+  },
+  {
+    "case": "filter_only_100000",
+    "samples": 3,
+    "before_ms": 35.0338,
+    "after_ms": 30.6912,
+    "speedup": 1.14
+  },
+  {
+    "case": "join_current_cold_anti_False",
+    "samples": 3,
+    "before_ms": 580.5618,
+    "after_ms": 625.0862,
+    "speedup": 0.93
+  },
+  {
+    "case": "join_current_cold_anti_True",
+    "samples": 3,
+    "before_ms": 867.6492,
+    "after_ms": 1413.4159,
+    "speedup": 0.61
+  },
+  {
+    "case": "join_current_warm_anti_False",
+    "samples": 3,
+    "before_ms": 78.4056,
+    "after_ms": 93.5391,
+    "speedup": 0.84
+  },
+  {
+    "case": "join_current_warm_anti_True",
+    "samples": 3,
+    "before_ms": 371.8097,
+    "after_ms": 578.2697,
+    "speedup": 0.64
+  },
+  {
+    "case": "join_single_cold_anti_False",
+    "samples": 3,
+    "before_ms": 127.5045,
+    "after_ms": 133.4034,
+    "speedup": 0.96
+  },
+  {
+    "case": "join_single_cold_anti_True",
+    "samples": 3,
+    "before_ms": 144.6122,
+    "after_ms": 174.2821,
+    "speedup": 0.83
+  },
+  {
+    "case": "join_single_warm_anti_False",
+    "samples": 3,
+    "before_ms": 117.1571,
+    "after_ms": 116.8863,
+    "speedup": 1.0
+  },
+  {
+    "case": "join_single_warm_anti_True",
+    "samples": 3,
+    "before_ms": 132.2956,
+    "after_ms": 181.4371,
+    "speedup": 0.73
+  },
+  {
+    "case": "rawarray_20k_30cols_10x",
+    "samples": 3,
+    "before_ms": 70.6092,
+    "after_ms": 140.2722,
+    "speedup": 0.5
+  },
+  {
+    "case": "remove_20_of_30_columns",
+    "samples": 3,
+    "before_ms": 323.4864,
+    "after_ms": 35.8614,
+    "speedup": 9.02
+  },
+  {
+    "case": "select_10_of_30_columns",
+    "samples": 3,
+    "before_ms": 10.6176,
+    "after_ms": 44.5566,
+    "speedup": 0.24
+  },
+  {
+    "case": "wide_join_early_projection_cold",
+    "samples": 3,
+    "before_ms": 242.1757,
+    "after_ms": 502.7542,
+    "speedup": 0.48
+  },
+  {
+    "case": "wide_join_late_projection_cold",
+    "samples": 3,
+    "before_ms": 302.7056,
+    "after_ms": 541.0229,
+    "speedup": 0.56
+  },
+  {
+    "case": "wide_join_late_projection_warm",
+    "samples": 3,
+    "before_ms": 193.8006,
+    "after_ms": 420.7778,
+    "speedup": 0.46
+  }
+]

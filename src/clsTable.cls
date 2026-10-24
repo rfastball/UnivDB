@@ -595,6 +595,56 @@ Public Property Get RawArray() As Variant
     RawArray = m_vData
 End Property
 
+Friend Property Get FirstDataRow() As Long
+    FirstDataRow = m_lHeaderRowIndex + 1
+End Property
+
+' 후보 위치와 같은 첨자의 사본을 반환한다. rowID 세대 검사는 쿼리 진입점이 담당한다.
+Friend Function CopyCandidateColumn(ByVal col As Long, ByRef rowIds As Variant) As Variant
+    Dim values() As Variant, i As Long
+    If col < 1 Or col > m_lColCount Then Err.Raise 9999, "clsTable.CopyCandidateColumn", "Column out of range"
+    ReDim values(LBound(rowIds) To UBound(rowIds))
+    For i = LBound(rowIds) To UBound(rowIds)
+        values(i) = m_vData(rowIds(i), col)
+    Next i
+    CopyCandidateColumn = values
+End Function
+
+' @desc 동일 스키마 테이블의 행을 순서대로 추가함, 스키마 불일치 시 9999
+Public Function AppendFrom(ByVal source As clsTable) As clsTable
+    Dim incoming As Variant, combined() As Variant, map() As Long
+    Dim headers As Object, key As Variant, r As Long, c As Long, count As Long, firstRow As Long
+    If source Is Nothing Then Err.Raise 9999, "clsTable.AppendFrom", "Source table required"
+    Set AppendFrom = Me
+    If source.ColCount = 0 And source.RowCount = 0 Then Exit Function
+    Set headers = source.Headers
+    If m_lColCount = 0 Or source.ColCount <> m_lColCount Or _
+       headers.Count <> source.ColCount Or m_dicHeaders.Count <> m_lColCount Then
+        Err.Raise 9999, "clsTable.AppendFrom", "Matching, uniquely named columns required"
+    End If
+    ReDim map(1 To m_lColCount)
+    For Each key In m_dicHeaders
+        If Not headers.exists(key) Then Err.Raise 9999, "clsTable.AppendFrom", "Missing column: " & key
+        map(m_dicHeaders(key)) = headers(key)
+    Next key
+    firstRow = source.FirstDataRow
+    count = source.RowCount - firstRow + 1
+    If count = 0 Then Exit Function
+    incoming = source.RawArray
+    ReDim combined(LBound(m_vData, 1) To m_lRowCount + count, 1 To m_lColCount)
+    For c = 1 To m_lColCount
+        For r = LBound(m_vData, 1) To m_lRowCount
+            combined(r, c) = m_vData(r, c)
+        Next r
+        For r = 0 To count - 1
+            combined(m_lRowCount + 1 + r, c) = incoming(firstRow + r, map(c))
+        Next r
+    Next c
+    m_vData = combined
+    m_lRowCount = m_lRowCount + count
+    BumpGeneration
+End Function
+
 
 ' [clsTable.cls] 추가 코드
 
@@ -1364,44 +1414,9 @@ End Function
 ' 9-2-2. 기존 컬럼 삭제
 ' sColName: 삭제할 헤더명
 Public Function RemoveColumn(ByVal sColName As String) As clsTable
-    Dim lTargetIdx As Long
-    Dim i As Long, j As Long, k As Long
-    Dim vNewData() As Variant
-
-    sColName = Trim(sColName)
-    ' 멱등 drop 계약 - 없으면 무시 (문서화는 C4)
-    If Not m_dicHeaders.exists(UCase(sColName)) Then Set RemoveColumn = Me: Exit Function
-    
-    ' 1. 삭제할 컬럼의 인덱스 확인
-    lTargetIdx = m_dicHeaders(UCase(sColName))
-    
-    ' 2. 새로운 배열 선언 (컬럼 수가 1개 줄어듦)
-    ReDim vNewData(1 To m_lRowCount, 1 To m_lColCount - 1)
-    
-    ' 3. 데이터 복사 (삭제 대상 컬럼만 제외하고 이동)
-    k = 0
-    For j = 1 To m_lColCount
-        If j <> lTargetIdx Then
-            k = k + 1 ' 새 배열의 컬럼 인덱스
-            For i = 1 To m_lRowCount
-                vNewData(i, k) = m_vData(i, j)
-            Next i
-        End If
-    Next j
-    
-    ' 4. 클래스 내부 변수 갱신
-    m_vData = vNewData ' 배열 교체
-    m_lColCount = m_lColCount - 1
-    
-    ' 5. 헤더 딕셔너리 재구성 (인덱스가 하나씩 밀리므로 새로 고침)
-    Set m_dicHeaders = CreateObject("Scripting.Dictionary")
-    For j = 1 To m_lColCount
-        m_dicHeaders(UCase(Trim(m_vData(m_lHeaderRowIndex, j)))) = j
-    Next j
-
-    BumpGeneration
-
-    Set RemoveColumn = Me
+    Dim names As New Collection
+    names.Add Trim$(sColName)
+    Set RemoveColumn = RemoveNamedColumns(names)
 End Function
 
 ' ==============================================================================
@@ -1459,13 +1474,52 @@ End Function
 
 ' @desc 컬럼 여러 개 삭제 후 자기 자신 반환, 개별 인자/csv/Array 허용 (멱등 drop)
 Public Function RemoveColumns(ParamArray vCols() As Variant) As clsTable
-    Dim colNames As Collection
-    Dim vName As Variant
-    Set colNames = FlattenColumnArgs(vCols)
+    Set RemoveColumns = RemoveNamedColumns(FlattenColumnArgs(vCols))
+End Function
+
+Private Function RemoveNamedColumns(ByVal colNames As Collection) As clsTable
+    Dim headers As Object, vName As Variant
+    Dim dropped() As Boolean, data As Variant, c As Long, k As Long, r As Long, count As Long
+    Dim name As String, hasHeader As Boolean
+    Set RemoveNamedColumns = Me
+    If m_lColCount = 0 Or colNames.Count = 0 Then Exit Function
+    Set headers = Me.Headers
+    hasHeader = (m_lHeaderRowIndex >= LBound(m_vData, 1))
+    ReDim dropped(1 To m_lColCount)
     For Each vName In colNames
-        RemoveColumn CStr(vName)
+        name = UCase$(CStr(vName))
+        If headers.exists(name) Then
+            dropped(headers(name)) = True
+            count = count + 1
+            If count = m_lColCount Then Err.Raise 9999, "clsTable.RemoveColumns", "At least one column must remain"
+            ' 순차 삭제의 중복 헤더 last-wins와 COLUMNn 재번호 의미를 유지한다.
+            headers.RemoveAll
+            k = 0
+            For c = 1 To m_lColCount
+                If Not dropped(c) Then
+                    k = k + 1
+                    If hasHeader Then name = UCase$(Trim$(CStr(m_vData(m_lHeaderRowIndex, c)))) Else name = "COLUMN" & k
+                    If Len(name) > 0 Then headers(name) = c
+                End If
+            Next c
+        End If
     Next vName
-    Set RemoveColumns = Me
+    If count = 0 Then Exit Function
+    ReDim data(LBound(m_vData, 1) To m_lRowCount, 1 To m_lColCount - count)
+    k = 0
+    For c = 1 To m_lColCount
+        If Not dropped(c) Then
+            k = k + 1
+            For r = LBound(m_vData, 1) To m_lRowCount
+                data(r, k) = m_vData(r, c)
+            Next r
+        End If
+    Next c
+    Set headers = BuildHeaders(data, hasHeader, False)
+    m_vData = data
+    m_lColCount = m_lColCount - count
+    Set m_dicHeaders = headers
+    BumpGeneration
 End Function
 
 Public Function SelectColumns(ParamArray vCols() As Variant) As clsTable

@@ -1,0 +1,798 @@
+{
+  "command": "test",
+  "ok": true,
+  "exitCode": 0,
+  "hint": null,
+  "session": {
+    "action": "ephemeral",
+    "pid": 58996,
+    "workbook": "C:\\Users\\rfast\\Desktop\\VBA_Projects\\UnivDB\\UnivDB.xlsm",
+    "readOnly": true
+  },
+  "errors": [],
+  "payload": {
+    "tests": [
+      {
+        "name": "Test_Smoke",
+        "module": "SmokeTest",
+        "result": "pass",
+        "detail": null
+      },
+      {
+        "name": "Test_Baseline_Query_Filter_Update_Delete",
+        "module": "TestBaseline",
+        "result": "pass",
+        "detail": null
+      },
+      {
+        "name": "Test_Baseline_Select_Order_Top",
+        "module": "TestBaseline",
+        "result": "pass",
+        "detail": null
+      },
+      {
+        "name": "Test_Baseline_Join_Types",
+        "module": "TestBaseline",
+        "result": "pass",
+        "detail": null
+      },
+      {
+        "name": "Test_Baseline_GroupBy",
+        "module": "TestBaseline",
+        "result": "pass",
+        "detail": null
+      },
+      {
+        "name": "Test_Baseline_AppendFrom_PreservesRows",
+        "module": "TestBaseline",
+        "result": "pass",
+        "detail": null
+      },
+      {
+        "name": "Test_Baseline_AppendFrom_ValidatesBeforeWrite",
+        "module": "TestBaseline",
+        "result": "pass",
+        "detail": null
+      },
+      {
+        "name": "Test_Load_DuplicateHeader_Raises",
+        "module": "TestBaseline",
+        "result": "pass",
+        "detail": null
+      },
+      {
+        "name": "Test_Load_DuplicateHeader_CaseInsensitive_Raises",
+        "module": "TestBaseline",
+        "result": "pass",
+        "detail": null
+      },
+      {
+        "name": "Test_Load_1DArray_Raises",
+        "module": "TestBaseline",
+        "result": "pass",
+        "detail": null
+      },
+      {
+        "name": "Test_Load_ScalarOrEmpty_Raises",
+        "module": "TestBaseline",
+        "result": "pass",
+        "detail": null
+      },
+      {
+        "name": "Test_Load_FailPreservesState",
+        "module": "TestBaseline",
+        "result": "pass",
+        "detail": null
+      },
+      {
+        "name": "Test_Load_AdoptArray_DuplicateHeader_LastWins",
+        "module": "TestBaseline",
+        "result": "pass",
+        "detail": null
+      },
+      {
+        "name": "Test_LibVersion_Reports_Something",
+        "module": "TestBaseline",
+        "result": "pass",
+        "detail": null
+      },
+      {
+        "name": "Test_Headers_SnapshotIsolation",
+        "module": "TestBaseline",
+        "result": "pass",
+        "detail": null
+      },
+      {
+        "name": "Test_BenchDb_IndexBuild",
+        "module": "TestBenchDb",
+        "result": "pass",
+        "detail": null
+      },
+      {
+        "name": "Test_BenchDb_WhereEquality",
+        "module": "TestBenchDb",
+        "result": "pass",
+        "detail": null
+      },
+      {
+        "name": "Test_BenchDb_FilterScan",
+        "module": "TestBenchDb",
+        "result": "pass",
+        "detail": null
+      },
+      {
+        "name": "Test_BenchDb_Join",
+        "module": "TestBenchDb",
+        "result": "pass",
+        "detail": null
+      },
+      {
+        "name": "Test_BenchDb_JoinWide",
+        "module": "TestBenchDb",
+        "result": "pass",
+        "detail": null
+      },
+      {
+        "name": "Test_BenchDb_GroupBy",
+        "module": "TestBenchDb",
+        "result": "pass",
+        "detail": null
+      },
+      {
+        "name": "Test_BenchDb_ColumnAccess",
+        "module": "TestBenchDb",
+        "result": "pass",
+        "detail": null
+      },
+      {
+        "name": "Test_BenchDb_Teardown",
+        "module": "TestBenchDb",
+        "result": "pass",
+        "detail": null
+      },
+      {
+        "name": "Test_BenchDb_QueryWritesAndNumericOr",
+        "module": "TestBenchDb",
+        "result": "pass",
+        "detail": null
+      },
+      {
+        "name": "Test_BenchDb_BulkAppendAndDrop",
+        "module": "TestBenchDb",
+        "result": "pass",
+        "detail": null
+      },
+      {
+        "name": "Test_ColumnReader_ValueParity",
+        "module": "TestColumnReader",
+        "result": "pass",
+        "detail": null
+      },
+      {
+        "name": "Test_ColumnReader_MissingColumn_ReturnsNothing",
+        "module": "TestColumnReader",
+        "result": "pass",
+        "detail": null
+      },
+      {
+        "name": "Test_ColumnReader_StaleAfterStructuralChange_FailFast",
+        "module": "TestColumnReader",
+        "result": "pass",
+        "detail": null
+      },
+      {
+        "name": "Test_ColumnReader_ScanSmoke",
+        "module": "TestColumnReader",
+        "result": "pass",
+        "detail": null
+      },
+      {
+        "name": "Test_ColumnReader_ValueChanges_FailFast",
+        "module": "TestColumnReader",
+        "result": "pass",
+        "detail": null
+      },
+      {
+        "name": "Test_Generation_StructuralChanges_Bump",
+        "module": "TestGeneration",
+        "result": "pass",
+        "detail": null
+      },
+      {
+        "name": "Test_Generation_Upsert_Bumps",
+        "module": "TestGeneration",
+        "result": "pass",
+        "detail": null
+      },
+      {
+        "name": "Test_Generation_ValueChanges_NoBump",
+        "module": "TestGeneration",
+        "result": "pass",
+        "detail": null
+      },
+      {
+        "name": "Test_Generation_StaleRowSet_FailFast",
+        "module": "TestGeneration",
+        "result": "pass",
+        "detail": null
+      },
+      {
+        "name": "Test_Generation_StaleIndex_FailFast",
+        "module": "TestGeneration",
+        "result": "pass",
+        "detail": null
+      },
+      {
+        "name": "Test_Generation_MixedBinding_FailFast",
+        "module": "TestGeneration",
+        "result": "pass",
+        "detail": null
+      },
+      {
+        "name": "Test_Generation_NormalQueryPath_Unaffected",
+        "module": "TestGeneration",
+        "result": "pass",
+        "detail": null
+      },
+      {
+        "name": "Test_GroupBySem_CaseKey",
+        "module": "TestGroupBySemantics",
+        "result": "pass",
+        "detail": null
+      },
+      {
+        "name": "Test_GroupBySem_ErrorKeySkip",
+        "module": "TestGroupBySemantics",
+        "result": "pass",
+        "detail": null
+      },
+      {
+        "name": "Test_GroupBySem_EmptyKey",
+        "module": "TestGroupBySemantics",
+        "result": "pass",
+        "detail": null
+      },
+      {
+        "name": "Test_GroupBySem_CompositeDelimiterCollision",
+        "module": "TestGroupBySemantics",
+        "result": "pass",
+        "detail": null
+      },
+      {
+        "name": "Test_GroupBySem_CompositeContractParity",
+        "module": "TestGroupBySemantics",
+        "result": "pass",
+        "detail": null
+      },
+      {
+        "name": "Test_GroupBySem_NumericKeyType",
+        "module": "TestGroupBySemantics",
+        "result": "pass",
+        "detail": null
+      },
+      {
+        "name": "Test_HashIndex_KeySemantics_Parametric",
+        "module": "TestHashIndex",
+        "result": "pass",
+        "detail": null
+      },
+      {
+        "name": "Test_HashIndex_CursorAndClear_Parametric",
+        "module": "TestHashIndex",
+        "result": "pass",
+        "detail": null
+      },
+      {
+        "name": "Test_HashIndex_SpanApi_Parametric",
+        "module": "TestHashIndex",
+        "result": "pass",
+        "detail": null
+      },
+      {
+        "name": "Test_TableHashIndex_SelectRows_Parity",
+        "module": "TestHashIndex",
+        "result": "pass",
+        "detail": null
+      },
+      {
+        "name": "Test_TableHashIndex_CoreBackend_Parity",
+        "module": "TestHashIndex",
+        "result": "pass",
+        "detail": null
+      },
+      {
+        "name": "Test_QueryWhere_UsesHashIndex_Path",
+        "module": "TestHashIndex",
+        "result": "pass",
+        "detail": null
+      },
+      {
+        "name": "Test_HashIndex_UnicodeEquality",
+        "module": "TestHashIndex",
+        "result": "pass",
+        "detail": null
+      },
+      {
+        "name": "Test_IndexInvalidation_ValueLet_RemovesNameAndIndexCaches",
+        "module": "TestIndexInvalidation",
+        "result": "pass",
+        "detail": null
+      },
+      {
+        "name": "Test_IndexInvalidation_UpdateBatch_RemovesNumericCache",
+        "module": "TestIndexInvalidation",
+        "result": "pass",
+        "detail": null
+      },
+      {
+        "name": "Test_IndexInvalidation_UpdateOnlyUpsert_ClearsCache",
+        "module": "TestIndexInvalidation",
+        "result": "pass",
+        "detail": null
+      },
+      {
+        "name": "Test_IndexInvalidation_ColumnTransforms_ClearAffectedCaches",
+        "module": "TestIndexInvalidation",
+        "result": "pass",
+        "detail": null
+      },
+      {
+        "name": "Test_IndexInvalidation_RetainedIndex_Parametric",
+        "module": "TestIndexInvalidation",
+        "result": "pass",
+        "detail": null
+      },
+      {
+        "name": "Test_JoinDirect_AllJoinTypes",
+        "module": "TestJoinDirect",
+        "result": "pass",
+        "detail": null
+      },
+      {
+        "name": "Test_JoinDirect_DifferentKeyColumnNames",
+        "module": "TestJoinDirect",
+        "result": "pass",
+        "detail": null
+      },
+      {
+        "name": "Test_NullSem_EmptyNumericFilterExcluded",
+        "module": "TestNullTypeSemantics",
+        "result": "pass",
+        "detail": null
+      },
+      {
+        "name": "Test_NullSem_EmptyStringFilterAsBlank",
+        "module": "TestNullTypeSemantics",
+        "result": "pass",
+        "detail": null
+      },
+      {
+        "name": "Test_NullSem_StringFilterTrimSymmetry",
+        "module": "TestNullTypeSemantics",
+        "result": "pass",
+        "detail": null
+      },
+      {
+        "name": "Test_NullSem_EmptyAggregateAndFilterConsistent",
+        "module": "TestNullTypeSemantics",
+        "result": "pass",
+        "detail": null
+      },
+      {
+        "name": "Test_NullSem_EmptyOrderByAsZero",
+        "module": "TestNullTypeSemantics",
+        "result": "pass",
+        "detail": null
+      },
+      {
+        "name": "Test_NullSem_ErrorNumericFilterExcluded",
+        "module": "TestNullTypeSemantics",
+        "result": "pass",
+        "detail": null
+      },
+      {
+        "name": "Test_NullSem_ErrorStringFilterSkipped",
+        "module": "TestNullTypeSemantics",
+        "result": "pass",
+        "detail": null
+      },
+      {
+        "name": "Test_NullSem_ErrorOrderBySortsLast",
+        "module": "TestNullTypeSemantics",
+        "result": "pass",
+        "detail": null
+      },
+      {
+        "name": "Test_NullSem_ErrorAggregateExcluded",
+        "module": "TestNullTypeSemantics",
+        "result": "pass",
+        "detail": null
+      },
+      {
+        "name": "Test_NullSem_MinMaxErrorSkipped",
+        "module": "TestNullTypeSemantics",
+        "result": "pass",
+        "detail": null
+      },
+      {
+        "name": "Test_NullSem_NumericStringMerge",
+        "module": "TestNullTypeSemantics",
+        "result": "pass",
+        "detail": null
+      },
+      {
+        "name": "Test_NullSem_MixedOrderByPermutation",
+        "module": "TestNullTypeSemantics",
+        "result": "pass",
+        "detail": null
+      },
+      {
+        "name": "Test_NullSem_AggregatePermutation",
+        "module": "TestNullTypeSemantics",
+        "result": "pass",
+        "detail": null
+      },
+      {
+        "name": "Test_NullSem_DateNumericExcludedButCounted",
+        "module": "TestNullTypeSemantics",
+        "result": "pass",
+        "detail": null
+      },
+      {
+        "name": "Test_NullSem_DateOrderByChronological",
+        "module": "TestNullTypeSemantics",
+        "result": "pass",
+        "detail": null
+      },
+      {
+        "name": "Test_NullSem_DateIndexKeySelfConsistent",
+        "module": "TestNullTypeSemantics",
+        "result": "pass",
+        "detail": null
+      },
+      {
+        "name": "Test_NullSem_DateIndexKeyIsoCanonical",
+        "module": "TestNullTypeSemantics",
+        "result": "pass",
+        "detail": null
+      },
+      {
+        "name": "Test_Insert",
+        "module": "TestQuery",
+        "result": "pass",
+        "detail": null
+      },
+      {
+        "name": "Test_Update",
+        "module": "TestQuery",
+        "result": "pass",
+        "detail": null
+      },
+      {
+        "name": "Test_Delete",
+        "module": "TestQuery",
+        "result": "pass",
+        "detail": null
+      },
+      {
+        "name": "Test_ComplexScenario",
+        "module": "TestQuery",
+        "result": "pass",
+        "detail": null
+      },
+      {
+        "name": "Test_RowList_Append_RowAt_ToArray_Clear",
+        "module": "TestRowList",
+        "result": "pass",
+        "detail": null
+      },
+      {
+        "name": "Test_RowList_Collection_Adapter",
+        "module": "TestRowList",
+        "result": "pass",
+        "detail": null
+      },
+      {
+        "name": "Test_RowList_SelectRows_Compatibility",
+        "module": "TestRowList",
+        "result": "pass",
+        "detail": null
+      },
+      {
+        "name": "Test_RowSet_FromAllRows_ToArray_Order",
+        "module": "TestRowSet",
+        "result": "pass",
+        "detail": null
+      },
+      {
+        "name": "Test_RowSet_Load_Intersect_Contains",
+        "module": "TestRowSet",
+        "result": "pass",
+        "detail": null
+      },
+      {
+        "name": "Test_Query_RowSet_Candidate_Order_And_Update",
+        "module": "TestRowSet",
+        "result": "pass",
+        "detail": null
+      },
+      {
+        "name": "Test_RowSet_UnionWith",
+        "module": "TestRowSet",
+        "result": "pass",
+        "detail": null
+      },
+      {
+        "name": "Test_RowSet_UnionWith_BindingMismatch",
+        "module": "TestRowSet",
+        "result": "pass",
+        "detail": null
+      },
+      {
+        "name": "Test_Chain_UnknownFilterOp",
+        "module": "TestChainingSemantics",
+        "result": "pass",
+        "detail": null
+      },
+      {
+        "name": "Test_Chain_UnknownAggFunc",
+        "module": "TestChainingSemantics",
+        "result": "pass",
+        "detail": null
+      },
+      {
+        "name": "Test_Chain_ComputeSilentFailures",
+        "module": "TestChainingSemantics",
+        "result": "pass",
+        "detail": null
+      },
+      {
+        "name": "Test_Chain_PatchIfUnknownOp",
+        "module": "TestChainingSemantics",
+        "result": "pass",
+        "detail": null
+      },
+      {
+        "name": "Test_Chain_CanonicalAliases",
+        "module": "TestChainingSemantics",
+        "result": "pass",
+        "detail": null
+      },
+      {
+        "name": "Test_Chain_BuilderSetGetVal",
+        "module": "TestChainingSemantics",
+        "result": "pass",
+        "detail": null
+      },
+      {
+        "name": "Test_Chain_TableMutationChaining",
+        "module": "TestChainingSemantics",
+        "result": "pass",
+        "detail": null
+      },
+      {
+        "name": "Test_Chain_ColumnWriteFailFast",
+        "module": "TestChainingSemantics",
+        "result": "pass",
+        "detail": null
+      },
+      {
+        "name": "Test_Chain_VocabAliases",
+        "module": "TestChainingSemantics",
+        "result": "pass",
+        "detail": null
+      },
+      {
+        "name": "Test_Chain_TableAddRemoveColumns",
+        "module": "TestChainingSemantics",
+        "result": "pass",
+        "detail": null
+      },
+      {
+        "name": "Test_Chain_QueryJoinChain",
+        "module": "TestChainingSemantics",
+        "result": "pass",
+        "detail": null
+      },
+      {
+        "name": "Test_Chain_QueryJoinBarrier",
+        "module": "TestChainingSemantics",
+        "result": "pass",
+        "detail": null
+      },
+      {
+        "name": "Test_Chain_JoinBadKeyFailFast",
+        "module": "TestChainingSemantics",
+        "result": "pass",
+        "detail": null
+      },
+      {
+        "name": "Test_Chain_NonNumericCompareValue",
+        "module": "TestChainingSemantics",
+        "result": "pass",
+        "detail": null
+      },
+      {
+        "name": "Test_Chain_FilterAnyCrossColumnOr",
+        "module": "TestChainingSemantics",
+        "result": "pass",
+        "detail": null
+      },
+      {
+        "name": "Test_Chain_FilterAnyFirstCondition",
+        "module": "TestChainingSemantics",
+        "result": "pass",
+        "detail": null
+      },
+      {
+        "name": "Test_Chain_FilterAnyOverlapNoDupes",
+        "module": "TestChainingSemantics",
+        "result": "pass",
+        "detail": null
+      },
+      {
+        "name": "Test_Chain_FilterAnySameColumnIn",
+        "module": "TestChainingSemantics",
+        "result": "pass",
+        "detail": null
+      },
+      {
+        "name": "Test_Chain_FilterAnyDynamicList",
+        "module": "TestChainingSemantics",
+        "result": "pass",
+        "detail": null
+      },
+      {
+        "name": "Test_Chain_FilterAnyValidation",
+        "module": "TestChainingSemantics",
+        "result": "pass",
+        "detail": null
+      },
+      {
+        "name": "Test_Chain_FilterAnyValidateBeforeMutate",
+        "module": "TestChainingSemantics",
+        "result": "pass",
+        "detail": null
+      },
+      {
+        "name": "Test_Chain_ReportKeepAny",
+        "module": "TestChainingSemantics",
+        "result": "pass",
+        "detail": null
+      },
+      {
+        "name": "Test_Chain_ComputeConstOperand",
+        "module": "TestChainingSemantics",
+        "result": "pass",
+        "detail": null
+      },
+      {
+        "name": "Test_Chain_ComputeConstBoth",
+        "module": "TestChainingSemantics",
+        "result": "pass",
+        "detail": null
+      },
+      {
+        "name": "Test_Chain_ComputeConstValidation",
+        "module": "TestChainingSemantics",
+        "result": "pass",
+        "detail": null
+      },
+      {
+        "name": "Test_Chain_ComputeConstConcatAndNullSkip",
+        "module": "TestChainingSemantics",
+        "result": "pass",
+        "detail": null
+      },
+      {
+        "name": "Test_Chain_SortProjectionAndEmpty",
+        "module": "TestChainingSemantics",
+        "result": "pass",
+        "detail": null
+      },
+      {
+        "name": "Test_Chain_ValidationBeforeEmpty",
+        "module": "TestChainingSemantics",
+        "result": "pass",
+        "detail": null
+      },
+      {
+        "name": "Test_Chain_UpdateValidatesAllColumns",
+        "module": "TestChainingSemantics",
+        "result": "pass",
+        "detail": null
+      },
+      {
+        "name": "Test_Chain_FillFromMapValidatesBeforeCopy",
+        "module": "TestChainingSemantics",
+        "result": "pass",
+        "detail": null
+      },
+      {
+        "name": "Test_Chain_FillFromMapDefaultsAndCopy",
+        "module": "TestChainingSemantics",
+        "result": "pass",
+        "detail": null
+      },
+      {
+        "name": "Test_Chain_UpsertRejectsDuplicateSourceBeforeWrite",
+        "module": "TestChainingSemantics",
+        "result": "pass",
+        "detail": null
+      },
+      {
+        "name": "Test_CsrPayload_BasicSpans",
+        "module": "TestCsrPayload",
+        "result": "pass",
+        "detail": null
+      },
+      {
+        "name": "Test_CsrPayload_DirtyRefinalize",
+        "module": "TestCsrPayload",
+        "result": "pass",
+        "detail": null
+      },
+      {
+        "name": "Test_CsrPayload_ClearAndBufferReuse",
+        "module": "TestCsrPayload",
+        "result": "pass",
+        "detail": null
+      },
+      {
+        "name": "Test_CsrPayload_RowListBridge",
+        "module": "TestCsrPayload",
+        "result": "pass",
+        "detail": null
+      },
+      {
+        "name": "Test_DumpLeadingZero_Preserved",
+        "module": "TestDumpLeadingZero",
+        "result": "pass",
+        "detail": null
+      },
+      {
+        "name": "Test_DumpLeadingZero_OptOut",
+        "module": "TestDumpLeadingZero",
+        "result": "pass",
+        "detail": null
+      },
+      {
+        "name": "Test_DumpGuard_AllNumericText_LongCode",
+        "module": "TestDumpLeadingZero",
+        "result": "pass",
+        "detail": null
+      },
+      {
+        "name": "Test_BuildToSheet_PreservesTextAndNumbers",
+        "module": "TestDumpLeadingZero",
+        "result": "pass",
+        "detail": null
+      },
+      {
+        "name": "Test_DumpToSheet_ShrinkClearsGhostRows",
+        "module": "TestDumpLeadingZero",
+        "result": "pass",
+        "detail": null
+      },
+      {
+        "name": "Test_DumpToSheet_ClearOptOut_PreservesGhost",
+        "module": "TestDumpLeadingZero",
+        "result": "pass",
+        "detail": null
+      },
+      {
+        "name": "Test_DumpToSheet_EmptyClearsRegion",
+        "module": "TestDumpLeadingZero",
+        "result": "pass",
+        "detail": null
+      }
+    ],
+    "summary": {
+      "pass": 129,
+      "fail": 0,
+      "skipped": 0
+    },
+    "sessionDied": false,
+    "watchdog": []
+  }
+}

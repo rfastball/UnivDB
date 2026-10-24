@@ -1,0 +1,45 @@
+{
+  "source_base": "9ec684a",
+  "product_version": "2.9.0",
+  "tests": {
+    "pass": 129,
+    "fail": 0,
+    "skipped": 0
+  },
+  "session_died": false,
+  "compile": {
+    "result": "compiled",
+    "detail": null
+  },
+  "lint": {
+    "codePage": 949,
+    "filesChecked": 49,
+    "findingCount": 0,
+    "files": []
+  },
+  "test_start": "2026-10-24 15:55:32.537",
+  "test_end": "2026-10-24 15:55:59.102",
+  "suite_seconds": 26.565,
+  "benchmarks": [
+    {
+      "ts": "2026-10-24 15:55:50.676",
+      "kind": "J",
+      "event": "bench_db_query_writes_or",
+      "data": {
+        "rows": 100000,
+        "arms": 100,
+        "update_warm_ms": 28.767,
+        "numeric_or_ms": 85.7404
+      }
+    },
+    {
+      "ts": "2026-10-24 15:55:51.250",
+      "kind": "J",
+      "event": "bench_db_bulk_append_drop",
+      "data": {
+        "append_ms": 8.8298,
+        "drop_ms": 21.0568
+      }
+    }
+  ]
+}

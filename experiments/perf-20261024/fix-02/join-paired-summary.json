@@ -1,0 +1,58 @@
+[
+  {
+    "case": "paired_join_new_5",
+    "samples": 3,
+    "median_ms": 114.7225,
+    "min_ms": 110.9333,
+    "max_ms": 116.6779
+  },
+  {
+    "case": "paired_join_new_6",
+    "samples": 3,
+    "median_ms": 25.8335,
+    "min_ms": 24.9925,
+    "max_ms": 31.2276
+  },
+  {
+    "case": "paired_join_new_7",
+    "samples": 3,
+    "median_ms": 31.6343,
+    "min_ms": 31.096,
+    "max_ms": 32.4837
+  },
+  {
+    "case": "paired_join_new_8",
+    "samples": 3,
+    "median_ms": 22.7913,
+    "min_ms": 22.5195,
+    "max_ms": 23.0632
+  },
+  {
+    "case": "paired_join_old_5",
+    "samples": 3,
+    "median_ms": 113.7452,
+    "min_ms": 113.1943,
+    "max_ms": 116.4012
+  },
+  {
+    "case": "paired_join_old_6",
+    "samples": 3,
+    "median_ms": 36.2134,
+    "min_ms": 33.5659,
+    "max_ms": 39.9112
+  },
+  {
+    "case": "paired_join_old_7",
+    "samples": 3,
+    "median_ms": 39.1351,
+    "min_ms": 34.111,
+    "max_ms": 44.3891
+  },
+  {
+    "case": "paired_join_old_8",
+    "samples": 3,
+    "median_ms": 31.7066,
+    "min_ms": 30.2934,
+    "max_ms": 32.2492
+  }
+]
