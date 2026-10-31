@@ -1,0 +1,335 @@
+{
+  "command": "run",
+  "ok": true,
+  "exitCode": 0,
+  "hint": null,
+  "session": {
+    "action": "ephemeral",
+    "pid": 8000,
+    "workbook": "C:\\Users\\rfast\\Desktop\\VBA_Projects\\UnivDB\\UnivDB.xlsm",
+    "readOnly": true
+  },
+  "errors": [],
+  "payload": {
+    "run": {
+      "macro": "ZPerfProbe.Probe_IndexFold",
+      "module": "ZPerfProbe",
+      "proc": "Probe_IndexFold",
+      "result": "ok",
+      "returnValue": null,
+      "returnType": "Empty",
+      "elapsedMs": 27163,
+      "detail": null,
+      "failedAsserts": 0,
+      "failedAssertSamples": [],
+      "records": [
+        {
+          "ts": "2026-10-31 13:58:40.328",
+          "kind": "A",
+          "name": "probe_fold_keys_dict_text_27000",
+          "ok": true,
+          "expected": "27000",
+          "actual": "27000"
+        },
+        {
+          "ts": "2026-10-31 13:58:40.336",
+          "kind": "J",
+          "event": "probe_index_fold",
+          "data": {
+            "shape": "ascii",
+            "keys": 27000,
+            "path": "dict_text",
+            "ms": 72.708
+          }
+        },
+        {
+          "ts": "2026-10-31 13:58:40.531",
+          "kind": "A",
+          "name": "probe_fold_keys_ucase_binary_27000",
+          "ok": true,
+          "expected": "27000",
+          "actual": "27000"
+        },
+        {
+          "ts": "2026-10-31 13:58:40.539",
+          "kind": "J",
+          "event": "probe_index_fold",
+          "data": {
+            "shape": "ascii",
+            "keys": 27000,
+            "path": "ucase_binary",
+            "ms": 45.9573
+          }
+        },
+        {
+          "ts": "2026-10-31 13:58:40.898",
+          "kind": "A",
+          "name": "probe_fold_keys_lcmap_binary_27000",
+          "ok": true,
+          "expected": "27000",
+          "actual": "27000"
+        },
+        {
+          "ts": "2026-10-31 13:58:40.902",
+          "kind": "J",
+          "event": "probe_index_fold",
+          "data": {
+            "shape": "ascii",
+            "keys": 27000,
+            "path": "lcmap_binary",
+            "ms": 87.9153
+          }
+        },
+        {
+          "ts": "2026-10-31 13:58:41.262",
+          "kind": "A",
+          "name": "probe_fold_keys_lcmap_inplace_binary_27000",
+          "ok": true,
+          "expected": "27000",
+          "actual": "27000"
+        },
+        {
+          "ts": "2026-10-31 13:58:41.266",
+          "kind": "J",
+          "event": "probe_index_fold",
+          "data": {
+            "shape": "ascii",
+            "keys": 27000,
+            "path": "lcmap_inplace_binary",
+            "ms": 85.4955
+          }
+        },
+        {
+          "ts": "2026-10-31 13:58:43.117",
+          "kind": "A",
+          "name": "probe_fold_keys_dict_text_91000",
+          "ok": true,
+          "expected": "91000",
+          "actual": "91000"
+        },
+        {
+          "ts": "2026-10-31 13:58:43.125",
+          "kind": "J",
+          "event": "probe_index_fold",
+          "data": {
+            "shape": "ascii",
+            "keys": 91000,
+            "path": "dict_text",
+            "ms": 448.6257
+          }
+        },
+        {
+          "ts": "2026-10-31 13:58:43.965",
+          "kind": "A",
+          "name": "probe_fold_keys_ucase_binary_91000",
+          "ok": true,
+          "expected": "91000",
+          "actual": "91000"
+        },
+        {
+          "ts": "2026-10-31 13:58:43.969",
+          "kind": "J",
+          "event": "probe_index_fold",
+          "data": {
+            "shape": "ascii",
+            "keys": 91000,
+            "path": "ucase_binary",
+            "ms": 201.0681
+          }
+        },
+        {
+          "ts": "2026-10-31 13:58:45.367",
+          "kind": "A",
+          "name": "probe_fold_keys_lcmap_binary_91000",
+          "ok": true,
+          "expected": "91000",
+          "actual": "91000"
+        },
+        {
+          "ts": "2026-10-31 13:58:45.371",
+          "kind": "J",
+          "event": "probe_index_fold",
+          "data": {
+            "shape": "ascii",
+            "keys": 91000,
+            "path": "lcmap_binary",
+            "ms": 341.3825
+          }
+        },
+        {
+          "ts": "2026-10-31 13:58:46.719",
+          "kind": "A",
+          "name": "probe_fold_keys_lcmap_inplace_binary_91000",
+          "ok": true,
+          "expected": "91000",
+          "actual": "91000"
+        },
+        {
+          "ts": "2026-10-31 13:58:46.727",
+          "kind": "J",
+          "event": "probe_index_fold",
+          "data": {
+            "shape": "ascii",
+            "keys": 91000,
+            "path": "lcmap_inplace_binary",
+            "ms": 325.9232
+          }
+        },
+        {
+          "ts": "2026-10-31 13:58:52.691",
+          "kind": "A",
+          "name": "probe_fold_keys_dict_text_182000",
+          "ok": true,
+          "expected": "182000",
+          "actual": "182000"
+        },
+        {
+          "ts": "2026-10-31 13:58:52.699",
+          "kind": "J",
+          "event": "probe_index_fold",
+          "data": {
+            "shape": "ascii",
+            "keys": 182000,
+            "path": "dict_text",
+            "ms": 1451.575
+          }
+        },
+        {
+          "ts": "2026-10-31 13:58:54.914",
+          "kind": "A",
+          "name": "probe_fold_keys_ucase_binary_182000",
+          "ok": true,
+          "expected": "182000",
+          "actual": "182000"
+        },
+        {
+          "ts": "2026-10-31 13:58:54.922",
+          "kind": "J",
+          "event": "probe_index_fold",
+          "data": {
+            "shape": "ascii",
+            "keys": 182000,
+            "path": "ucase_binary",
+            "ms": 529.6767
+          }
+        },
+        {
+          "ts": "2026-10-31 13:58:58.566",
+          "kind": "A",
+          "name": "probe_fold_keys_lcmap_binary_182000",
+          "ok": true,
+          "expected": "182000",
+          "actual": "182000"
+        },
+        {
+          "ts": "2026-10-31 13:58:58.574",
+          "kind": "J",
+          "event": "probe_index_fold",
+          "data": {
+            "shape": "ascii",
+            "keys": 182000,
+            "path": "lcmap_binary",
+            "ms": 841.1445
+          }
+        },
+        {
+          "ts": "2026-10-31 13:59:01.848",
+          "kind": "A",
+          "name": "probe_fold_keys_lcmap_inplace_binary_182000",
+          "ok": true,
+          "expected": "182000",
+          "actual": "182000"
+        },
+        {
+          "ts": "2026-10-31 13:59:01.855",
+          "kind": "J",
+          "event": "probe_index_fold",
+          "data": {
+            "shape": "ascii",
+            "keys": 182000,
+            "path": "lcmap_inplace_binary",
+            "ms": 797.8808
+          }
+        },
+        {
+          "ts": "2026-10-31 13:59:03.629",
+          "kind": "A",
+          "name": "probe_fold_keys_dict_text_91000",
+          "ok": true,
+          "expected": "91000",
+          "actual": "91000"
+        },
+        {
+          "ts": "2026-10-31 13:59:03.637",
+          "kind": "J",
+          "event": "probe_index_fold",
+          "data": {
+            "shape": "hangul",
+            "keys": 91000,
+            "path": "dict_text",
+            "ms": 409.5376
+          }
+        },
+        {
+          "ts": "2026-10-31 13:59:04.484",
+          "kind": "A",
+          "name": "probe_fold_keys_ucase_binary_91000",
+          "ok": true,
+          "expected": "91000",
+          "actual": "91000"
+        },
+        {
+          "ts": "2026-10-31 13:59:04.488",
+          "kind": "J",
+          "event": "probe_index_fold",
+          "data": {
+            "shape": "hangul",
+            "keys": 91000,
+            "path": "ucase_binary",
+            "ms": 199.763
+          }
+        },
+        {
+          "ts": "2026-10-31 13:59:05.844",
+          "kind": "A",
+          "name": "probe_fold_keys_lcmap_binary_91000",
+          "ok": true,
+          "expected": "91000",
+          "actual": "91000"
+        },
+        {
+          "ts": "2026-10-31 13:59:05.852",
+          "kind": "J",
+          "event": "probe_index_fold",
+          "data": {
+            "shape": "hangul",
+            "keys": 91000,
+            "path": "lcmap_binary",
+            "ms": 330.7774
+          }
+        },
+        {
+          "ts": "2026-10-31 13:59:07.152",
+          "kind": "A",
+          "name": "probe_fold_keys_lcmap_inplace_binary_91000",
+          "ok": true,
+          "expected": "91000",
+          "actual": "91000"
+        },
+        {
+          "ts": "2026-10-31 13:59:07.160",
+          "kind": "J",
+          "event": "probe_index_fold",
+          "data": {
+            "shape": "hangul",
+            "keys": 91000,
+            "path": "lcmap_inplace_binary",
+            "ms": 316.9563
+          }
+        }
+      ]
+    },
+    "sessionDied": false,
+    "watchdog": []
+  }
+}

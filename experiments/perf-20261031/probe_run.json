@@ -1,0 +1,870 @@
+{
+  "command": "run",
+  "ok": true,
+  "exitCode": 0,
+  "hint": null,
+  "session": {
+    "action": "ephemeral",
+    "pid": 78256,
+    "workbook": "C:\\Users\\rfast\\Desktop\\VBA_Projects\\UnivDB\\UnivDB.xlsm",
+    "readOnly": true
+  },
+  "errors": [],
+  "payload": {
+    "run": {
+      "macro": "ZPerfProbe.Probe_All",
+      "module": "ZPerfProbe",
+      "proc": "Probe_All",
+      "result": "ok",
+      "returnValue": null,
+      "returnType": "Empty",
+      "elapsedMs": 55126,
+      "detail": null,
+      "failedAsserts": 0,
+      "failedAssertSamples": [],
+      "records": [
+        {
+          "ts": "2026-10-31 13:56:34.234",
+          "kind": "J",
+          "event": "probe_key_semantics",
+          "data": {
+            "pair": "ascii_case",
+            "dict_text": true,
+            "ucase": true,
+            "lcmap": true,
+            "strconv": true,
+            "strcomp_text": true
+          }
+        },
+        {
+          "ts": "2026-10-31 13:56:34.238",
+          "kind": "J",
+          "event": "probe_key_semantics",
+          "data": {
+            "pair": "fullwidth_latin",
+            "dict_text": true,
+            "ucase": false,
+            "lcmap": true,
+            "strconv": true,
+            "strcomp_text": true
+          }
+        },
+        {
+          "ts": "2026-10-31 13:56:34.242",
+          "kind": "J",
+          "event": "probe_key_semantics",
+          "data": {
+            "pair": "fullwidth_digit",
+            "dict_text": true,
+            "ucase": false,
+            "lcmap": true,
+            "strconv": true,
+            "strcomp_text": true
+          }
+        },
+        {
+          "ts": "2026-10-31 13:56:34.250",
+          "kind": "J",
+          "event": "probe_key_semantics",
+          "data": {
+            "pair": "fullwidth_lower",
+            "dict_text": true,
+            "ucase": false,
+            "lcmap": true,
+            "strconv": true,
+            "strcomp_text": true
+          }
+        },
+        {
+          "ts": "2026-10-31 13:56:34.254",
+          "kind": "J",
+          "event": "probe_key_semantics",
+          "data": {
+            "pair": "halfwidth_hangul",
+            "dict_text": true,
+            "ucase": false,
+            "lcmap": true,
+            "strconv": true,
+            "strcomp_text": true
+          }
+        },
+        {
+          "ts": "2026-10-31 13:56:34.262",
+          "kind": "J",
+          "event": "probe_key_semantics",
+          "data": {
+            "pair": "fullwidth_space",
+            "dict_text": true,
+            "ucase": false,
+            "lcmap": true,
+            "strconv": true,
+            "strcomp_text": true
+          }
+        },
+        {
+          "ts": "2026-10-31 13:56:34.266",
+          "kind": "J",
+          "event": "probe_key_semantics",
+          "data": {
+            "pair": "kata_hira",
+            "dict_text": false,
+            "ucase": false,
+            "lcmap": false,
+            "strconv": false,
+            "strcomp_text": true
+          }
+        },
+        {
+          "ts": "2026-10-31 13:56:34.270",
+          "kind": "J",
+          "event": "probe_key_semantics",
+          "data": {
+            "pair": "halfwidth_kata_voiced",
+            "dict_text": false,
+            "ucase": false,
+            "lcmap": true,
+            "strconv": true,
+            "strcomp_text": true
+          }
+        },
+        {
+          "ts": "2026-10-31 13:56:34.273",
+          "kind": "J",
+          "event": "probe_key_semantics",
+          "data": {
+            "pair": "sharp_s",
+            "dict_text": false,
+            "ucase": false,
+            "lcmap": false,
+            "strconv": false,
+            "strcomp_text": true
+          }
+        },
+        {
+          "ts": "2026-10-31 13:56:34.277",
+          "kind": "J",
+          "event": "probe_key_semantics",
+          "data": {
+            "pair": "final_sigma",
+            "dict_text": false,
+            "ucase": false,
+            "lcmap": false,
+            "strconv": false,
+            "strcomp_text": true
+          }
+        },
+        {
+          "ts": "2026-10-31 13:56:34.285",
+          "kind": "J",
+          "event": "probe_key_semantics",
+          "data": {
+            "pair": "e_combining",
+            "dict_text": false,
+            "ucase": false,
+            "lcmap": false,
+            "strconv": false,
+            "strcomp_text": true
+          }
+        },
+        {
+          "ts": "2026-10-31 13:56:34.289",
+          "kind": "J",
+          "event": "probe_key_semantics",
+          "data": {
+            "pair": "accented_upper",
+            "dict_text": true,
+            "ucase": true,
+            "lcmap": true,
+            "strconv": true,
+            "strcomp_text": true
+          }
+        },
+        {
+          "ts": "2026-10-31 13:56:34.293",
+          "kind": "J",
+          "event": "probe_key_semantics",
+          "data": {
+            "pair": "accent_vs_plain",
+            "dict_text": false,
+            "ucase": false,
+            "lcmap": false,
+            "strconv": true,
+            "strcomp_text": false
+          }
+        },
+        {
+          "ts": "2026-10-31 13:56:34.301",
+          "kind": "J",
+          "event": "probe_key_semantics",
+          "data": {
+            "pair": "nbsp",
+            "dict_text": false,
+            "ucase": false,
+            "lcmap": false,
+            "strconv": false,
+            "strcomp_text": false
+          }
+        },
+        {
+          "ts": "2026-10-31 13:56:34.305",
+          "kind": "J",
+          "event": "probe_key_semantics",
+          "data": {
+            "pair": "hyphen",
+            "dict_text": false,
+            "ucase": false,
+            "lcmap": false,
+            "strconv": false,
+            "strcomp_text": false
+          }
+        },
+        {
+          "ts": "2026-10-31 13:56:34.309",
+          "kind": "J",
+          "event": "probe_key_semantics",
+          "data": {
+            "pair": "cyrillic",
+            "dict_text": true,
+            "ucase": true,
+            "lcmap": true,
+            "strconv": true,
+            "strcomp_text": true
+          }
+        },
+        {
+          "ts": "2026-10-31 13:56:34.316",
+          "kind": "J",
+          "event": "probe_key_semantics",
+          "data": {
+            "pair": "roman_numeral",
+            "dict_text": true,
+            "ucase": true,
+            "lcmap": true,
+            "strconv": true,
+            "strcomp_text": true
+          }
+        },
+        {
+          "ts": "2026-10-31 13:56:34.320",
+          "kind": "J",
+          "event": "probe_key_semantics",
+          "data": {
+            "pair": "circled",
+            "dict_text": true,
+            "ucase": true,
+            "lcmap": true,
+            "strconv": true,
+            "strcomp_text": true
+          }
+        },
+        {
+          "ts": "2026-10-31 13:56:34.324",
+          "kind": "J",
+          "event": "probe_key_semantics",
+          "data": {
+            "pair": "hangul_same",
+            "dict_text": true,
+            "ucase": true,
+            "lcmap": true,
+            "strconv": true,
+            "strcomp_text": true
+          }
+        },
+        {
+          "ts": "2026-10-31 13:56:35.094",
+          "kind": "J",
+          "event": "probe_trim_pass",
+          "data": {
+            "rows": 27401,
+            "cols": 34,
+            "path": "array_copy",
+            "ms": 96.4895,
+            "diff": 0
+          }
+        },
+        {
+          "ts": "2026-10-31 13:56:36.074",
+          "kind": "J",
+          "event": "probe_trim_pass",
+          "data": {
+            "rows": 27401,
+            "cols": 34,
+            "path": "trim_current",
+            "ms": 103.2093,
+            "diff": 0
+          }
+        },
+        {
+          "ts": "2026-10-31 13:56:37.086",
+          "kind": "J",
+          "event": "probe_trim_pass",
+          "data": {
+            "rows": 27401,
+            "cols": 34,
+            "path": "trim_edge_leftright",
+            "ms": 127.0823,
+            "diff": 0
+          }
+        },
+        {
+          "ts": "2026-10-31 13:56:38.105",
+          "kind": "J",
+          "event": "probe_trim_pass",
+          "data": {
+            "rows": 27401,
+            "cols": 34,
+            "path": "trim_edge_ascw",
+            "ms": 130.7638,
+            "diff": 0
+          }
+        },
+        {
+          "ts": "2026-10-31 13:56:39.207",
+          "kind": "J",
+          "event": "probe_trim_pass",
+          "data": {
+            "rows": 27401,
+            "cols": 34,
+            "path": "loadfromarray_current",
+            "ms": 241.136,
+            "diff": 0
+          }
+        },
+        {
+          "ts": "2026-10-31 13:56:39.648",
+          "kind": "A",
+          "name": "probe_keys_dict_text_27000",
+          "ok": true,
+          "expected": "27000",
+          "actual": "27000"
+        },
+        {
+          "ts": "2026-10-31 13:56:39.656",
+          "kind": "J",
+          "event": "probe_index_build",
+          "data": {
+            "shape": "ascii",
+            "keys": 27000,
+            "path": "dict_text",
+            "ms": 69.2645
+          }
+        },
+        {
+          "ts": "2026-10-31 13:56:39.852",
+          "kind": "A",
+          "name": "probe_keys_dict_binary_raw_27000",
+          "ok": true,
+          "expected": "27000",
+          "actual": "27000"
+        },
+        {
+          "ts": "2026-10-31 13:56:39.855",
+          "kind": "J",
+          "event": "probe_index_build",
+          "data": {
+            "shape": "ascii",
+            "keys": 27000,
+            "path": "dict_binary_raw",
+            "ms": 45.7008
+          }
+        },
+        {
+          "ts": "2026-10-31 13:56:40.055",
+          "kind": "A",
+          "name": "probe_keys_ucase_binary_27000",
+          "ok": true,
+          "expected": "27000",
+          "actual": "27000"
+        },
+        {
+          "ts": "2026-10-31 13:56:40.062",
+          "kind": "J",
+          "event": "probe_index_build",
+          "data": {
+            "shape": "ascii",
+            "keys": 27000,
+            "path": "ucase_binary",
+            "ms": 46.3883
+          }
+        },
+        {
+          "ts": "2026-10-31 13:56:40.414",
+          "kind": "A",
+          "name": "probe_keys_lcmap_binary_27000",
+          "ok": true,
+          "expected": "27000",
+          "actual": "27000"
+        },
+        {
+          "ts": "2026-10-31 13:56:40.422",
+          "kind": "J",
+          "event": "probe_index_build",
+          "data": {
+            "shape": "ascii",
+            "keys": 27000,
+            "path": "lcmap_binary",
+            "ms": 84.3403
+          }
+        },
+        {
+          "ts": "2026-10-31 13:56:40.672",
+          "kind": "A",
+          "name": "probe_keys_strconv_binary_27000",
+          "ok": true,
+          "expected": "27000",
+          "actual": "27000"
+        },
+        {
+          "ts": "2026-10-31 13:56:40.676",
+          "kind": "J",
+          "event": "probe_index_build",
+          "data": {
+            "shape": "ascii",
+            "keys": 27000,
+            "path": "strconv_binary",
+            "ms": 58.7148
+          }
+        },
+        {
+          "ts": "2026-10-31 13:56:41.051",
+          "kind": "A",
+          "name": "probe_real_keys_0_27000",
+          "ok": true,
+          "expected": "27000",
+          "actual": "27000"
+        },
+        {
+          "ts": "2026-10-31 13:56:41.059",
+          "kind": "J",
+          "event": "probe_index_build",
+          "data": {
+            "shape": "ascii",
+            "keys": 27000,
+            "path": "real_dict",
+            "ms": 80.2202
+          }
+        },
+        {
+          "ts": "2026-10-31 13:56:41.730",
+          "kind": "A",
+          "name": "probe_real_keys_1_27000",
+          "ok": true,
+          "expected": "27000",
+          "actual": "27000"
+        },
+        {
+          "ts": "2026-10-31 13:56:41.734",
+          "kind": "J",
+          "event": "probe_index_build",
+          "data": {
+            "shape": "ascii",
+            "keys": 27000,
+            "path": "real_core",
+            "ms": 151.2742
+          }
+        },
+        {
+          "ts": "2026-10-31 13:56:43.551",
+          "kind": "A",
+          "name": "probe_keys_dict_text_91000",
+          "ok": true,
+          "expected": "91000",
+          "actual": "91000"
+        },
+        {
+          "ts": "2026-10-31 13:56:43.559",
+          "kind": "J",
+          "event": "probe_index_build",
+          "data": {
+            "shape": "ascii",
+            "keys": 91000,
+            "path": "dict_text",
+            "ms": 427.092
+          }
+        },
+        {
+          "ts": "2026-10-31 13:56:44.395",
+          "kind": "A",
+          "name": "probe_keys_dict_binary_raw_91000",
+          "ok": true,
+          "expected": "91000",
+          "actual": "91000"
+        },
+        {
+          "ts": "2026-10-31 13:56:44.402",
+          "kind": "J",
+          "event": "probe_index_build",
+          "data": {
+            "shape": "ascii",
+            "keys": 91000,
+            "path": "dict_binary_raw",
+            "ms": 200.4925
+          }
+        },
+        {
+          "ts": "2026-10-31 13:56:45.238",
+          "kind": "A",
+          "name": "probe_keys_ucase_binary_91000",
+          "ok": true,
+          "expected": "91000",
+          "actual": "91000"
+        },
+        {
+          "ts": "2026-10-31 13:56:45.246",
+          "kind": "J",
+          "event": "probe_index_build",
+          "data": {
+            "shape": "ascii",
+            "keys": 91000,
+            "path": "ucase_binary",
+            "ms": 201.2708
+          }
+        },
+        {
+          "ts": "2026-10-31 13:56:46.648",
+          "kind": "A",
+          "name": "probe_keys_lcmap_binary_91000",
+          "ok": true,
+          "expected": "91000",
+          "actual": "91000"
+        },
+        {
+          "ts": "2026-10-31 13:56:46.656",
+          "kind": "J",
+          "event": "probe_index_build",
+          "data": {
+            "shape": "ascii",
+            "keys": 91000,
+            "path": "lcmap_binary",
+            "ms": 347.5251
+          }
+        },
+        {
+          "ts": "2026-10-31 13:56:47.684",
+          "kind": "A",
+          "name": "probe_keys_strconv_binary_91000",
+          "ok": true,
+          "expected": "91000",
+          "actual": "91000"
+        },
+        {
+          "ts": "2026-10-31 13:56:47.691",
+          "kind": "J",
+          "event": "probe_index_build",
+          "data": {
+            "shape": "ascii",
+            "keys": 91000,
+            "path": "strconv_binary",
+            "ms": 244.888
+          }
+        },
+        {
+          "ts": "2026-10-31 13:56:49.879",
+          "kind": "A",
+          "name": "probe_real_keys_0_91000",
+          "ok": true,
+          "expected": "91000",
+          "actual": "91000"
+        },
+        {
+          "ts": "2026-10-31 13:56:49.887",
+          "kind": "J",
+          "event": "probe_index_build",
+          "data": {
+            "shape": "ascii",
+            "keys": 91000,
+            "path": "real_dict",
+            "ms": 497.929
+          }
+        },
+        {
+          "ts": "2026-10-31 13:56:52.145",
+          "kind": "A",
+          "name": "probe_real_keys_1_91000",
+          "ok": true,
+          "expected": "91000",
+          "actual": "91000"
+        },
+        {
+          "ts": "2026-10-31 13:56:52.152",
+          "kind": "J",
+          "event": "probe_index_build",
+          "data": {
+            "shape": "ascii",
+            "keys": 91000,
+            "path": "real_core",
+            "ms": 525.2496
+          }
+        },
+        {
+          "ts": "2026-10-31 13:56:57.977",
+          "kind": "A",
+          "name": "probe_keys_dict_text_182000",
+          "ok": true,
+          "expected": "182000",
+          "actual": "182000"
+        },
+        {
+          "ts": "2026-10-31 13:56:57.984",
+          "kind": "J",
+          "event": "probe_index_build",
+          "data": {
+            "shape": "ascii",
+            "keys": 182000,
+            "path": "dict_text",
+            "ms": 1405.1305
+          }
+        },
+        {
+          "ts": "2026-10-31 13:57:00.180",
+          "kind": "A",
+          "name": "probe_keys_dict_binary_raw_182000",
+          "ok": true,
+          "expected": "182000",
+          "actual": "182000"
+        },
+        {
+          "ts": "2026-10-31 13:57:00.184",
+          "kind": "J",
+          "event": "probe_index_build",
+          "data": {
+            "shape": "ascii",
+            "keys": 182000,
+            "path": "dict_binary_raw",
+            "ms": 531.9505
+          }
+        },
+        {
+          "ts": "2026-10-31 13:57:02.387",
+          "kind": "A",
+          "name": "probe_keys_ucase_binary_182000",
+          "ok": true,
+          "expected": "182000",
+          "actual": "182000"
+        },
+        {
+          "ts": "2026-10-31 13:57:02.395",
+          "kind": "J",
+          "event": "probe_index_build",
+          "data": {
+            "shape": "ascii",
+            "keys": 182000,
+            "path": "ucase_binary",
+            "ms": 534.9852
+          }
+        },
+        {
+          "ts": "2026-10-31 13:57:05.746",
+          "kind": "A",
+          "name": "probe_keys_lcmap_binary_182000",
+          "ok": true,
+          "expected": "182000",
+          "actual": "182000"
+        },
+        {
+          "ts": "2026-10-31 13:57:05.750",
+          "kind": "J",
+          "event": "probe_index_build",
+          "data": {
+            "shape": "ascii",
+            "keys": 182000,
+            "path": "lcmap_binary",
+            "ms": 818.0419
+          }
+        },
+        {
+          "ts": "2026-10-31 13:57:08.332",
+          "kind": "A",
+          "name": "probe_keys_strconv_binary_182000",
+          "ok": true,
+          "expected": "182000",
+          "actual": "182000"
+        },
+        {
+          "ts": "2026-10-31 13:57:08.336",
+          "kind": "J",
+          "event": "probe_index_build",
+          "data": {
+            "shape": "ascii",
+            "keys": 182000,
+            "path": "strconv_binary",
+            "ms": 625.0368
+          }
+        },
+        {
+          "ts": "2026-10-31 13:57:14.633",
+          "kind": "A",
+          "name": "probe_real_keys_0_182000",
+          "ok": true,
+          "expected": "182000",
+          "actual": "182000"
+        },
+        {
+          "ts": "2026-10-31 13:57:14.637",
+          "kind": "J",
+          "event": "probe_index_build",
+          "data": {
+            "shape": "ascii",
+            "keys": 182000,
+            "path": "real_dict",
+            "ms": 1465.1314
+          }
+        },
+        {
+          "ts": "2026-10-31 13:57:19.375",
+          "kind": "A",
+          "name": "probe_real_keys_1_182000",
+          "ok": true,
+          "expected": "182000",
+          "actual": "182000"
+        },
+        {
+          "ts": "2026-10-31 13:57:19.379",
+          "kind": "J",
+          "event": "probe_index_build",
+          "data": {
+            "shape": "ascii",
+            "keys": 182000,
+            "path": "real_core",
+            "ms": 1108.2245
+          }
+        },
+        {
+          "ts": "2026-10-31 13:57:21.230",
+          "kind": "A",
+          "name": "probe_keys_dict_text_91000",
+          "ok": true,
+          "expected": "91000",
+          "actual": "91000"
+        },
+        {
+          "ts": "2026-10-31 13:57:21.238",
+          "kind": "J",
+          "event": "probe_index_build",
+          "data": {
+            "shape": "hangul",
+            "keys": 91000,
+            "path": "dict_text",
+            "ms": 417.9753
+          }
+        },
+        {
+          "ts": "2026-10-31 13:57:22.047",
+          "kind": "A",
+          "name": "probe_keys_dict_binary_raw_91000",
+          "ok": true,
+          "expected": "91000",
+          "actual": "91000"
+        },
+        {
+          "ts": "2026-10-31 13:57:22.051",
+          "kind": "J",
+          "event": "probe_index_build",
+          "data": {
+            "shape": "hangul",
+            "keys": 91000,
+            "path": "dict_binary_raw",
+            "ms": 191.8233
+          }
+        },
+        {
+          "ts": "2026-10-31 13:57:22.867",
+          "kind": "A",
+          "name": "probe_keys_ucase_binary_91000",
+          "ok": true,
+          "expected": "91000",
+          "actual": "91000"
+        },
+        {
+          "ts": "2026-10-31 13:57:22.871",
+          "kind": "J",
+          "event": "probe_index_build",
+          "data": {
+            "shape": "hangul",
+            "keys": 91000,
+            "path": "ucase_binary",
+            "ms": 195.2202
+          }
+        },
+        {
+          "ts": "2026-10-31 13:57:24.219",
+          "kind": "A",
+          "name": "probe_keys_lcmap_binary_91000",
+          "ok": true,
+          "expected": "91000",
+          "actual": "91000"
+        },
+        {
+          "ts": "2026-10-31 13:57:24.227",
+          "kind": "J",
+          "event": "probe_index_build",
+          "data": {
+            "shape": "hangul",
+            "keys": 91000,
+            "path": "lcmap_binary",
+            "ms": 326.5336
+          }
+        },
+        {
+          "ts": "2026-10-31 13:57:25.211",
+          "kind": "A",
+          "name": "probe_keys_strconv_binary_91000",
+          "ok": true,
+          "expected": "91000",
+          "actual": "91000"
+        },
+        {
+          "ts": "2026-10-31 13:57:25.219",
+          "kind": "J",
+          "event": "probe_index_build",
+          "data": {
+            "shape": "hangul",
+            "keys": 91000,
+            "path": "strconv_binary",
+            "ms": 240.877
+          }
+        },
+        {
+          "ts": "2026-10-31 13:57:27.145",
+          "kind": "A",
+          "name": "probe_real_keys_0_91000",
+          "ok": true,
+          "expected": "91000",
+          "actual": "91000"
+        },
+        {
+          "ts": "2026-10-31 13:57:27.148",
+          "kind": "J",
+          "event": "probe_index_build",
+          "data": {
+            "shape": "hangul",
+            "keys": 91000,
+            "path": "real_dict",
+            "ms": 442.8351
+          }
+        },
+        {
+          "ts": "2026-10-31 13:57:29.332",
+          "kind": "A",
+          "name": "probe_real_keys_1_91000",
+          "ok": true,
+          "expected": "91000",
+          "actual": "91000"
+        },
+        {
+          "ts": "2026-10-31 13:57:29.340",
+          "kind": "J",
+          "event": "probe_index_build",
+          "data": {
+            "shape": "hangul",
+            "keys": 91000,
+            "path": "real_core",
+            "ms": 509.6982
+          }
+        }
+      ]
+    },
+    "sessionDied": false,
+    "watchdog": []
+  }
+}
