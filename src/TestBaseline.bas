@@ -345,6 +345,37 @@ Public Sub Test_LibVersion_Reports_Something()
     LogShim.AssertEq "libversion_nonempty", True, Len(sVer) > 0
 End Sub
 
+' vbaloop dist 스탬프(vbaloop_*)를 읽는다 - 구 vbaflow_* 이름만 읽으면 배포본이 "dev"로 보고되어
+' 소비 측 최소 버전 검사가 조용히 통과한다. 속성은 테스트 동안만 메모리에 추가(ephemeral은 저장 안 함).
+Public Sub Test_LibVersion_ReadsVbaloopStamp()
+    Dim props As Object
+    Set props = ThisWorkbook.CustomDocumentProperties
+    RemoveStampProps props
+    LogShim.AssertEq "libversion_unstamped_dev", "dev", UnivDB.LibVersion()
+
+    props.Add "vbaflow_BuildVersion", False, 4, "2.8.0"
+    props.Add "vbaflow_BuildRev", False, 4, "aaaaaaa"
+    props.Add "vbaflow_BuiltAt", False, 4, "2026-07-01 00:00:00"
+    LogShim.AssertEq "libversion_vbaflow_fallback", "2.8.0+aaaaaaa (2026-07-01 00:00:00)", UnivDB.LibVersion()
+
+    props.Add "vbaloop_BuildVersion", False, 4, "9.9.9"
+    props.Add "vbaloop_BuildRev", False, 4, "abc1234"
+    props.Add "vbaloop_BuiltAt", False, 4, "2026-10-31 00:00:00"
+    LogShim.AssertEq "libversion_vbaloop_wins", "9.9.9+abc1234 (2026-10-31 00:00:00)", UnivDB.LibVersion()
+
+    RemoveStampProps props
+End Sub
+
+Private Sub RemoveStampProps(ByVal props As Object)
+    Dim vName As Variant
+    For Each vName In Array("vbaloop_BuildVersion", "vbaloop_BuildRev", "vbaloop_BuiltAt", _
+                            "vbaflow_BuildVersion", "vbaflow_BuildRev", "vbaflow_BuiltAt")
+        On Error Resume Next
+        props(CStr(vName)).Delete
+        On Error GoTo 0
+    Next vName
+End Sub
+
 ' Headers 사본을 수정해도 원본 스키마/인덱스/값은 영향을 받지 않는다.
 Public Sub Test_Headers_SnapshotIsolation()
     Dim T As clsTable, headers As Object, result As clsTable, gen As Long, n As Long, col As Long

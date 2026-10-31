@@ -17,22 +17,29 @@ Private m_dicTables As Object
 ' 컴파일 오류가 나 프로젝트 전체가 멈춘다:
 '   On Error Resume Next
 '   sVer = Application.Run("UnivDB.xlam!UnivDB.LibVersion")   ' Err면 구버전
-' 스탬프는 vbaflow dist가 산출물에 심는 CustomDocumentProperties에서 읽는다
+' 스탬프는 vbaloop dist가 산출물에 심는 CustomDocumentProperties(vbaloop_*)에서 읽고,
+' 없으면 구 vbaflow dist 빌드(2.8.x)의 vbaflow_*로 폴백한다
 ' (BUILD_* 상수는 합성 모듈 modBuildInfo에만 있어 src에서 직접 참조할 수 없다).
 Public Function LibVersion() As String
-    Dim sVer As String, sRev As String, sAt As String
+    Dim sVer As String, sRev As String, sAt As String, sPrefix As String
 
-    On Error Resume Next
-    sVer = CStr(ThisWorkbook.CustomDocumentProperties("vbaflow_BuildVersion").Value)
-    sRev = CStr(ThisWorkbook.CustomDocumentProperties("vbaflow_BuildRev").Value)
-    sAt = CStr(ThisWorkbook.CustomDocumentProperties("vbaflow_BuiltAt").Value)
-    On Error GoTo 0
+    sPrefix = "vbaloop_"
+    If Len(BuildStamp(sPrefix & "BuildVersion")) = 0 Then sPrefix = "vbaflow_"
+    sVer = BuildStamp(sPrefix & "BuildVersion")
+    sRev = BuildStamp(sPrefix & "BuildRev")
+    sAt = BuildStamp(sPrefix & "BuiltAt")
 
     If Len(sVer) = 0 Then
         LibVersion = "dev"
     Else
         LibVersion = sVer & "+" & sRev & " (" & sAt & ")"
     End If
+End Function
+
+' [Internal] 빌드 스탬프 문서 속성 값, 없으면 ""
+Private Function BuildStamp(ByVal sName As String) As String
+    On Error Resume Next
+    BuildStamp = CStr(ThisWorkbook.CustomDocumentProperties(sName).Value)
 End Function
 
 ' ==============================================================================
