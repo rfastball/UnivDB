@@ -18,6 +18,7 @@
 ```vb
 UnivDB.InitDB                                          ' 엔진 초기화 (최초 1회)
 UnivDB.RegisterTable "Name", Sheet1.Range("A1")        ' 시트→메모리 등록 (Smart Range)
+UnivDB.RegisterTable "Name", Source, bTrim:=False       ' 문자열 셀 Trim 생략 (5절 적재 Trim 계약)
 UnivDB.GetTable("Name") -> clsTable                    ' 등록된 테이블 직접 참조
 UnivDB.CreateTable() -> clsTable                       ' [Factory] 빈 clsTable 생성 (xlam 참조 시 New 불가 대응)
 UnivDB.ClearDB                                         ' 메모리 정리
@@ -196,11 +197,19 @@ UnivDB.Report("SalesData") _
 
 ### I/O
 ```vb
-.LoadFromSheet(Range)         ' 시트에서 로드
-.LoadFromArray(Array)         ' 배열에서 로드
+.LoadFromSheet(Range, [bTrim])               ' 시트에서 로드
+.LoadFromArray(Array, [bHasHeader], [bTrim])  ' 배열에서 로드
 .DumpToSheet(Range, [bAutoFit], [eTextGuard], [bClearRegion])  ' 시트로 출력 (기본 옛 영역 선클리어)
 .RawArray                     ' 내부 2D 배열 접근 (읽기 전용 권장)
 ```
+
+> **적재 Trim 계약**: `LoadFromSheet`/`LoadFromArray`/`RegisterTable`은 기본으로(`bTrim:=True`)
+> 문자열 셀의 앞뒤 공백(ASCII 스페이스)을 `Trim$`한다. 헤더 셀은 항상 Trim되고 중복 헤더 거부도 `bTrim`과 무관하다.
+> `bTrim:=False`(2.10.0)는 데이터 셀 Trim만 생략한다(27k x 34 문자열 위주 적재 약 160 -> 80ms).
+> 이때 공백 포함 셀에서 표면이 갈린다: `Filter`/`Keep`/`Exclude`의 문자열 연산자(`IS`, `IS NOT`, `LIKE`, `NOT LIKE`)는
+> 비교 시 셀을 Trim하므로 `" a "`가 `"a"`와 일치하지만, `Where`/Join/GroupBy/Upsert(인덱스 키, 6.1절)는 Trim하지 않으므로
+> 일치하지 않는다(`Where("K", " a ")`처럼 원문으로만 일치). 공백이 의미 없는 키 열이면 기본값을 쓸 것.
+> 내부 결과(Join/GroupBy/Query 결과 등)는 이미 적재된 셀을 옮기므로 재Trim하지 않는다.
 
 > **DumpToSheet 클리어 계약 (기본 클리어)**: `DumpToSheet`는 기본으로(`bClearRegion:=True`)
 > 쓰기 전 시작셀의 옛 `CurrentRegion`을 선클리어한 뒤 새 데이터를 덮어쓴다. 축소 재덤프에서

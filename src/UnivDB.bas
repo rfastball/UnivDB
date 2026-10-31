@@ -47,17 +47,19 @@ Public Sub InitDB()
 End Sub
 
 ' 시트 데이터를 이름을 지정하여 테이블로 등록
-' [UnivDB.bas] 수정된 RegisterTable
-Public Sub RegisterTable(ByVal sTableName As String, ByVal Source As Variant)
+' bTrim: 문자열 셀 앞뒤 공백 Trim$ (기본 True). False면 생략 - Reference 6.1절 공백 경계 참고
+' @desc 테이블명과 Range/2D 배열 받아 테이블로 등록함, bTrim=False면 셀 공백 유지
+Public Sub RegisterTable(ByVal sTableName As String, ByVal Source As Variant, _
+                         Optional ByVal bTrim As Boolean = True)
     Dim T As New clsTable
     
     ' 소스 타입에 따라 분기 처리
     If TypeOf Source Is Range Then
         ' Range 객체인 경우 (시트 로드)
-        T.LoadFromSheet Source
+        T.LoadFromSheet Source, bTrim
     ElseIf IsArray(Source) Then
-        ' 배열인 경우 (메모리 직접 로드)
-        T.LoadFromArray Source
+        ' 배열인 경우 (메모리 직접 로드) - Source는 이 프로시저의 ByVal 사본이라 소유권을 넘긴다
+        T.LoadOwnedArray Source, True, bTrim
     Else
         Err.Raise 9999, , "지원하지 않는 소스 타입입니다. (Range 또는 Array 필요)"
     End If

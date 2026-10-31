@@ -4,17 +4,19 @@
 `vbaloop test` 전량 실행 중 측정 (`_dbg\UnivDB.jsonl`의 `bench_db_*` 이벤트). 같은 PC, Dict 백엔드.
 각 열은 해당 단계 커밋 직후 수치(누적).
 
-| 벤치 (이벤트.필드) | 0 (before) | 1 | 2 | 3 | 4 | 5 | 6 |
-|---|---:|---:|---:|---:|---:|---:|---:|
-| select_small.ms (27k x 34, 548행) | 53.1 | 5.7 | 5.7 | 5.7 | 5.2 | - | 6.0 |
-| join_large.inner_ms (27k x 91k, 3천 키) | 699.2 | 700.9 | 236.3 | 236.3 | - | - | 211.8 |
-| join_large.left_anti_ms | 524.6 | 521.6 | 258.5 | 258.5 | - | - | 199.3 |
-| upsert.all_update_ms (27k x 34) | 523.7 | 518.5 | 504.6 | 152.9 | 153.1 | - | 153.3 |
-| query_insert.one_row_ms | 439.3 | 438.3 | 472.6 | 417.9 | 408.4 | 124.8 | 139.2 |
-| index_build_large.unique_ms (91k) | 483.7 | 457.1 | 457.1 | 457.1 | 454.1 | - | 221.5 |
-| index_build_large.group50_ms (91k) | 165.9 | 147.6 | 148.7 | 148.7 | 146.1 | - | 122.2 |
-| load.sheet_ms (27k x 34, Value2 읽기 포함) | - | - | - | 240.8 | 155.2 | - | 174.8 |
-| load.array_ms (LoadFromArray) | - | - | - | 189.7 | 160.2 | - | 166.1 |
+| 벤치 (이벤트.필드) | 0 (before) | 1 | 2 | 3 | 4 | 5 | 6 | 7 |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| select_small.ms (27k x 34, 548행) | 53.1 | 5.7 | 5.7 | 5.7 | 5.2 | - | 6.0 | 6.2 |
+| join_large.inner_ms (27k x 91k, 3천 키) | 699.2 | 700.9 | 236.3 | 236.3 | - | - | 211.8 | 206.3 |
+| join_large.left_anti_ms | 524.6 | 521.6 | 258.5 | 258.5 | - | - | 199.3 | 194.9 |
+| upsert.all_update_ms (27k x 34) | 523.7 | 518.5 | 504.6 | 152.9 | 153.1 | - | 153.3 | 136.1 |
+| query_insert.one_row_ms | 439.3 | 438.3 | 472.6 | 417.9 | 408.4 | 124.8 | 139.2 | 133.0 |
+| index_build_large.unique_ms (91k) | 483.7 | 457.1 | 457.1 | 457.1 | 454.1 | - | 221.5 | 215.9 |
+| index_build_large.group50_ms (91k) | 165.9 | 147.6 | 148.7 | 148.7 | 146.1 | - | 122.2 | 121.2 |
+| load.sheet_ms (27k x 34, Value2 읽기 포함) | - | - | - | 240.8 | 155.2 | - | 174.8 | 158.7 |
+| load.array_ms (LoadFromArray) | - | - | - | 189.7 | 160.2 | - | 166.1 | 160.9 |
+| load.sheet_notrim_ms (bTrim:=False) | - | - | - | - | - | - | - | 76.3 |
+| load.array_notrim_ms (bTrim:=False) | - | - | - | - | - | - | - | 80.3 |
 
 ## 단계 기록
 
@@ -47,3 +49,21 @@
   Reference 6.1절/Upsert/Insert 절, CLAUDE.md/AGENTS.md 하류 벤더링 메모 갱신. 149 pass.
   20k 벤치(Dict): 인덱스 빌드 저중복 49 -> 41, 고중복 34 -> 31. 기대치(91k 250~300)보다 좋은 221ms.
   (load 열 175/166은 단계 4의 155/160과 같은 코드 경로 - 회차 편차)
+- 단계 7 (공개 API 추가): `LoadFromArray(..., Optional bTrim = True)`, `LoadFromSheet(..., Optional bTrim = True)`,
+  `UnivDB.RegisterTable(..., Optional bTrim = True)`. 중복 헤더 거부/헤더 Trim은 bTrim과 무관.
+  `RegisterTable` 배열 경로는 자기 ByVal 사본을 Friend `LoadOwnedArray`로 넘겨 복사 1회 추가 절감.
+  Reference 5절 "적재 Trim 계약" 명문화 - 계획/검증 문서의 `Filter "="`는 실제로는 문자열 연산자 `IS`/`LIKE` 경로
+  (`=`는 숫자 전용, 문자열 값이면 9999). `TestLoadTrim.bas` 추가. 152 pass.
+
+## 요약 (단계 0 -> 7, ms)
+
+| 경로 | before | after | 배수 |
+|---|---:|---:|---:|
+| 소량 Select (27k x 34, 548행) | 53.1 | 6.2 | 8.6x |
+| Join inner (27k x 91k) | 699.2 | 206.3 | 3.4x |
+| Join left anti | 524.6 | 194.9 | 2.7x |
+| UpsertFrom 전 행 갱신 | 523.7 | 136.1 | 3.8x |
+| Query.Insert 1행 | 439.3 | 133.0 | 3.3x |
+| 인덱스 빌드 91k 고유 | 483.7 | 215.9 | 2.2x |
+| 인덱스 빌드 91k 50그룹 | 165.9 | 121.2 | 1.4x |
+| 시트 적재 27k x 34 | 240.8 | 158.7 (Trim 생략 76.3) | 1.5x (3.2x) |

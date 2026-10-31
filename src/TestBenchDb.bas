@@ -656,10 +656,11 @@ Public Sub Test_BenchDb_PlanIndexBuild()
         Array(PLAN_DW_ROWS, Median3(msUniq(0), msUniq(1), msUniq(2)), Median3(msGrp(0), msGrp(1), msGrp(2)))
 End Sub
 
-' @desc 마스터형 시트/배열 적재(LoadFromSheet/LoadFromArray) 비용을 기록함
+' @desc 마스터형 시트/배열 적재(LoadFromSheet/LoadFromArray, Trim 기본/생략) 비용을 기록함
 Public Sub Test_BenchDb_PlanLoad()
     Dim ws As Worksheet, T As clsTable, v As Variant, r As Long, el As Double
     Dim msSheet(0 To 2) As Double, msArray(0 To 2) As Double
+    Dim msSheetNo(0 To 2) As Double, msArrayNo(0 To 2) As Double
 
     v = PlanMaster()
     Application.ScreenUpdating = False
@@ -682,13 +683,31 @@ Public Sub Test_BenchDb_PlanLoad()
         If r >= 0 Then msArray(r) = el
         LogShim.AssertEq "bench_plan_load_array_rows_" & r, CLng(PLAN_MASTER_ROWS + 1), T.RowCount
         Set T = Nothing
+
+        Set T = New clsTable
+        TicStart
+        T.LoadFromSheet ws, False
+        el = TicMs
+        If r >= 0 Then msSheetNo(r) = el
+        LogShim.AssertEq "bench_plan_load_sheet_notrim_rows_" & r, CLng(PLAN_MASTER_ROWS + 1), T.RowCount
+        Set T = Nothing
+
+        Set T = New clsTable
+        TicStart
+        T.LoadFromArray v, True, False
+        el = TicMs
+        If r >= 0 Then msArrayNo(r) = el
+        LogShim.AssertEq "bench_plan_load_array_notrim_rows_" & r, CLng(PLAN_MASTER_ROWS + 1), T.RowCount
+        Set T = Nothing
     Next r
     Application.DisplayAlerts = False
     ws.Delete
     Application.DisplayAlerts = True
-    LogShim.LogEvent "bench_db_load", Array("rows", "cols", "sheet_ms", "array_ms"), _
+    LogShim.LogEvent "bench_db_load", _
+        Array("rows", "cols", "sheet_ms", "array_ms", "sheet_notrim_ms", "array_notrim_ms"), _
         Array(PLAN_MASTER_ROWS, PLAN_MASTER_COLS, Median3(msSheet(0), msSheet(1), msSheet(2)), _
-              Median3(msArray(0), msArray(1), msArray(2)))
+              Median3(msArray(0), msArray(1), msArray(2)), Median3(msSheetNo(0), msSheetNo(1), msSheetNo(2)), _
+              Median3(msArrayNo(0), msArrayNo(1), msArrayNo(2)))
 End Sub
 
 Private Function PlanMaster() As Variant
