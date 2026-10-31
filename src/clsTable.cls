@@ -1124,35 +1124,33 @@ End Function
 
 ' 8-1. Upsert (Merge): 다른 테이블의 데이터를 키 기준으로 병합 (Insert + Update)
 ' 설명: 키가 같으면 덮어쓰고(Update), 없으면 추가(Insert)합니다.
-' 전략: Update는 In-place로 즉시 처리, Insert는 모아서 배치로 처리 (배열 재할당 비용 최소화)
+' 전략: 1패스에서 소스 행마다 대상 행을 1회 조회해 기록하고 중복 소스 키를 전부 검증(쓰기 전 fail-fast),
+'       2패스에서 조회 없이 셀을 쓴다. Insert는 결합 배열 1회 할당 후 소스에서 직접 수집.
 Public Function UpsertFrom(ByVal tSource As clsTable, ByVal sKeyCol As String) As clsTable
     Dim idxKey As DbHashIndex
-    Dim vSourceData As Variant
-    Dim vKey As Variant
-    Dim lSourceRow As Long, lTargetRow As Long
-    Dim i As Long, j As Long
-    Dim bUpdated As Boolean
+    Dim vSrcHeader As Variant, vSrcKeys As Variant, vKey As Variant
+    Dim lSourceRow As Long, lTargetRow As Long, lSrcRows As Long
+    Dim i As Long, j As Long, R As Long
+    Dim sColName As String, normalizedKey As String
     
-    Dim colNewRows As Collection ' 신규 행 임시 저장소
-    Dim vNewRow As Variant
-    
-    ' 1. 컬럼 매핑 (Source Index -> Target Index)
+    ' 1. 컬럼 매핑 (Source Index -> Target Index), 소스 헤더 순서
     ' 헤더 이름이 일치하는 컬럼만 업데이트 대상이 됩니다.
-    Dim dicColMap As Object
-    Dim lSourceColIdx As Long, lTargetColIdx As Long
-    Dim sColName As String
-    
-    Set dicColMap = CreateObject("Scripting.Dictionary")
-
-    vSourceData = tSource.RawArray ' 1회 물질화 (RawArray는 호출마다 전체 복사)
-
-    ' Source의 헤더를 순회하며 Target에 존재하는지 확인
+    Dim srcIdx() As Long, dstIdx() As Long, nMap As Long
+    ReDim srcIdx(1 To tSource.ColCount + 1)
+    ReDim dstIdx(1 To tSource.ColCount + 1)
+    vSrcHeader = tSource.GetRecord(1)
     For i = 1 To tSource.ColCount
-        sColName = UCase(Trim(vSourceData(1, i)))
+        sColName = UCase(Trim(vSrcHeader(i)))
         If m_dicHeaders.exists(sColName) Then
-            dicColMap(i) = m_dicHeaders(sColName)
+            nMap = nMap + 1
+            srcIdx(nMap) = i
+            dstIdx(nMap) = m_dicHeaders(sColName)
         End If
     Next i
+    If nMap > 0 Then
+        ReDim Preserve srcIdx(1 To nMap)
+        ReDim Preserve dstIdx(1 To nMap)
+    End If
     
     ' 키 컬럼 인덱스 확보
     Dim lKeyColSource As Long
@@ -1166,93 +1164,111 @@ Public Function UpsertFrom(ByVal tSource As clsTable, ByVal sKeyCol As String) A
     Set idxKey = Me.GetHashIndex(sKeyCol)
     If idxKey Is Nothing Then Err.Raise 9999, , "Upsert Error: Target table missing key column"
 
-    ' Validate the full source before any in-place update; use the index key contract.
-    Dim seenKeys As Object, normalizedKey As String
-    Set seenKeys = CreateObject("Scripting.Dictionary")
-    seenKeys.CompareMode = vbTextCompare
-    For lSourceRow = 2 To tSource.RowCount
-        vKey = vSourceData(lSourceRow, lKeyColSource)
-        If Not IsError(vKey) Then
-            normalizedKey = modIndexKey.NormalizeIndexKey(vKey)
-            If seenKeys.exists(normalizedKey) Then
-                Err.Raise 9999, "clsTable.UpsertFrom", _
-                    "Duplicate source key [" & normalizedKey & "] in column [" & sKeyCol & _
-                    "] at rows " & seenKeys(normalizedKey) & " and " & lSourceRow
-            End If
-            seenKeys.Add normalizedKey, lSourceRow
-        End If
-    Next lSourceRow
-    Set seenKeys = Nothing
-
-    Set colNewRows = New Collection
-
-    ' 3. Source 데이터 순회 및 분류 (Update vs Insert)
-    ' 키 정규화(Empty/CStr/vbTextCompare)는 TryGetFirstRowId가 담당
-    For lSourceRow = 2 To tSource.RowCount
-        vKey = vSourceData(lSourceRow, lKeyColSource)
-
-        If idxKey.TryGetFirstRowId(vKey, lTargetRow) Then
-            ' [UPDATE] 키 존재 -> 기존 행 덮어쓰기 (In-place)
-            ' 주의: 중복 키가 있다면 첫 번째 매칭 행만 업데이트
-
-            For Each vKey In dicColMap.Keys
-                lSourceColIdx = vKey
-                lTargetColIdx = dicColMap(vKey)
-                m_vData(lTargetRow, lTargetColIdx) = vSourceData(lSourceRow, lSourceColIdx)
-            Next vKey
-            bUpdated = True
-        Else
-            ' [INSERT] 키 미존재 -> 신규 행 임시 저장
-            ' 전체 컬럼 크기만큼 배열 확보
-            ReDim vNewRow(1 To m_lColCount)
-            For Each vKey In dicColMap.Keys
-                lSourceColIdx = vKey
-                lTargetColIdx = dicColMap(vKey)
-                vNewRow(lTargetColIdx) = vSourceData(lSourceRow, lSourceColIdx)
-            Next vKey
-            colNewRows.Add vNewRow
-        End If
-    Next lSourceRow
+    ' 3. [1패스] 대상 행 조회 + 중복 소스 키 검증 (모든 쓰기 전에 끝남 - fail-fast 계약)
+    ' 서로 다른 정규화 키는 서로 다른 첫 행으로 가므로 같은 대상 행 재점유 = 중복 소스 키.
+    ' 미존재 키(삽입 대상)끼리의 중복만 Dictionary로 검사. Error 키는 비교 불가 - 항상 삽입.
+    Dim updSrc() As Long, updDst() As Long, nUpd As Long
+    Dim insSrc() As Long, insDst() As Long, nIns As Long
+    Dim stamp() As Long, newKeys As Object
     
-    ' 4. 신규 데이터 병합 (Array Resize)
+    lSrcRows = tSource.RowCount
+    If lSrcRows >= 2 Then
+        ReDim updSrc(0 To lSrcRows - 2): ReDim updDst(0 To lSrcRows - 2)
+        ReDim insSrc(0 To lSrcRows - 2)
+        vSrcKeys = tSource.CopyColumnValues(lKeyColSource)
+    End If
+    ReDim stamp(0 To m_lRowCount)
+    Set newKeys = CreateObject("Scripting.Dictionary")
+    newKeys.CompareMode = vbTextCompare
+    
+    ' 키 정규화(Empty/CStr/vbTextCompare)는 TryGetFirstRowId가 담당
+    For lSourceRow = 2 To lSrcRows
+        vKey = vSrcKeys(lSourceRow)
+        If IsError(vKey) Then
+            insSrc(nIns) = lSourceRow: nIns = nIns + 1
+        ElseIf idxKey.TryGetFirstRowId(vKey, lTargetRow) Then
+            ' [UPDATE] 키 존재 -> 기존 행 덮어쓰기 (대상 중복 키는 첫 번째 매칭 행만)
+            If stamp(lTargetRow) <> 0 Then
+                RaiseDuplicateSourceKey vKey, sKeyCol, stamp(lTargetRow), lSourceRow
+            End If
+            stamp(lTargetRow) = lSourceRow
+            updSrc(nUpd) = lSourceRow: updDst(nUpd) = lTargetRow: nUpd = nUpd + 1
+        Else
+            ' [INSERT] 키 미존재 -> 신규 행
+            normalizedKey = modIndexKey.NormalizeIndexKey(vKey)
+            If newKeys.exists(normalizedKey) Then
+                RaiseDuplicateSourceKey vKey, sKeyCol, newKeys(normalizedKey), lSourceRow
+            End If
+            newKeys.Add normalizedKey, lSourceRow
+            insSrc(nIns) = lSourceRow: nIns = nIns + 1
+        End If
+    Next lSourceRow
+    Set newKeys = Nothing
+    Erase stamp
+    
+    ' 4. [2패스] 갱신 - 조회 없이 기록된 대상 행에 소스 셀을 직접 쓴다 (In-place)
+    If nUpd > 0 And nMap > 0 Then
+        tSource.CopyCellsInto m_vData, updSrc, updDst, nUpd, srcIdx, dstIdx
+    End If
+    
+    ' 5. 신규 데이터 병합 (Array Resize)
     ' VBA 2차원 배열은 첫 번째 차원(Row) 확장이 불가능하므로, 새 배열을 만들어 이사해야 함
-    If colNewRows.Count > 0 Then
-        Dim lOldCount As Long, lNewTotal As Long
-        Dim vNewData As Variant
+    If nIns > 0 Then
+        Dim lOldCount As Long
+        Dim vNewData() As Variant
         
         lOldCount = m_lRowCount
-        lNewTotal = lOldCount + colNewRows.Count
-        
-        ReDim vNewData(1 To lNewTotal, 1 To m_lColCount)
+        ReDim vNewData(1 To lOldCount + nIns, 1 To m_lColCount)
         
         ' (1) 기존 데이터 복사 (헤더 포함)
-        For i = 1 To lOldCount
-            For j = 1 To m_lColCount
+        For j = 1 To m_lColCount
+            For i = 1 To lOldCount
                 vNewData(i, j) = m_vData(i, j)
-            Next j
-        Next i
+            Next i
+        Next j
         
-        ' (2) 신규 데이터 추가
-        i = lOldCount + 1
-        For Each vNewRow In colNewRows
-            For j = 1 To m_lColCount
-                vNewData(i, j) = vNewRow(j)
-            Next j
-            i = i + 1
-        Next vNewRow
+        ' (2) 신규 데이터 추가 (매핑 열만, 나머지는 Empty)
+        ReDim insDst(0 To nIns - 1)
+        For R = 0 To nIns - 1: insDst(R) = lOldCount + 1 + R: Next R
+        If nMap > 0 Then tSource.CopyCellsInto vNewData, insSrc, insDst, nIns, srcIdx, dstIdx
         
         ' (3) 교체 및 상태 갱신
         m_vData = vNewData
-        m_lRowCount = lNewTotal
-        
-        ' 중요: 행 번호가 바뀌거나 추가되었으므로 세대 증가 (전체 파생물 실효)
-        BumpGeneration
-    ElseIf bUpdated Then
-        BumpGeneration
+        m_lRowCount = lOldCount + nIns
     End If
+    
+    ' 중요: 행이 추가되었거나 값이 덮어써졌으므로 세대 증가 (전체 파생물 실효)
+    If nIns > 0 Or nUpd > 0 Then BumpGeneration
 
     Set UpsertFrom = Me
 End Function
+
+Private Sub RaiseDuplicateSourceKey(ByVal vKey As Variant, ByVal sKeyCol As String, _
+                                    ByVal firstRow As Long, ByVal secondRow As Long)
+    Err.Raise 9999, "clsTable.UpsertFrom", _
+        "Duplicate source key [" & modIndexKey.NormalizeIndexKey(vKey) & "] in column [" & sKeyCol & _
+        "] at rows " & firstRow & " and " & secondRow
+End Sub
+
+' 열 값 1D 사본 (첨자 = rowId, 데이터 행만). 행 데이터가 없으면 Empty.
+Friend Function CopyColumnValues(ByVal lCol As Long) As Variant
+    If lCol < 1 Or lCol > m_lColCount Then Err.Raise 9999, "clsTable.CopyColumnValues", "Column out of range"
+    CopyColumnValues = CopyColumn1D(lCol)
+End Function
+
+' 각 k, i에 대해 dest(dstRows(i), dstCols(k)) = 자기 셀(srcRows(i), srcCols(k)). 전체 배열 사본 없음.
+' rowID 세대 검증은 호출 진입점 책임(Friend, 호출자 신뢰).
+Friend Sub CopyCellsInto(ByRef dest As Variant, ByRef srcRows() As Long, ByRef dstRows() As Long, _
+                         ByVal n As Long, ByRef srcCols() As Long, ByRef dstCols() As Long)
+    Dim i As Long, k As Long, sc As Long, dc As Long
+    If n <= 0 Then Exit Sub
+    For k = LBound(srcCols) To UBound(srcCols)
+        sc = srcCols(k): dc = dstCols(k)
+        For i = 0 To n - 1
+            dest(dstRows(i), dc) = m_vData(srcRows(i), sc)
+        Next i
+    Next k
+End Sub
 
 ' Query 전용: 세대/열/행을 선검증하고 변경 열만 한 번씩 무효화한다.
 Friend Function UpdateRows(ByVal rows As DbRowSet, ByVal updates As Object) As Long
