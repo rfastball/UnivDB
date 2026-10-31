@@ -656,6 +656,41 @@ Public Sub Test_BenchDb_PlanIndexBuild()
         Array(PLAN_DW_ROWS, Median3(msUniq(0), msUniq(1), msUniq(2)), Median3(msGrp(0), msGrp(1), msGrp(2)))
 End Sub
 
+' @desc 마스터형 시트/배열 적재(LoadFromSheet/LoadFromArray) 비용을 기록함
+Public Sub Test_BenchDb_PlanLoad()
+    Dim ws As Worksheet, T As clsTable, v As Variant, r As Long, el As Double
+    Dim msSheet(0 To 2) As Double, msArray(0 To 2) As Double
+
+    v = PlanMaster()
+    Application.ScreenUpdating = False
+    Set ws = ThisWorkbook.Worksheets.Add
+    ws.Range(ws.Cells(1, 1), ws.Cells(PLAN_MASTER_ROWS + 1, PLAN_MASTER_COLS)).Value2 = v
+    For r = -1 To 2
+        Set T = New clsTable
+        TicStart
+        T.LoadFromSheet ws
+        el = TicMs
+        If r >= 0 Then msSheet(r) = el
+        LogShim.AssertEq "bench_plan_load_sheet_rows_" & r, CLng(PLAN_MASTER_ROWS + 1), T.RowCount
+        LogShim.AssertEq "bench_plan_load_sheet_cols_" & r, CLng(PLAN_MASTER_COLS), T.ColCount
+        Set T = Nothing
+
+        Set T = New clsTable
+        TicStart
+        T.LoadFromArray v, True
+        el = TicMs
+        If r >= 0 Then msArray(r) = el
+        LogShim.AssertEq "bench_plan_load_array_rows_" & r, CLng(PLAN_MASTER_ROWS + 1), T.RowCount
+        Set T = Nothing
+    Next r
+    Application.DisplayAlerts = False
+    ws.Delete
+    Application.DisplayAlerts = True
+    LogShim.LogEvent "bench_db_load", Array("rows", "cols", "sheet_ms", "array_ms"), _
+        Array(PLAN_MASTER_ROWS, PLAN_MASTER_COLS, Median3(msSheet(0), msSheet(1), msSheet(2)), _
+              Median3(msArray(0), msArray(1), msArray(2)))
+End Sub
+
 Private Function PlanMaster() As Variant
     If IsEmpty(mPlanMaster) Then mPlanMaster = MakePlanData(PLAN_MASTER_ROWS, PLAN_MASTER_COLS, 0)
     PlanMaster = mPlanMaster

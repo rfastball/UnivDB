@@ -94,8 +94,8 @@ Public Sub LoadFromSheet(ByVal vSource As Variant)
     Dim vData As Variant
     vData = rngTarget.Value2
     
-    ' 4. 배열 로드 실행
-    LoadFromArray vData
+    ' 4. 배열 로드 실행 (ByRef 헬퍼 - 공개 LoadFromArray의 ByVal 인자 복사 1회 생략)
+    LoadArrayCore vData, True
 End Sub
 ' ==============================================================================
 ' Find(xlPrevious) 기반 실사용 범위 탐색 - 중간 공백행에 흔들리지 않음
@@ -149,6 +149,13 @@ End Function
 
 ' 1-2. 배열에서 직접 로드 (데이터 정규화 포함 버전)
 Public Sub LoadFromArray(ByVal vArr As Variant, Optional ByVal bHasHeader As Boolean = True)
+    LoadArrayCore vArr, bHasHeader
+End Sub
+
+' [Internal] LoadFromArray/LoadFromSheet 공통 본체. ByRef로 받아 호출 시점 복사를 생략한다
+' (vArr의 헤더 행은 BuildHeaders가 그 자리에서 Trim - 호출자는 자기 소유 배열만 넘길 것).
+' 사용자 입력 경계: 중복 헤더 거부 + 문자열 셀 Trim$.
+Private Sub LoadArrayCore(ByRef vArr As Variant, ByVal bHasHeader As Boolean)
     Dim i As Long, j As Long
 
     ' 입력 검증은 Clear 앞에서 - 잘못된 입력이 기존 테이블 상태를 파괴하지 않도록 fail-fast
@@ -163,13 +170,14 @@ Public Sub LoadFromArray(ByVal vArr As Variant, Optional ByVal bHasHeader As Boo
     m_lColCount = UBound(m_vData, 2)
 
     ' [전처리] 전체 데이터 트림 (문자열 셀만 - vbString에만 Trim$ 수행)
-    For i = LBound(m_vData, 1) To UBound(m_vData, 1)
-        For j = LBound(m_vData, 2) To UBound(m_vData, 2)
+    ' 열 우선 순회 = VBA 배열 메모리 순서 (첫 첨자가 연속)
+    For j = LBound(m_vData, 2) To UBound(m_vData, 2)
+        For i = LBound(m_vData, 1) To UBound(m_vData, 1)
             If VarType(m_vData(i, j)) = vbString Then
                 m_vData(i, j) = Trim$(m_vData(i, j))
             End If
-        Next j
-    Next i
+        Next i
+    Next j
 
     ' 선검증한 헤더 매핑을 커밋
     Set m_dicHeaders = headers
