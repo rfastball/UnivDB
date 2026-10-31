@@ -20,10 +20,15 @@ Private Declare Function QueryPerformanceFrequency Lib "kernel32" (ByRef f As Cu
 #End If
 
 Private Const BENCH_ROWS As Long = 20000
+Private Const PLAN_MASTER_ROWS As Long = 27401
+Private Const PLAN_MASTER_COLS As Long = 34
+Private Const PLAN_DW_ROWS As Long = 91000
+Private Const PLAN_DW_COLS As Long = 27
 
 Private mFreq As Currency
 Private mT0 As Currency
 Private mT20k As clsTable ' 공유 벤치 테이블 (지연 생성, 테스트 간 재사용)
+Private mPlanMaster As Variant ' 마스터형 원본 배열 (지연 생성, 테스트 간 재사용)
 
 Private Sub TicStart()
     If mFreq = 0 Then QueryPerformanceFrequency mFreq
@@ -533,6 +538,155 @@ Public Sub Test_BenchDb_BulkAppendAndDrop()
     LogShim.LogEvent "bench_db_bulk_append_drop", Array("append_ms", "drop_ms"), _
         Array(Median3(msAppend(0), msAppend(1), msAppend(2)), Median3(msDrop(0), msDrop(1), msDrop(2)))
 End Sub
+
+' ==============================================================================
+' 8. 2026-10-31 성능 계획 벤치 (docs/tasks/2026-10-31_perf_implementation_plan.md)
+' 데이터 형태: 마스터형 27,401 x 34 / DW형 91,000 x 27, 셀 2/3 문자열 (MakePlanData)
+' ==============================================================================
+
+' @desc 마스터형 테이블의 인덱스 warm 소량 Select 물질화 비용을 기록함
+Public Sub Test_BenchDb_PlanSelectSmall()
+    Dim T As clsTable, tRes As clsTable, r As Long, el As Double, ms(0 To 2) As Double
+
+    Set T = PlanTable(PlanMaster())
+    T.GetHashIndex "G"
+    For r = -1 To 2
+        TicStart
+        Set tRes = UnivDB.Query(T).Where("G", "G7").ToTable()
+        el = TicMs
+        If r >= 0 Then ms(r) = el
+        LogShim.AssertEq "bench_plan_select_rows_" & r, CLng(549), tRes.RowCount
+        LogShim.AssertEq "bench_plan_select_last_" & r, "R25TA00027357", tRes.Value(549, "K")
+    Next r
+    LogShim.LogEvent "bench_db_select_small", Array("rows", "cols", "result_rows", "ms"), _
+        Array(PLAN_MASTER_ROWS, PLAN_MASTER_COLS, 548, Median3(ms(0), ms(1), ms(2)))
+End Sub
+
+' @desc 마스터형 x DW형 inner/left anti 조인 비용을 기록함 (인덱스 warm)
+Public Sub Test_BenchDb_PlanJoin()
+    Dim tL As clsTable, tR As clsTable, tRes As clsTable, r As Long, el As Double
+    Dim msInner(0 To 2) As Double, msAnti(0 To 2) As Double
+
+    Set tL = PlanTable(PlanMaster())
+    Set tR = PlanTable(MakePlanData(PLAN_DW_ROWS, PLAN_DW_COLS, PLAN_MASTER_ROWS - 3000))
+    tL.GetHashIndex "K"
+    tR.GetHashIndex "K"
+    For r = -1 To 2
+        TicStart
+        Set tRes = UnivDB.Join(tL, tR, "K", jtInner, "R_")
+        el = TicMs
+        If r >= 0 Then msInner(r) = el
+        LogShim.AssertEq "bench_plan_join_inner_rows_" & r, CLng(3001), tRes.RowCount
+        LogShim.AssertEq "bench_plan_join_inner_cols_" & r, CLng(PLAN_MASTER_COLS + PLAN_DW_COLS), tRes.ColCount
+        Set tRes = Nothing
+
+        TicStart
+        Set tRes = UnivDB.Join(tL, tR, "K", jtLeftAnti)
+        el = TicMs
+        If r >= 0 Then msAnti(r) = el
+        LogShim.AssertEq "bench_plan_join_anti_rows_" & r, CLng(PLAN_MASTER_ROWS - 3000 + 1), tRes.RowCount
+        Set tRes = Nothing
+    Next r
+    LogShim.LogEvent "bench_db_join_large", _
+        Array("left_rows", "right_rows", "match_keys", "inner_ms", "left_anti_ms"), _
+        Array(PLAN_MASTER_ROWS, PLAN_DW_ROWS, 3000, Median3(msInner(0), msInner(1), msInner(2)), _
+              Median3(msAnti(0), msAnti(1), msAnti(2)))
+End Sub
+
+' @desc 마스터형 전 행 갱신 UpsertFrom 비용을 기록함 (대상 인덱스 warm)
+Public Sub Test_BenchDb_PlanUpsert()
+    Dim tgt As clsTable, src As clsTable, r As Long, el As Double, ms(0 To 2) As Double
+
+    Set src = PlanTable(PlanMaster())
+    For r = -1 To 2
+        Set tgt = PlanTable(PlanMaster())
+        tgt.GetHashIndex "K"
+        TicStart
+        tgt.UpsertFrom src, "K"
+        el = TicMs
+        If r >= 0 Then ms(r) = el
+        LogShim.AssertEq "bench_plan_upsert_rows_" & r, CLng(PLAN_MASTER_ROWS + 1), tgt.RowCount
+        Set tgt = Nothing
+    Next r
+    LogShim.LogEvent "bench_db_upsert", Array("rows", "cols", "all_update_ms"), _
+        Array(PLAN_MASTER_ROWS, PLAN_MASTER_COLS, Median3(ms(0), ms(1), ms(2)))
+End Sub
+
+' @desc 마스터형 테이블에 Query.Insert 1행 추가 비용을 기록함
+Public Sub Test_BenchDb_PlanQueryInsert()
+    Dim T As clsTable, r As Long, el As Double, ms(0 To 2) As Double
+
+    Set T = PlanTable(PlanMaster())
+    For r = -1 To 2
+        TicStart
+        UnivDB.Query(T).SetVal("K", "NEW" & r).SetVal("C3", 1.5).Insert
+        el = TicMs
+        If r >= 0 Then ms(r) = el
+        LogShim.AssertEq "bench_plan_insert_rows_" & r, CLng(PLAN_MASTER_ROWS + 3 + r), T.RowCount
+        LogShim.AssertEq "bench_plan_insert_key_" & r, "NEW" & r, T.Value(T.RowCount, "K")
+    Next r
+    LogShim.LogEvent "bench_db_query_insert", Array("rows", "cols", "one_row_ms"), _
+        Array(PLAN_MASTER_ROWS, PLAN_MASTER_COLS, Median3(ms(0), ms(1), ms(2)))
+End Sub
+
+' @desc DW형 91k 행 고유 키/50그룹 인덱스 빌드 비용을 기록함
+Public Sub Test_BenchDb_PlanIndexBuild()
+    Dim v As Variant, T As clsTable, idx As DbHashIndex, r As Long, el As Double
+    Dim msUniq(0 To 2) As Double, msGrp(0 To 2) As Double
+
+    v = MakePlanData(PLAN_DW_ROWS, 2, 0)
+    For r = -1 To 2
+        Set T = PlanTable(v)
+        TicStart
+        Set idx = T.GetHashIndex("K")
+        el = TicMs
+        If r >= 0 Then msUniq(r) = el
+        LogShim.AssertEq "bench_plan_idx_uniq_keys_" & r, PLAN_DW_ROWS, idx.CountKeys
+        Set idx = Nothing: Set T = Nothing
+
+        Set T = PlanTable(v)
+        TicStart
+        Set idx = T.GetHashIndex("G")
+        el = TicMs
+        If r >= 0 Then msGrp(r) = el
+        LogShim.AssertEq "bench_plan_idx_grp_keys_" & r, 50, idx.CountKeys
+        Set idx = Nothing: Set T = Nothing
+    Next r
+    LogShim.LogEvent "bench_db_index_build_large", Array("rows", "unique_ms", "group50_ms"), _
+        Array(PLAN_DW_ROWS, Median3(msUniq(0), msUniq(1), msUniq(2)), Median3(msGrp(0), msGrp(1), msGrp(2)))
+End Sub
+
+Private Function PlanMaster() As Variant
+    If IsEmpty(mPlanMaster) Then mPlanMaster = MakePlanData(PLAN_MASTER_ROWS, PLAN_MASTER_COLS, 0)
+    PlanMaster = mPlanMaster
+End Function
+
+Private Function PlanTable(ByRef v As Variant) As clsTable
+    Dim T As New clsTable
+    T.LoadFromArray v, True
+    Set PlanTable = T
+End Function
+
+' 1열 K(고유 키 R25TA########, 오프셋), 2열 G(50그룹), 나머지는 숫자/영문/한글 혼합
+Private Function MakePlanData(ByVal nRows As Long, ByVal nCols As Long, ByVal keyOffset As Long) As Variant
+    Dim v As Variant, i As Long, j As Long, hangul As String
+    hangul = ChrW(&HAC00) & ChrW(&HB098) & ChrW(&HC0C1) & ChrW(&HC0AC)
+    ReDim v(1 To nRows + 1, 1 To nCols)
+    v(1, 1) = "K": v(1, 2) = "G"
+    For j = 3 To nCols: v(1, j) = "C" & j: Next j
+    For i = 2 To nRows + 1
+        v(i, 1) = "R25TA" & Format$(i - 1 + keyOffset, "00000000")
+        v(i, 2) = "G" & ((i - 1) Mod 50)
+        For j = 3 To nCols
+            Select Case j Mod 3
+                Case 0: v(i, j) = CDbl(i) * 1.5 + j
+                Case 1: v(i, j) = "V" & Format$(i, "00000000")
+                Case 2: v(i, j) = hangul & (i Mod 977)
+            End Select
+        Next j
+    Next i
+    MakePlanData = v
+End Function
 
 Private Function GetBench20k() As clsTable
     If mT20k Is Nothing Then Set mT20k = BuildBenchTable(BENCH_ROWS)
