@@ -4,17 +4,17 @@
 `vbaloop test` 전량 실행 중 측정 (`_dbg\UnivDB.jsonl`의 `bench_db_*` 이벤트). 같은 PC, Dict 백엔드.
 각 열은 해당 단계 커밋 직후 수치(누적).
 
-| 벤치 (이벤트.필드) | 0 (before) | 1 | 2 | 3 | 4 | 5 |
-|---|---:|---:|---:|---:|---:|---:|
-| select_small.ms (27k x 34, 548행) | 53.1 | 5.7 | 5.7 | 5.7 | 5.2 | - |
-| join_large.inner_ms (27k x 91k, 3천 키) | 699.2 | 700.9 | 236.3 | 236.3 | - | - |
-| join_large.left_anti_ms | 524.6 | 521.6 | 258.5 | 258.5 | - | - |
-| upsert.all_update_ms (27k x 34) | 523.7 | 518.5 | 504.6 | 152.9 | 153.1 | - |
-| query_insert.one_row_ms | 439.3 | 438.3 | 472.6 | 417.9 | 408.4 | 124.8 |
-| index_build_large.unique_ms (91k) | 483.7 | 457.1 | 457.1 | 457.1 | 454.1 | - |
-| index_build_large.group50_ms (91k) | 165.9 | 147.6 | 148.7 | 148.7 | 146.1 | - |
-| load.sheet_ms (27k x 34, Value2 읽기 포함) | - | - | - | 240.8 | 155.2 | - |
-| load.array_ms (LoadFromArray) | - | - | - | 189.7 | 160.2 | - |
+| 벤치 (이벤트.필드) | 0 (before) | 1 | 2 | 3 | 4 | 5 | 6 |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| select_small.ms (27k x 34, 548행) | 53.1 | 5.7 | 5.7 | 5.7 | 5.2 | - | 6.0 |
+| join_large.inner_ms (27k x 91k, 3천 키) | 699.2 | 700.9 | 236.3 | 236.3 | - | - | 211.8 |
+| join_large.left_anti_ms | 524.6 | 521.6 | 258.5 | 258.5 | - | - | 199.3 |
+| upsert.all_update_ms (27k x 34) | 523.7 | 518.5 | 504.6 | 152.9 | 153.1 | - | 153.3 |
+| query_insert.one_row_ms | 439.3 | 438.3 | 472.6 | 417.9 | 408.4 | 124.8 | 139.2 |
+| index_build_large.unique_ms (91k) | 483.7 | 457.1 | 457.1 | 457.1 | 454.1 | - | 221.5 |
+| index_build_large.group50_ms (91k) | 165.9 | 147.6 | 148.7 | 148.7 | 146.1 | - | 122.2 |
+| load.sheet_ms (27k x 34, Value2 읽기 포함) | - | - | - | 240.8 | 155.2 | - | 174.8 |
+| load.array_ms (LoadFromArray) | - | - | - | 189.7 | 160.2 | - | 166.1 |
 
 ## 단계 기록
 
@@ -38,3 +38,12 @@
   중복 헤더 재검사 - `AdoptArray` 결과 테이블의 동명 열에서 Insert가 실패하던 부작용도 사라짐). 남은 비용은 결합 배열
   -> `m_vData` 대입의 deep copy(문자열 셀 재할당)와 해제 - 함수 반환 대입으로 바꿔도 117ms로 차이 없어 단순형 유지.
   `TestQueryInsert.bas` 추가. 146 pass.
+- 단계 6 (계약 변경): `modIndexKey.FoldIndexKey`(하이브리드 접기, Declare 모듈 내장). `DictHashIndex`는 접기 키 +
+  binary Dictionary + 첫 등장 표기 배열 `mKeyText`(Cursor 키), 새 키는 Item 읽기 자동 추가 + 쓰기.
+  `DictHashIndex`/`CoreHashIndex`에 Friend `BuildFromArray` - `GetHashIndexByIndex`가 구체 타입으로 분기해 `m_vData`를
+  직접 넘김(열 사본 + 행당 인터페이스 `AddRow` 제거). GroupBy 복합 키는 **파트별** 접기(접힌 길이로 접두 - 전체 문자열을
+  한 번에 접으면 다른 파트의 가나 유무에 따라 같은 값이 다르게 접힘), Upsert 삽입 키 Dictionary도 접기 + binary.
+  Core는 의미 불변(빌드만 일괄화, 20k 빌드 80 -> 78 수준). `TestKeyFold.bas`(검증 문서 2.2절 표, 표기 보존, 판별 경계).
+  Reference 6.1절/Upsert/Insert 절, CLAUDE.md/AGENTS.md 하류 벤더링 메모 갱신. 149 pass.
+  20k 벤치(Dict): 인덱스 빌드 저중복 49 -> 41, 고중복 34 -> 31. 기대치(91k 250~300)보다 좋은 221ms.
+  (load 열 175/166은 단계 4의 155/160과 같은 코드 경로 - 회차 편차)

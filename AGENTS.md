@@ -52,6 +52,8 @@ rowID는 특정 테이블의 특정 세대 안에서만 유효한 물리 행 번
   clsSet 사용 금지는 그대로 유지**된다 (아래 금지 사항 참조).
 - 두 파일의 공개 API/키 의미론(Variant 키: 숫자 1과 문자 "1" 구분, vbTextCompare)을
   바꿀 때는 UnivFilter 쪽 재스냅샷 필요 여부를 함께 판단할 것.
+- **2026-10-31 (2.10.0 성능 계획 단계 6)**: `modIndexKey.bas`에 `FoldIndexKey`(하이브리드 키 접기, LCMapStringW Declare를
+  모듈 안에 둠 - Core_* 비의존) 추가 = **UnivFilter 재스냅샷 필요**. clsSet은 이번 범위 밖(접기 미적용).
 
 ## 금지 사항 (설계 결정으로 확정됨)
 

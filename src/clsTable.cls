@@ -384,7 +384,6 @@ End Function
 ' 3-1b. 인덱스 생성 및 획득 (By 숫자 인덱스)
 ' 빌드는 IndexBackend가 고른 구체 백엔드로, 반환은 인터페이스로
 Public Function GetHashIndexByIndex(ByVal lCol As Long) As DbHashIndex
-    Dim i As Long
     Dim idx As DbHashIndex
 
     If m_dicHashIndices.exists(lCol) Then
@@ -396,34 +395,27 @@ Public Function GetHashIndexByIndex(ByVal lCol As Long) As DbHashIndex
 
     If lCol < 1 Or lCol > m_lColCount Then Exit Function
 
-    Set idx = NewBoundIndex()
-
-    ' Phase 6.8 밀봉 - 컬럼 접근은 CopyColumn1D 경유
-    Dim vCol As Variant
-    vCol = CopyColumn1D(lCol)
-    For i = (m_lHeaderRowIndex + 1) To m_lRowCount
-        idx.AddRow vCol(i), i
-    Next i
-
-    Set m_dicHashIndices(lCol) = idx
-    Set GetHashIndexByIndex = idx
-End Function
-
-' [Internal] IndexBackend 선택에 따라 현재 세대에 결속된 빈 인덱스 생성
-Private Function NewBoundIndex() As DbHashIndex
+    ' 일괄 빌드: 구체 백엔드가 m_vData를 직접 읽는다 (밀봉 예외 - 열 사본과 행당 AddRow
+    ' 인터페이스 디스패치 제거, 2026-10-31 계획 단계 6). 인터페이스에는 Friend를 둘 수 없어 분기한다.
+    Dim lFirst As Long
+    lFirst = m_lHeaderRowIndex + 1
     If m_lIndexBackend = dbBackendCore Then
         Dim idxCore As CoreHashIndex
         Set idxCore = New CoreHashIndex
         idxCore.BindTo Me
-        Set NewBoundIndex = idxCore
+        If m_lRowCount >= lFirst Then idxCore.BuildFromArray m_vData, lCol, lFirst, m_lRowCount
+        Set idx = idxCore
     Else
         Dim idxDict As DictHashIndex
         Set idxDict = New DictHashIndex
         idxDict.BindTo Me
-        Set NewBoundIndex = idxDict
+        If m_lRowCount >= lFirst Then idxDict.BuildFromArray m_vData, lCol, lFirst, m_lRowCount
+        Set idx = idxDict
     End If
-End Function
 
+    Set m_dicHashIndices(lCol) = idx
+    Set GetHashIndexByIndex = idx
+End Function
 
 ' 3-2a. 특정 조건에 맞는 행 번호들 찾기 (By 컬럼명) - DictHashIndex 어댑터 (호환 shim)
 Public Function SelectRows(ByVal sColName As String, ByVal vValue As Variant) As Collection
@@ -797,11 +789,9 @@ Public Function GroupBy(ByVal sGroupCols As String, ByVal sAggList As String) As
     Dim vCell As Variant
     Dim bSkipRow As Boolean
 
-    ' 초기화 - 키 의미론은 인덱스 계약(modIndexKey)과 동일: 대소문자 무시
+    ' 초기화 - 키 의미론은 인덱스 계약(modIndexKey)과 동일: 파트별 FoldIndexKey 접기 + binary 비교
     Set dicAccumulator = CreateObject("Scripting.Dictionary")
-    dicAccumulator.CompareMode = vbTextCompare
     Set dicGroupParts = CreateObject("Scripting.Dictionary")
-    dicGroupParts.CompareMode = vbTextCompare
     arrGroupCols = Split(sGroupCols, ",")
     arrAggItems = Split(sAggList, ",")
     lGroupCount = UBound(arrGroupCols) + 1
@@ -861,7 +851,7 @@ Public Function GroupBy(ByVal sGroupCols As String, ByVal sAggList As String) As
 
     ' 2-S. [R2 엔진 경로] 단일 그룹 컬럼: 해시 인덱스(키->RowList)가 이미 그룹 파티션.
     ' 커서 순회로 그룹별 RowList만 읽어 전체 행 재스캔과 로컬 누적기를 제거한다.
-    ' 키 의미론(vbTextCompare/Empty->""/Error skip)은 인덱스 계약이 그대로 보장한다.
+    ' 키 의미론(대소문자/폭 접기, Empty->"", Error skip)은 인덱스 계약이 그대로 보장한다.
     If lGroupCount = 1 Then
         Dim idx As DbHashIndex
         Dim cur As DbIndexCursor
@@ -963,7 +953,7 @@ Public Function GroupBy(ByVal sGroupCols As String, ByVal sAggList As String) As
     ' AVG 계산을 위해 모든 항목에 대해 Count를 별도로 관리합니다.
 
     For R = (m_lHeaderRowIndex + 1) To m_lRowCount
-        ' 2-1. 복합 키(Composite Key) 생성 - 길이 접두 인코딩(modIndexKey, R3)으로 구분자 충돌 차단
+        ' 2-1. 복합 키(Composite Key) 생성 - 길이 접두 인코딩(R3)으로 구분자 충돌 차단
         ' 인덱스 계약 준수: Empty->"", Error 키 행은 그룹핑에서 제외 (인덱스 AddRow skip과 동치)
         sKey = ""
         bSkipRow = False
@@ -972,7 +962,10 @@ Public Function GroupBy(ByVal sGroupCols As String, ByVal sAggList As String) As
                 bSkipRow = True
                 Exit For
             End If
-            sKey = sKey & modIndexKey.EncodeCompositeKeyPart(vGroupCols(i)(R)) & "|"
+            ' 파트별 접기 후 접힌 길이로 접두 - 접기가 다른 파트 내용에 좌우되지 않음
+            sVal = modIndexKey.NormalizeIndexKey(vGroupCols(i)(R))
+            sVal = modIndexKey.FoldIndexKey(sVal)
+            sKey = sKey & CStr(Len(sVal)) & ":" & sVal & "|"
         Next i
 
         If Not bSkipRow Then
@@ -1186,10 +1179,9 @@ Public Function UpsertFrom(ByVal tSource As clsTable, ByVal sKeyCol As String) A
         vSrcKeys = tSource.CopyColumnValues(lKeyColSource)
     End If
     ReDim stamp(0 To m_lRowCount)
-    Set newKeys = CreateObject("Scripting.Dictionary")
-    newKeys.CompareMode = vbTextCompare
+    Set newKeys = CreateObject("Scripting.Dictionary") ' 접기 키 + binary (인덱스 계약과 동일)
     
-    ' 키 정규화(Empty/CStr/vbTextCompare)는 TryGetFirstRowId가 담당
+    ' 키 정규화(Empty/CStr/접기)는 TryGetFirstRowId가 담당
     For lSourceRow = 2 To lSrcRows
         vKey = vSrcKeys(lSourceRow)
         If IsError(vKey) Then
@@ -1204,6 +1196,7 @@ Public Function UpsertFrom(ByVal tSource As clsTable, ByVal sKeyCol As String) A
         Else
             ' [INSERT] 키 미존재 -> 신규 행
             normalizedKey = modIndexKey.NormalizeIndexKey(vKey)
+            normalizedKey = modIndexKey.FoldIndexKey(normalizedKey)
             If newKeys.exists(normalizedKey) Then
                 RaiseDuplicateSourceKey vKey, sKeyCol, newKeys(normalizedKey), lSourceRow
             End If

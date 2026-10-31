@@ -90,6 +90,9 @@ UnivDB.EditTable(TableName, KeyCol) -> clsTableBuilder ' 기존 테이블 스키
 다른 대소문자/공백 표기로 여러 번 지정하면 기존처럼 마지막 값이 적용된다.
 변경 열의 인덱스와 컬럼 reader는 무효화되지만 행 세대와 후보 rowID는 유지된다.
 
+`Insert`는 미존재 컬럼을 테이블 변경 전에 `Err 9999`로 거부하고, 새 행 1개만 끝에 추가한다.
+새 행의 문자열 값은 적재와 같이 앞뒤 `Trim$`되며 기존 행은 다시 트리밍하지 않는다(2.10.0부터 -
+이전엔 Insert마다 전체를 `LoadFromArray`로 재적재). 성공 시 세대가 한 번 증가한다.
 대량 입력에서 단건 `Insert`를 반복하면 매번 기존 테이블 전체를 복사한다.
 **고유 키 기준 병합**이 목적이면 기존 Builder로 행들을 모아 `UpsertFrom`을 한 번 호출한다:
 
@@ -261,7 +264,7 @@ Builder의 같은 Row ID는 병합되므로, 중복을 보존할 입력에는 �
 
 `UpsertFrom`과 `UnivDB.Upsert`는 대상에 쓰기 전에 소스의 중복 키를 `Err 9999`로 거부합니다.
 오류에는 키·키 컬럼·중복된 소스 행 번호(헤더 포함)가 표시되며, 대상 값·행 수·세대는 변경하지 않습니다.
-중복 판정은 인덱스와 같은 정규화 및 대소문자 무시 규칙을 사용합니다
+중복 판정은 인덱스와 같은 정규화 및 대소문자/폭 접기 규칙(6.1절)을 사용합니다
 (숫자 42와 문자열 "42", `Empty`와 빈 문자열, Date와 대응 ISO 문자열은 같은 키).
 `Error` 셀은 비교 가능한 키가 아니므로 중복 검사에서 제외하며, 기존처럼 신규 행으로 추가됩니다.
 대상에 이미 중복 키가 있으면 첫 번째 행만 갱신하는 기존 동작은 유지됩니다.
@@ -292,13 +295,20 @@ Where/Join/GroupBy 키는 전부 단일 정규화 계약을 탄다:
 | Error (#N/A 등) | 키 없음 — 해당 행이 인덱스/그룹핑에서 skip |
 | 그 외 | `CStr` 문자열화 — 숫자 `42`와 문자 `"42"`는 **같은 키로 병합** |
 
-- 키 비교는 대소문자 무시 (`vbTextCompare`)
-- **Unicode 한계 (2026-10-03 실측)**: 기본 Dictionary 및 복합 GroupBy의 Dictionary는
-  `StrComp(..., vbTextCompare)`와 모든 Unicode 입력에서 동치가 아니다.
-  이 Windows/Excel 환경에서 U+00E9와 U+0065 U+0301, `"ab"`와 `"a" & ChrW(0) & "b"`는
-  StrComp에서는 같지만 Dictionary 키에서는 분리됐다. Core의 텍스트 해시는 Windows sort key를
-  사용해 자기 비교기와의 불일치를 수정했으며, 기본 백엔드/복합 키의 Unicode 통일은 미해결이다.
-  백엔드 간 동치 보장은 이 입력들에 적용되지 않는다. 자동 백엔드 전환은 없다.
+- 키 비교는 대소문자/폭 무시. 기본 Dict 백엔드, 복합 GroupBy 키, Upsert 중복 검사는 같은 접기
+  `modIndexKey.FoldIndexKey`(정규화 키 -> 접기 키) + binary 비교를 쓴다 (2.10.0, 하이브리드 접기):
+  - 키에 U+3000-30FF, U+3131-318E, U+FF00-FFFF 코드 유닛이 있으면 `LCMapStringW(LCMAP_UPPERCASE | LCMAP_HALFWIDTH)`,
+    없으면 `UCase$`
+  - **같은 키**: 대소문자(`abc`/`ABC`, `e-acute`/`E-acute`, 키릴 등), 전각 라틴/숫자/소문자/공백(`ＡＢＣ`/`ABC`),
+    반각 한글 자모(U+3131/U+FFA1), 반각 가나와 탁음 결합(U+30AC / U+FF76 U+FF9E)
+  - **다른 키**: `e`/`e-acute`, `sharp s`/`ss`, 결합 문자열(U+00E9 / U+0065 U+0301), 가타카나/히라가나,
+    굽은 따옴표(U+2018 등)/ASCII 따옴표
+  - 키 표기(커서 키, `GetUniqueKeys`, GroupBy 그룹 값)는 첫 등장 정규화 키 그대로 (접기 전)
+- **Unicode 한계 / 백엔드 차이**: 2.9.x Dict(`vbTextCompare` Dictionary)는 미할당 문자, 서식 제어 문자(ZWNJ/LRM 등),
+  일부 인도계/아르메니아 문자를 무관한 문자와 같은 키로 합쳤다 - 2.10.0 접기는 이들을 분리한다(BMP 단일 문자 전수
+  대조 1,400자, 실무 문자 0건). 반각 가나 탁음 결합은 2.9.x에서 분리였고 2.10.0에서 합친다.
+  Core 백엔드(`IndexBackend = dbBackendCore`)는 `vbTextCompare` 등가를 유지하므로 **두 백엔드는 이 문자들에서만 다르다**.
+  자동 백엔드 전환은 없다. `Filter`/`OrderBy`의 문자열 비교는 계속 `StrComp(..., vbTextCompare)`다.
   Core는 [LCMapStringW sort key](https://learn.microsoft.com/en-us/windows/win32/api/winnls/nf-winnls-lcmapstringw)의
   바이트열을 해싱한다. 기존 2만 행 벤치의 3회 중앙값은 수정 전 23/25ms에서 수정 후 102/103ms로
   증가했다(저중복/고중복, 동일 세션 실측). 기본 Dict는 49/32ms에서 50/32ms였다.

@@ -51,6 +51,27 @@ Public Sub AddRow(ByVal key As Variant, ByVal rowId As Long)
     mPayload.AddEntry slot, rowId
 End Sub
 
+' 일괄 빌드: data(firstRow..lastRow, col)을 직접 읽는다 (열 사본, 행당 ByVal 복사와 인터페이스 디스패치 없음).
+' 문자열 셀은 그대로, 그 외는 NormalizeIndexKey, Error 셀 skip - AddRow 계약과 동치.
+Friend Sub BuildFromArray(ByRef data As Variant, ByVal col As Long, ByVal firstRow As Long, ByVal lastRow As Long)
+    RequireValid
+    Dim i As Long, sKey As String, vKey As Variant, slot As Long, isNew As Boolean
+
+    For i = firstRow To lastRow
+        If VarType(data(i, col)) = vbString Then
+            sKey = data(i, col)
+        ElseIf IsError(data(i, col)) Then
+            GoTo NextRow
+        Else
+            sKey = modIndexKey.NormalizeIndexKey(data(i, col))
+        End If
+        vKey = sKey
+        slot = mEngine.EnsureKeyH(vKey, Core_HashKeyText(sKey), isNew)
+        mPayload.AddEntry slot, i
+NextRow:
+    Next i
+End Sub
+
 ' @desc 테이블을 받아 현재 세대에 결속함
 Public Sub BindTo(ByVal tbl As clsTable)
     RequireValid
