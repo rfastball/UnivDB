@@ -610,9 +610,48 @@ Friend Function CopyCandidateColumn(ByVal col As Long, ByRef rowIds As Variant) 
     CopyCandidateColumn = values
 End Function
 
+' rowIds(0..n-1)의 각 행을 srcCols 순서로 dest(destRow + i, destCol + k)에 복사한다.
+' rowId = 0이면 대상 셀을 건드리지 않는다(outer 조인의 Empty 측). 전체 배열 사본(RawArray) 없이
+' 자기 m_vData를 직접 읽는 수집 경로. rowID 세대 검증은 호출 진입점 책임(Friend, 호출자 신뢰).
+Friend Sub GatherRows(ByRef rowIds() As Long, ByVal n As Long, ByRef srcCols() As Long, _
+                      ByRef dest As Variant, ByVal destRow As Long, ByVal destCol As Long)
+    Dim i As Long, k As Long, r As Long, c As Long, dc As Long
+    If n <= 0 Then Exit Sub
+    dc = destCol
+    For k = LBound(srcCols) To UBound(srcCols)
+        c = srcCols(k)
+        For i = 0 To n - 1
+            r = rowIds(i)
+            If r <> 0 Then dest(destRow + i, dc) = m_vData(r, c)
+        Next i
+        dc = dc + 1
+    Next k
+End Sub
+
+' 헤더 행과 rowIds(0..n-1)의 행만 이 순서로 남기도록 자기 배열을 재작성한다(구조 변경 - 세대 증가).
+' 헤더 매핑은 그대로 유효하다. rowID 세대 검증은 호출 진입점 책임(Friend, 호출자 신뢰).
+Friend Sub KeepRows(ByRef rowIds() As Long, ByVal n As Long)
+    Dim v() As Variant, r As Long, c As Long, i As Long, lo As Long, base As Long
+    lo = LBound(m_vData, 1)
+    base = m_lHeaderRowIndex + 1
+    If base + n - 1 < lo Then Err.Raise 9999, "clsTable.KeepRows", "Headerless table cannot become empty"
+    ReDim v(lo To base + n - 1, LBound(m_vData, 2) To m_lColCount)
+    For c = LBound(m_vData, 2) To m_lColCount
+        For r = lo To m_lHeaderRowIndex
+            v(r, c) = m_vData(r, c)
+        Next r
+        For i = 0 To n - 1
+            v(base + i, c) = m_vData(rowIds(i), c)
+        Next i
+    Next c
+    m_vData = v
+    m_lRowCount = base + n - 1
+    BumpGeneration
+End Sub
+
 ' @desc 동일 스키마 테이블의 행을 순서대로 추가함, 스키마 불일치 시 9999
 Public Function AppendFrom(ByVal source As clsTable) As clsTable
-    Dim incoming As Variant, combined() As Variant, map() As Long
+    Dim combined() As Variant, map() As Long, ids() As Long
     Dim headers As Object, key As Variant, r As Long, c As Long, count As Long, firstRow As Long
     If source Is Nothing Then Err.Raise 9999, "clsTable.AppendFrom", "Source table required"
     Set AppendFrom = Me
@@ -630,16 +669,15 @@ Public Function AppendFrom(ByVal source As clsTable) As clsTable
     firstRow = source.FirstDataRow
     count = source.RowCount - firstRow + 1
     If count = 0 Then Exit Function
-    incoming = source.RawArray
+    ReDim ids(0 To count - 1)
+    For r = 0 To count - 1: ids(r) = firstRow + r: Next r
     ReDim combined(LBound(m_vData, 1) To m_lRowCount + count, 1 To m_lColCount)
     For c = 1 To m_lColCount
         For r = LBound(m_vData, 1) To m_lRowCount
             combined(r, c) = m_vData(r, c)
         Next r
-        For r = 0 To count - 1
-            combined(m_lRowCount + 1 + r, c) = incoming(firstRow + r, map(c))
-        Next r
     Next c
+    source.GatherRows ids, count, map, combined, m_lRowCount + 1, 1
     m_vData = combined
     m_lRowCount = m_lRowCount + count
     BumpGeneration

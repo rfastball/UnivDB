@@ -519,10 +519,9 @@ End Function
 ' 반환: 삭제된 행의 개수
 ' ------------------------------------------------------------------------------
 Public Function Delete() As Long
-    Dim vSource As Variant
-    Dim vNewData As Variant
-    Dim i As Long, j As Long, R As Long
-    Dim lTotalRows As Long, lTotalCols As Long
+    Dim keepIds() As Long
+    Dim i As Long, R As Long
+    Dim lTotalRows As Long
     Dim lDeleteCount As Long
     Dim lKeepCount As Long
 
@@ -531,26 +530,20 @@ Public Function Delete() As Long
     lDeleteCount = m_setCandidates.Count
     If lDeleteCount = 0 Then Delete = 0: Exit Function
 
-    ' 1. 데이터 재구성 (삭제 대상은 후보 RowSet의 ContainsRow로 직접 판정)
-    vSource = m_SourceTable.RawArray
-    lTotalRows = UBound(vSource, 1)
-    lTotalCols = UBound(vSource, 2)
-    lKeepCount = lTotalRows - lDeleteCount
-
-    ReDim vNewData(1 To lKeepCount, 1 To lTotalCols)
-
-    R = 1
-    For j = 1 To lTotalCols: vNewData(1, j) = vSource(1, j): Next j ' 헤더
-
+    ' 1. 남길 행 목록 (삭제 대상은 후보 RowSet의 ContainsRow로 직접 판정)
+    lTotalRows = m_SourceTable.RowCount
+    lKeepCount = lTotalRows - 1 - lDeleteCount
+    If lKeepCount > 0 Then ReDim keepIds(0 To lKeepCount - 1) Else ReDim keepIds(0 To 0)
+    R = 0
     For i = 2 To lTotalRows
         If Not m_setCandidates.ContainsRow(i) Then
+            keepIds(R) = i
             R = R + 1
-            For j = 1 To lTotalCols: vNewData(R, j) = vSource(i, j): Next j
         End If
     Next i
-    
-    ' 2. 테이블 갱신 (기존 셀 재배치라 이미 정규화됨 - 입양 경로)
-    m_SourceTable.AdoptArray vNewData, True
+
+    ' 2. 테이블이 자기 배열을 재작성 (기존 셀 재배치 - 세대 증가 포함)
+    m_SourceTable.KeepRows keepIds, lKeepCount
     Set m_setCandidates = Nothing: m_bIsFirstCondition = True
     
     Delete = lDeleteCount
@@ -616,8 +609,8 @@ Public Function SelectTable() As clsTable
     Dim tResult As New clsTable
     Dim vResultData As Variant
     Dim vRowIDs As Variant
-    Dim vRawSource As Variant
-    
+    Dim rowIds() As Long
+
     Dim arrColNames() As String
     Dim arrSourceIndices() As Long ' Target Index -> Source Index 매핑
     Dim lTargetCols As Long
@@ -669,26 +662,20 @@ Public Function SelectTable() As clsTable
     
     ' 3. [Allocation] 결과 배열 할당 (Limit이 적용된 lResultRows 사용)
     ReDim vResultData(1 To lResultRows + 1, 1 To lTargetCols)
-    vRawSource = m_SourceTable.RawArray
-    
+
     ' 4. [Header Copy] 헤더 작성
     If m_sTargetColumns = "*" Then
-        For j = 1 To lTargetCols: vResultData(1, j) = vRawSource(1, j): Next j
+        rowIds = HeaderRowIds()
+        m_SourceTable.GatherRows rowIds, 1, arrSourceIndices, vResultData, 1, 1
     Else
         For j = 0 To UBound(arrColNames): vResultData(1, j + 1) = Trim(arrColNames(j)): Next j
     End If
-    
-    ' 5. [Data Fetch] 데이터 고속 복사
+
+    ' 5. [Data Fetch] 후보 행만 원본에서 직접 수집 (원본 전체 사본 없음)
+    ' lResultRows만큼만 수집 (정렬 없는 경우 Limit까지만), vRowIDs는 0-based
     If lResultRows > 0 Then
-        
-        ' [핵심] lResultRows만큼만 루프 수행 (정렬 없는 경우 Limit까지만 돎)
-        ' vRowIDs는 0-based array이므로 0부터 시작
-        For i = 0 To lResultRows - 1
-            R = vRowIDs(i)
-            For j = 1 To lTargetCols
-                vResultData(i + 2, j) = vRawSource(R, arrSourceIndices(j))
-            Next j
-        Next i
+        rowIds = vRowIDs
+        m_SourceTable.GatherRows rowIds, lResultRows, arrSourceIndices, vResultData, 2, 1
     End If
     
     ' 결과 로드 (원본 셀 프로젝션이라 이미 정규화됨 - 입양 경로)
@@ -700,6 +687,14 @@ End Function
 ' ==============================================================================
 ' [Internal] 헬퍼 함수
 ' ==============================================================================
+
+' 헤더 행(1행)만 담은 GatherRows용 rowId 목록
+Private Function HeaderRowIds() As Long()
+    Dim ids() As Long
+    ReDim ids(0 To 0)
+    ids(0) = 1
+    HeaderRowIds = ids
+End Function
 
 ' 전체 행을 후보군으로 초기화 (Where 없이 Filter 먼저 호출 시)
 Private Sub InitializeAllRows()

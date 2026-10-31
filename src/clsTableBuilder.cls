@@ -126,12 +126,12 @@ Public Function ExtractRow(ByVal SourceTable As clsTable, ByVal ID As String) As
     ' 3. 데이터가 존재하면 고속 복사
     If colRows.Count > 0 Then
         lRow = colRows(1) ' 중복 시 첫 번째 행 기준
-        vRaw = SourceTable.RawArray
+        vRaw = SourceTable.GetRecord(lRow) ' 해당 행만 복사 (전체 배열 사본 없음)
         Set dicSrcHeaders = SourceTable.Headers
-        
+
         For Each vKey In dicSrcHeaders.Keys
             ' 현재 빌더의 Val(Setter)를 이용해 안전하게 복사 (동적 스키마 자동 대응)
-            Me.Val CStr(vKey), vRaw(lRow, dicSrcHeaders(vKey))
+            Me.Val CStr(vKey), vRaw(dicSrcHeaders(vKey))
         Next vKey
     End If
     
