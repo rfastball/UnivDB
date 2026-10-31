@@ -71,10 +71,15 @@
 ## 릴리스 (계획 3절)
 
 - `vbaloop.toml` [dist] version = "2.10.0", Reference 버전 동기 (0432fbf). vbaloop 0.3.0 관리 블록 커밋 (4af0859).
+- 최초 게시(4af0859 빌드) 직후 설치 검증 중 결함 발견: `LibVersion`이 구 `vbaflow_*` 스탬프만 읽어 vbaloop 빌드
+  (2.9.0, 2.10.0)가 "dev"로 보고됨 -> 소비 측 `MIN_UNIVDB_VERSION` 검사가 조용히 통과. 73c2bb2에서 `vbaloop_*` 우선 +
+  `vbaflow_*` 폴백으로 수정, `Test_LibVersion_ReadsVbaloopStamp` 추가 (153/153 green). 사용자 결정으로 같은 버전
+  v2.10.0의 태그를 73c2bb2로 이동하고 릴리스 자산을 교체했다(릴리스 노트에 교체 사실 명시).
 - `vbaloop dist --out dist\UnivDB-2.10.0.xlam --bootstrap UnivDB.InitDB`: ok, VBE 컴파일 통과, InitDB 부트스트랩 실행,
-  테스트 모듈 26개 제외. 스탬프 2.10.0 / `4af0859` (docProps 확인). 원시 결과 `_dbg\release-2.10.0-dist.json`.
-- 배포 자산 SHA-256: UnivDB.xlam `129c37681728ab81019916d9dbc28625993bd813ea1134db3669e34cc185a9c8`,
-  UnivDB_v2.10.0.zip `d7683188ee9b18deccd80ec48ebfe900ab1e223df3082c3025a19e547fa2e676` (xlam, README.md/txt, 101, Reference, LICENSE).
-- GitHub 릴리스 v2.10.0 게시, 로컬 설치본(`%APPDATA%\Microsoft\AddIns\UnivDB.xlam`) 교체.
+  테스트 모듈 26개 제외. 스탬프 2.10.0 / `73c2bb2` (docProps 확인). 원시 결과 `_dbg\release-2.10.0-dist.json`.
+- 배포 자산 SHA-256 (GitHub 자산 digest와 일치): UnivDB.xlam `c4c496c1ee8da8b9835414f0fc7856e9a2d08711ebb4c41b1ed5cdf6712bcada`,
+  UnivDB_v2.10.0.zip `08c87a5725daaead89b95827df6084326095f93500435a85affd557464890f3b` (xlam, README.md/txt, 101, Reference, LICENSE).
+- 로컬 설치본(`%APPDATA%\Microsoft\AddIns\UnivDB.xlam`)을 위 xlam으로 교체. 이전 설치본(2.8.0 / fe5f1d9)은
+  `dist\installed-backup\`에 보관.
 - 남은 후속: 단계 8(변경 행 보고 API - 비교 모드/쓰기 규칙 설계 결정 필요), UnivFilter 재스냅샷(modIndexKey),
   소비자(지출 리팩토링) DW `IndexBackend = 1` 핀 제거 + `MIN_UNIVDB_VERSION` 상향 + `X_DwIndexBackend` 재측정.
