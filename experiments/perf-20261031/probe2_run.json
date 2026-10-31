@@ -1,0 +1,314 @@
+{
+  "command": "run",
+  "ok": true,
+  "exitCode": 0,
+  "hint": null,
+  "session": {
+    "action": "ephemeral",
+    "pid": 64032,
+    "workbook": "C:\\Users\\rfast\\Desktop\\VBA_Projects\\UnivDB\\UnivDB.xlsm",
+    "readOnly": true
+  },
+  "errors": [],
+  "payload": {
+    "run": {
+      "macro": "ZPerfProbe2.Probe_All",
+      "module": "ZPerfProbe2",
+      "proc": "Probe_All",
+      "result": "ok",
+      "returnValue": null,
+      "returnType": "Empty",
+      "elapsedMs": 27755,
+      "detail": null,
+      "failedAsserts": 0,
+      "failedAssertSamples": [],
+      "records": [
+        {
+          "ts": "2026-10-31 14:12:03.160",
+          "kind": "J",
+          "event": "probe2",
+          "data": {
+            "case": "materialize",
+            "path": "rawarray_copy_release",
+            "rows": 27401,
+            "ms": 55.9657
+          }
+        },
+        {
+          "ts": "2026-10-31 14:12:03.402",
+          "kind": "J",
+          "event": "probe2",
+          "data": {
+            "case": "materialize",
+            "path": "select_where_small_total",
+            "rows": 548,
+            "ms": 58.5029
+          }
+        },
+        {
+          "ts": "2026-10-31 14:12:04.648",
+          "kind": "J",
+          "event": "probe2",
+          "data": {
+            "case": "materialize",
+            "path": "select_all_total",
+            "rows": 27401,
+            "ms": 287.9222
+          }
+        },
+        {
+          "ts": "2026-10-31 14:12:05.059",
+          "kind": "J",
+          "event": "probe2",
+          "data": {
+            "case": "materialize",
+            "path": "adopt_copy_full",
+            "rows": 27401,
+            "ms": 27.8486
+          }
+        },
+        {
+          "ts": "2026-10-31 14:12:10.719",
+          "kind": "J",
+          "event": "probe2",
+          "data": {
+            "case": "join",
+            "path": "inner_3k_match_total",
+            "rows": 3000,
+            "ms": 714.0927
+          }
+        },
+        {
+          "ts": "2026-10-31 14:12:13.078",
+          "kind": "J",
+          "event": "probe2",
+          "data": {
+            "case": "join",
+            "path": "left_anti_total",
+            "rows": 24401,
+            "ms": 579.5352
+          }
+        },
+        {
+          "ts": "2026-10-31 14:12:13.309",
+          "kind": "J",
+          "event": "probe2",
+          "data": {
+            "case": "join",
+            "path": "rawarray_left_27k_x34",
+            "rows": 27401,
+            "ms": 51.7148
+          }
+        },
+        {
+          "ts": "2026-10-31 14:12:13.984",
+          "kind": "J",
+          "event": "probe2",
+          "data": {
+            "case": "join",
+            "path": "rawarray_right_91k_x27",
+            "rows": 91000,
+            "ms": 164.0733
+          }
+        },
+        {
+          "ts": "2026-10-31 14:12:14.551",
+          "kind": "J",
+          "event": "probe2",
+          "data": {
+            "case": "index_unique_K",
+            "path": "real_dict",
+            "rows": 27401,
+            "ms": 86.0777
+          }
+        },
+        {
+          "ts": "2026-10-31 14:12:14.848",
+          "kind": "J",
+          "event": "probe2",
+          "data": {
+            "case": "index_unique_K",
+            "path": "bulk_direct_exists_add",
+            "rows": 27401,
+            "ms": 70.5248
+          }
+        },
+        {
+          "ts": "2026-10-31 14:12:15.105",
+          "kind": "J",
+          "event": "probe2",
+          "data": {
+            "case": "index_unique_K",
+            "path": "bulk_direct_single_lookup",
+            "rows": 27401,
+            "ms": 62.462
+          }
+        },
+        {
+          "ts": "2026-10-31 14:12:15.348",
+          "kind": "J",
+          "event": "probe2",
+          "data": {
+            "case": "index_dup50_G",
+            "path": "real_dict",
+            "rows": 27401,
+            "ms": 44.5329
+          }
+        },
+        {
+          "ts": "2026-10-31 14:12:15.477",
+          "kind": "J",
+          "event": "probe2",
+          "data": {
+            "case": "index_dup50_G",
+            "path": "bulk_direct_exists_add",
+            "rows": 27401,
+            "ms": 30.5719
+          }
+        },
+        {
+          "ts": "2026-10-31 14:12:15.621",
+          "kind": "J",
+          "event": "probe2",
+          "data": {
+            "case": "index_dup50_G",
+            "path": "bulk_direct_single_lookup",
+            "rows": 27401,
+            "ms": 36.5359
+          }
+        },
+        {
+          "ts": "2026-10-31 14:12:17.742",
+          "kind": "J",
+          "event": "probe2",
+          "data": {
+            "case": "index_unique_K",
+            "path": "real_dict",
+            "rows": 91000,
+            "ms": 463.2984
+          }
+        },
+        {
+          "ts": "2026-10-31 14:12:19.422",
+          "kind": "J",
+          "event": "probe2",
+          "data": {
+            "case": "index_unique_K",
+            "path": "bulk_direct_exists_add",
+            "rows": 91000,
+            "ms": 422.0915
+          }
+        },
+        {
+          "ts": "2026-10-31 14:12:20.652",
+          "kind": "J",
+          "event": "probe2",
+          "data": {
+            "case": "index_unique_K",
+            "path": "bulk_direct_single_lookup",
+            "rows": 91000,
+            "ms": 306.7623
+          }
+        },
+        {
+          "ts": "2026-10-31 14:12:21.426",
+          "kind": "J",
+          "event": "probe2",
+          "data": {
+            "case": "index_dup50_G",
+            "path": "real_dict",
+            "rows": 91000,
+            "ms": 147.3484
+          }
+        },
+        {
+          "ts": "2026-10-31 14:12:21.828",
+          "kind": "J",
+          "event": "probe2",
+          "data": {
+            "case": "index_dup50_G",
+            "path": "bulk_direct_exists_add",
+            "rows": 91000,
+            "ms": 98.9713
+          }
+        },
+        {
+          "ts": "2026-10-31 14:12:22.246",
+          "kind": "J",
+          "event": "probe2",
+          "data": {
+            "case": "index_dup50_G",
+            "path": "bulk_direct_single_lookup",
+            "rows": 91000,
+            "ms": 103.5502
+          }
+        },
+        {
+          "ts": "2026-10-31 14:12:23.090",
+          "kind": "J",
+          "event": "probe2",
+          "data": {
+            "case": "upsert",
+            "path": "seenkeys_pass_current",
+            "rows": 27401,
+            "ms": 62.2366
+          }
+        },
+        {
+          "ts": "2026-10-31 14:12:23.660",
+          "kind": "J",
+          "event": "probe2",
+          "data": {
+            "case": "upsert",
+            "path": "lookup_pass_only",
+            "rows": 27401,
+            "ms": 70.7521
+          }
+        },
+        {
+          "ts": "2026-10-31 14:12:23.957",
+          "kind": "J",
+          "event": "probe2",
+          "data": {
+            "case": "upsert",
+            "path": "lookup_plus_stamp",
+            "rows": 27401,
+            "ms": 72.3236
+          }
+        },
+        {
+          "ts": "2026-10-31 14:12:23.961",
+          "kind": "A",
+          "name": "probe2_upsert_no_dup",
+          "ok": true,
+          "expected": "0",
+          "actual": "0"
+        },
+        {
+          "ts": "2026-10-31 14:12:27.316",
+          "kind": "J",
+          "event": "probe2",
+          "data": {
+            "case": "upsert",
+            "path": "upsertfrom_total_all_update",
+            "rows": 27401,
+            "ms": 514.6178
+          }
+        },
+        {
+          "ts": "2026-10-31 14:12:29.992",
+          "kind": "J",
+          "event": "probe2",
+          "data": {
+            "case": "insert",
+            "path": "query_insert_one_row",
+            "rows": 27401,
+            "ms": 489.838
+          }
+        }
+      ]
+    },
+    "sessionDied": false,
+    "watchdog": []
+  }
+}

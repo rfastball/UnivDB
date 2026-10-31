@@ -1,0 +1,83 @@
+{
+  "command": "run",
+  "ok": true,
+  "exitCode": 0,
+  "hint": null,
+  "session": {
+    "action": "ephemeral",
+    "pid": 69900,
+    "workbook": "C:\\Users\\rfast\\Desktop\\VBA_Projects\\UnivDB\\UnivDB.xlsm",
+    "readOnly": true
+  },
+  "errors": [],
+  "payload": {
+    "run": {
+      "macro": "ZPerfProbe2.Probe_JoinParts",
+      "module": "ZPerfProbe2",
+      "proc": "Probe_JoinParts",
+      "result": "ok",
+      "returnValue": null,
+      "returnType": "Empty",
+      "elapsedMs": 4698,
+      "detail": null,
+      "failedAsserts": 0,
+      "failedAssertSamples": [],
+      "records": [
+        {
+          "ts": "2026-10-31 14:13:22.445",
+          "kind": "J",
+          "event": "probe2",
+          "data": {
+            "case": "join_parts",
+            "path": "cursor_create_right_91k",
+            "rows": 91000,
+            "ms": 14.9342
+          }
+        },
+        {
+          "ts": "2026-10-31 14:13:23.430",
+          "kind": "J",
+          "event": "probe2",
+          "data": {
+            "case": "join_parts",
+            "path": "probe_pass_right_cursor_x_left",
+            "rows": 91000,
+            "ms": 209.497
+          }
+        },
+        {
+          "ts": "2026-10-31 14:13:23.434",
+          "kind": "A",
+          "name": "probe2_join_hits",
+          "ok": true,
+          "expected": "3000",
+          "actual": "3000"
+        },
+        {
+          "ts": "2026-10-31 14:13:24.012",
+          "kind": "J",
+          "event": "probe2",
+          "data": {
+            "case": "join_parts",
+            "path": "probe_pass_left_cursor_x_right",
+            "rows": 27401,
+            "ms": 132.8444
+          }
+        },
+        {
+          "ts": "2026-10-31 14:13:24.102",
+          "kind": "J",
+          "event": "probe2",
+          "data": {
+            "case": "join_parts",
+            "path": "cursor_walk_only_91k",
+            "rows": 91000,
+            "ms": 5.9273
+          }
+        }
+      ]
+    },
+    "sessionDied": false,
+    "watchdog": []
+  }
+}
