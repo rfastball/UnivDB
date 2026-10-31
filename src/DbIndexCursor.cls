@@ -21,7 +21,8 @@ Private mOwnerPtr As LongPtr
 Private mGeneration As Long
 
 ' CSR 페이로드 기반 초기화. ownerPtr/gen은 Rows 복사본에 전파할 세대 결속.
-Friend Function InitCsr(ByVal keys As Variant, ByVal payload As DbCsrPayload, _
+' keys는 ByRef - 호출자의 키 배열을 인자 전달 단계에서 다시 복사하지 않는다(보관 시 1회만 복사).
+Friend Function InitCsr(ByRef keys As Variant, ByVal payload As DbCsrPayload, _
                         ByVal count As Long, ByVal ownerPtr As LongPtr, _
                         ByVal gen As Long) As DbIndexCursor
     Set mPayload = payload
