@@ -555,42 +555,27 @@ End Function
 ' 반환: 추가된 행의 개수 (성공 시 1)
 ' ------------------------------------------------------------------------------
 Public Function Insert() As Long
-    Dim vSource As Variant
-    Dim vNewData As Variant
-    Dim lTotalRows As Long, lTotalCols As Long
-    Dim i As Long, j As Long
+    Dim vNewRow() As Variant
     Dim dicHeaders As Object
     Dim vKey As Variant
     Dim sCol As String
-    Dim lColIdx As Long
     
     If m_dicUpdates.Count = 0 Then Insert = 0: Exit Function
     
-    ' 1. 원본 데이터 및 헤더 확보
-    vSource = m_SourceTable.RawArray
-    lTotalRows = UBound(vSource, 1)
-    lTotalCols = UBound(vSource, 2)
+    ' 1. 새 행 매핑 (미존재 컬럼은 테이블 변경 전에 fail-fast)
     Set dicHeaders = m_SourceTable.Headers
-    
-    ' 2. 배열 확장 (행 추가) 및 데이터 복사
-    ReDim vNewData(1 To lTotalRows + 1, 1 To lTotalCols)
-    For i = 1 To lTotalRows
-        For j = 1 To lTotalCols: vNewData(i, j) = vSource(i, j): Next j
-    Next i
-    
-    ' 3. 새 데이터 매핑
+    ReDim vNewRow(1 To m_SourceTable.ColCount)
     For Each vKey In m_dicUpdates.Keys
         sCol = UCase(Trim(CStr(vKey)))
         If dicHeaders.exists(sCol) Then
-            lColIdx = dicHeaders(sCol)
-            vNewData(lTotalRows + 1, lColIdx) = m_dicUpdates(vKey)
+            vNewRow(dicHeaders(sCol)) = m_dicUpdates(vKey)
         Else
             Err.Raise 9999, "clsQuery", "Insert Error: Column not found [" & sCol & "]"
         End If
     Next vKey
     
-    ' 4. 테이블 갱신
-    m_SourceTable.LoadFromArray vNewData, True
+    ' 2. 테이블 끝에 1행 추가 (1회 결합 복사, 새 행의 문자열 셀만 Trim$, 세대 증가)
+    m_SourceTable.AppendRowValues vNewRow
     m_dicUpdates.RemoveAll
     
     Insert = 1

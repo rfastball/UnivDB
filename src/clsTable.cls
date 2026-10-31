@@ -1264,6 +1264,28 @@ Friend Function CopyColumnValues(ByVal lCol As Long) As Variant
     CopyColumnValues = CopyColumn1D(lCol)
 End Function
 
+' 행 1개(rowVals(1..ColCount))를 끝에 추가한다. 사용자 값 경계 - 새 행의 문자열 셀만 Trim$
+' (기존 행은 재트림하지 않음). 1회 결합 복사, 구조 변경이므로 세대 증가.
+Friend Sub AppendRowValues(ByRef rowVals As Variant)
+    Dim combined() As Variant, r As Long, c As Long, lo As Long, newRow As Long
+    lo = LBound(m_vData, 1)
+    newRow = m_lRowCount + 1
+    ReDim combined(lo To newRow, 1 To m_lColCount)
+    For c = 1 To m_lColCount
+        For r = lo To m_lRowCount
+            combined(r, c) = m_vData(r, c)
+        Next r
+        If VarType(rowVals(c)) = vbString Then
+            combined(newRow, c) = Trim$(rowVals(c))
+        Else
+            combined(newRow, c) = rowVals(c)
+        End If
+    Next c
+    m_vData = combined
+    m_lRowCount = newRow
+    BumpGeneration
+End Sub
+
 ' 각 k, i에 대해 dest(dstRows(i), dstCols(k)) = 자기 셀(srcRows(i), srcCols(k)). 전체 배열 사본 없음.
 ' rowID 세대 검증은 호출 진입점 책임(Friend, 호출자 신뢰).
 Friend Sub CopyCellsInto(ByRef dest As Variant, ByRef srcRows() As Long, ByRef dstRows() As Long, _
