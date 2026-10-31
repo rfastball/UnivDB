@@ -67,3 +67,13 @@
 | 인덱스 빌드 91k 고유 | 483.7 | 215.9 | 2.2x |
 | 인덱스 빌드 91k 50그룹 | 165.9 | 121.2 | 1.4x |
 | 시트 적재 27k x 34 | 240.8 | 158.7 (Trim 생략 76.3) | 1.5x (3.2x) |
+
+## 릴리스 (계획 3절)
+
+- `vbaloop.toml` [dist] version = "2.10.0", Reference 버전 동기 (0432fbf).
+- `vbaloop dist --out dist\UnivDB-2.10.0.xlam`: ok, VBE 컴파일 통과, 테스트 모듈 26개 제외.
+  rev `0432fbf-dirty`(작업 트리의 vbaloop 0.3.0 init 관리 블록 변경이 미커밋이라 dirty 표기), SHA-256
+  `09EF22068BA16B01E1E5089C42913D70D6AD8B6DEFB17611F5703D4FB5FA3C73`. 원시 결과 `_dbg\release-2.10.0-dist.json`.
+- 설치본(`%APPDATA%\Microsoft\AddIns\UnivDB.xlam`) 교체는 사용자 확인 대기.
+- 남은 후속: 단계 8(변경 행 보고 API - 비교 모드/쓰기 규칙 설계 결정 필요), UnivFilter 재스냅샷(modIndexKey),
+  소비자(지출 리팩토링) 애드인 교체 + DW `IndexBackend = 1` 핀 제거 + `MIN_UNIVDB_VERSION` 상향 + `X_DwIndexBackend` 재측정.
