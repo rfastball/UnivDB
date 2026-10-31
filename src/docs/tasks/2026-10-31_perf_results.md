@@ -70,10 +70,11 @@
 
 ## 릴리스 (계획 3절)
 
-- `vbaloop.toml` [dist] version = "2.10.0", Reference 버전 동기 (0432fbf).
-- `vbaloop dist --out dist\UnivDB-2.10.0.xlam`: ok, VBE 컴파일 통과, 테스트 모듈 26개 제외.
-  rev `0432fbf-dirty`(작업 트리의 vbaloop 0.3.0 init 관리 블록 변경이 미커밋이라 dirty 표기), SHA-256
-  `09EF22068BA16B01E1E5089C42913D70D6AD8B6DEFB17611F5703D4FB5FA3C73`. 원시 결과 `_dbg\release-2.10.0-dist.json`.
-- 설치본(`%APPDATA%\Microsoft\AddIns\UnivDB.xlam`) 교체는 사용자 확인 대기.
+- `vbaloop.toml` [dist] version = "2.10.0", Reference 버전 동기 (0432fbf). vbaloop 0.3.0 관리 블록 커밋 (4af0859).
+- `vbaloop dist --out dist\UnivDB-2.10.0.xlam --bootstrap UnivDB.InitDB`: ok, VBE 컴파일 통과, InitDB 부트스트랩 실행,
+  테스트 모듈 26개 제외. 스탬프 2.10.0 / `4af0859` (docProps 확인). 원시 결과 `_dbg\release-2.10.0-dist.json`.
+- 배포 자산 SHA-256: UnivDB.xlam `129c37681728ab81019916d9dbc28625993bd813ea1134db3669e34cc185a9c8`,
+  UnivDB_v2.10.0.zip `d7683188ee9b18deccd80ec48ebfe900ab1e223df3082c3025a19e547fa2e676` (xlam, README.md/txt, 101, Reference, LICENSE).
+- GitHub 릴리스 v2.10.0 게시, 로컬 설치본(`%APPDATA%\Microsoft\AddIns\UnivDB.xlam`) 교체.
 - 남은 후속: 단계 8(변경 행 보고 API - 비교 모드/쓰기 규칙 설계 결정 필요), UnivFilter 재스냅샷(modIndexKey),
-  소비자(지출 리팩토링) 애드인 교체 + DW `IndexBackend = 1` 핀 제거 + `MIN_UNIVDB_VERSION` 상향 + `X_DwIndexBackend` 재측정.
+  소비자(지출 리팩토링) DW `IndexBackend = 1` 핀 제거 + `MIN_UNIVDB_VERSION` 상향 + `X_DwIndexBackend` 재측정.
