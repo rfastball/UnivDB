@@ -7,8 +7,6 @@ Attribute VB_GlobalNameSpace = False
 Attribute VB_Creatable = False
 Attribute VB_PredeclaredId = False
 Attribute VB_Exposed = True
-' SPDX-License-Identifier: MIT
-' Copyright (c) 2026 JM - see LICENSE
 Option Explicit
 
 ' ==============================================================================
@@ -32,7 +30,7 @@ Private Sub Class_Initialize()
     ' 기본 상태 설정
     m_bIsFirstCondition = True
     Set m_dicUpdates = CreateObject("Scripting.Dictionary")
-    
+
     ' 기능별 기본값 초기화
     m_sTargetColumns = "*"           ' 기본: 전체 컬럼
     m_sSortColumn = ""               ' 기본: 정렬 없음
@@ -69,7 +67,6 @@ Public Function Where(ByVal sColName As String, ByVal vValue As Variant) As clsQ
     EnsureCandidatesCurrent
 
     ' 1. 내부 HashIndex에서 행 번호 추출 (O(1))
-    RequireColumn sColName, "clsQuery.Where"
     Set idx = m_SourceTable.GetHashIndex(sColName)
 
     ' 2. DbRowList를 후보 RowSet에 반영
@@ -113,7 +110,6 @@ Public Function Filter(ByVal sColName As String, ByVal sOp As String, ByVal vVal
     ' 연산자 화이트리스트 검증 (audit F1, V1/V2): 미지 연산자는 후보 유무와 무관하게
     ' 즉시 raise - 컬럼명 오타(아래 9999)와 오류 처리 대칭. 정규화도 이 단일 지점에서.
     sOp = modOperators.NormalizeFilterOp(sOp)
-    ValidateFilterArm sColName, sOp, vValue, "clsQuery.Filter"
 
     EnsureCandidatesCurrent
     If m_bIsFirstCondition Then InitializeAllRows
@@ -134,9 +130,18 @@ Private Function EvaluateArm(ByVal sColName As String, ByVal sOp As String, _
     Dim setSurvivors As New DbRowSet
     Dim i As Long
 
+    ' 1. [Hoisting] 루프 외부에서 모든 전처리 완료
+    Dim rdr As DbColumnReader
     Dim vCol As Variant
-    vCol = m_SourceTable.CopyCandidateColumn(m_SourceTable.ColumnIndex(sColName), vCandidates)
+
+    ' 1-1. 컬럼 접근 표면 획득 (Phase 6.8 밀봉 - 레이아웃 비의존)
+    Set rdr = m_SourceTable.GetColumnReader(sColName)
+    If rdr Is Nothing Then Err.Raise 9999, sSource, "Column not found: " & sColName
+
     setSurvivors.BindTo m_SourceTable
+
+    ' 1-2. 컬럼 1D 배열 로컬 변수에 할당 (루프 내부는 직접 인덱싱 유지)
+    vCol = rdr.Values
 
     ' 2. [Dual Path] 연산자 종류에 따라 실행 경로 분기 (sOp는 호출자에서 정규화 완료)
     Select Case sOp
@@ -147,11 +152,16 @@ Private Function EvaluateArm(ByVal sColName As String, ByVal sOp As String, _
             Dim dTarget As Double
             Dim vCell As Variant
 
+            ' 수치 연산자에 비숫자 비교값은 문장 수준 오류 - fail-fast (audit F6, V1)
+            If Not IsNumeric(vValue) Then
+                Err.Raise 9999, sSource, _
+                    "Numeric operator '" & sOp & "' requires a numeric compare value: '" & CStr(vValue) & "'"
+            End If
             dTarget = CDbl(vValue)
-            
+
             ' 최적화된 루프
             For i = LBound(vCandidates) To UBound(vCandidates)
-                vCell = vCol(i)
+                vCell = vCol(vCandidates(i))
                 ' Empty=NULL 계약(D1): IsNumeric(Empty)=True라 0으로 참여하던 것을 차단.
                 ' Error/Date는 이미 IsNumeric=False로 제외 - 인덱스 계약과 정합.
                 If Not IsEmpty(vCell) And IsNumeric(vCell) Then
@@ -165,28 +175,28 @@ Private Function EvaluateArm(ByVal sColName As String, ByVal sOp As String, _
                     End Select
                 End If
             Next i
-            
+
         Case "IS", "IS NOT", "LIKE", "NOT LIKE"
             ' ==========================================================
             ' [Path B] 문자열 연산 경로 (String Path)
             ' ==========================================================
             Dim sTarget As String
             sTarget = FastNorm(vValue) ' FastNorm으로 비교값 사전 정규화
-            
+
             ' Error=skip 계약(D1): Error 셀은 어느 연산에서도 결과에 참여하지 않는다.
             ' 부정 연산(IS NOT/NOT LIKE)에서도 "not equal"로 걸리지 않고 skip - raw CStr(Error)의
             ' locale 문자열 은밀 참여를 차단. (Empty는 CStr(Empty)="" 로 IS "" 매칭 유지)
             Select Case sOp
                 Case "IS" ' StrComp 기반의 대소문자 무시 비교 (=)
                     For i = LBound(vCandidates) To UBound(vCandidates)
-                        vCell = vCol(i)
+                        vCell = vCol(vCandidates(i))
                         If Not IsError(vCell) Then
                             If StrComp(FastNorm(vCell), sTarget, vbTextCompare) = 0 Then setSurvivors.AddRow vCandidates(i)
                         End If
                     Next i
                 Case "IS NOT" ' StrComp 기반의 대소문자 무시 비교 (<>)
                     For i = LBound(vCandidates) To UBound(vCandidates)
-                        vCell = vCol(i)
+                        vCell = vCol(vCandidates(i))
                         If Not IsError(vCell) Then
                             If StrComp(FastNorm(vCell), sTarget, vbTextCompare) <> 0 Then setSurvivors.AddRow vCandidates(i)
                         End If
@@ -194,7 +204,7 @@ Private Function EvaluateArm(ByVal sColName As String, ByVal sOp As String, _
                 Case "LIKE" ' VBA Like 연산자
                     sTarget = UCase(sTarget) ' Like는 vbTextCompare를 지원 안하므로 UCase 필요
                     For i = LBound(vCandidates) To UBound(vCandidates)
-                        vCell = vCol(i)
+                        vCell = vCol(vCandidates(i))
                         If Not IsError(vCell) Then
                             If UCase(FastNorm(vCell)) Like sTarget Then setSurvivors.AddRow vCandidates(i)
                         End If
@@ -202,7 +212,7 @@ Private Function EvaluateArm(ByVal sColName As String, ByVal sOp As String, _
                 Case "NOT LIKE"
                      sTarget = UCase(sTarget)
                      For i = LBound(vCandidates) To UBound(vCandidates)
-                        vCell = vCol(i)
+                        vCell = vCol(vCandidates(i))
                         If Not IsError(vCell) Then
                             If Not (UCase(FastNorm(vCell)) Like sTarget) Then setSurvivors.AddRow vCandidates(i)
                         End If
@@ -220,8 +230,8 @@ End Function
 ' arm 형식: Array(컬럼, 연산자, 값) 3요소. 연산자는 Filter와 같은 화이트리스트.
 '   개별 arm 인자 외에 arm 배열 1개(동적 목록, KeepAny 위임)도 허용 - 재귀 평탄화.
 ' 검증: 전체 arm을 평가 전에 문장 수준 검증 (audit F3 교훈 - 부분 축소 없이 9999).
-'   Filter와 동일하게 후보 0행 early-out보다 검증이 앞선다.
-' 성능: 동일 열 숫자 동등 arm은 집합 조회 1회 스캔, 그 외는 arm별 평가.
+'   Filter와 달리 후보 0행 early-out보다 검증이 앞선다 (의도된 비대칭 - 더 엄격).
+' 성능: arm당 컬럼 사본 1회 (Filter N회 체인과 동일 비용 프로파일).
 ' ==============================================================================
 
 ' @desc 조건 arm들 받아 하나라도 맞는 행 유지 (OR 그룹, 체인 나머지와는 AND)
@@ -231,10 +241,10 @@ Public Function FilterAny(ParamArray vArms() As Variant) As clsQuery
     Dim k As Long, lb As Long
     Dim lArmCount As Long
     Dim sCols() As String, sOps() As String, vVals() As Variant
+    Dim dicHeaders As Object
     Dim vCandidates As Variant
     Dim setUnion As DbRowSet
     Dim setArm As DbRowSet
-    Dim bNumericSet As Boolean, lColumn As Long
 
     ' 1. arm 평탄화 (개별 Array 인자 / arm 배열 혼용 허용)
     If UBound(vArms) < LBound(vArms) Then
@@ -250,7 +260,8 @@ Public Function FilterAny(ParamArray vArms() As Variant) As clsQuery
 
     ' 2. 문장 수준 검증 - 전체 arm을 평가 앞에서 (미지 연산자/컬럼 오타/비숫자 비교값)
     ReDim sCols(1 To lArmCount): ReDim sOps(1 To lArmCount): ReDim vVals(1 To lArmCount)
-    bNumericSet = (lArmCount > 1)
+    Set dicHeaders = m_SourceTable.Headers
+
     k = 0
     For Each vArm In colArms
         k = k + 1
@@ -265,9 +276,16 @@ Public Function FilterAny(ParamArray vArms() As Variant) As clsQuery
         sOps(k) = modOperators.NormalizeFilterOp(CStr(vArm(lb + 1)))
         vVals(k) = vArm(lb + 2)
 
-        ValidateFilterArm sCols(k), sOps(k), vVals(k), "clsQuery.FilterAny"
-        If k = 1 Then lColumn = m_SourceTable.ColumnIndex(sCols(k))
-        If sOps(k) <> "=" Or m_SourceTable.ColumnIndex(sCols(k)) <> lColumn Then bNumericSet = False
+        If Not dicHeaders.exists(UCase(sCols(k))) Then
+            Err.Raise 9999, "clsQuery.FilterAny", "Column not found: " & sCols(k)
+        End If
+        Select Case sOps(k)
+            Case "=", "<>", ">", "<", ">=", "<="
+                If Not IsNumeric(vVals(k)) Then
+                    Err.Raise 9999, "clsQuery.FilterAny", _
+                        "Numeric operator '" & sOps(k) & "' requires a numeric compare value: '" & CStr(vVals(k)) & "'"
+                End If
+        End Select
     Next vArm
 
     ' 3. 실행: 같은 후보 스냅샷에 arm별 독립 스캔 -> 합집합 (중복 행은 비트맵이 무계수)
@@ -276,42 +294,18 @@ Public Function FilterAny(ParamArray vArms() As Variant) As clsQuery
     If m_setCandidates.Count = 0 Then Set FilterAny = Me: Exit Function
 
     vCandidates = m_setCandidates.ToArray
-    If bNumericSet Then
-        Set setUnion = EvaluateNumericSet(sCols(1), vVals, vCandidates)
-    Else
-        For k = 1 To lArmCount
-            Set setArm = EvaluateArm(sCols(k), sOps(k), vVals(k), vCandidates, "clsQuery.FilterAny")
-            If setUnion Is Nothing Then
-                Set setUnion = setArm
-            Else
-                setUnion.UnionWith setArm
-            End If
-        Next k
-    End If
+    For k = 1 To lArmCount
+        Set setArm = EvaluateArm(sCols(k), sOps(k), vVals(k), vCandidates, "clsQuery.FilterAny")
+        If setUnion Is Nothing Then
+            Set setUnion = setArm
+        Else
+            setUnion.UnionWith setArm
+        End If
+    Next k
 
     Set m_setCandidates = setUnion
     m_bIsFirstCondition = False
     Set FilterAny = Me
-End Function
-
-' 숫자 비교는 인덱스 문자열 키가 아닌 EvaluateArm과 같은 CDbl로 맞춘다.
-Private Function EvaluateNumericSet(ByVal sColumn As String, ByRef values() As Variant, _
-                                    ByRef candidates As Variant) As DbRowSet
-    Dim targets As Object, survivors As New DbRowSet
-    Dim column As Variant, cell As Variant, i As Long
-    Set targets = CreateObject("Scripting.Dictionary")
-    For i = LBound(values) To UBound(values)
-        targets(CDbl(values(i))) = True
-    Next i
-    column = m_SourceTable.CopyCandidateColumn(m_SourceTable.ColumnIndex(sColumn), candidates)
-    survivors.BindTo m_SourceTable
-    For i = LBound(candidates) To UBound(candidates)
-        cell = column(i)
-        If Not IsEmpty(cell) And IsNumeric(cell) Then
-            If targets.exists(CDbl(cell)) Then survivors.AddRow candidates(i)
-        End If
-    Next i
-    Set EvaluateNumericSet = survivors
 End Function
 
 ' arm 인자 재귀 평탄화: 첫 요소가 배열이면 arm 목록으로 보고 내부로 재귀
@@ -399,21 +393,21 @@ End Sub
 Public Function SelectColumns(ParamArray vCols() As Variant) As clsQuery
     Dim vItem As Variant, vSubItem As Variant
     Dim sFinal As String, sCol As String
-    
+
     ' 1. 인자가 없는 경우 기본값 "*" 설정
     If UBound(vCols) < 0 Then
         m_sTargetColumns = "*"
         Set SelectColumns = Me: Exit Function
     End If
-    
+
     sFinal = ""
-    
+
     ' 2. 모든 인자를 순회하며 결합
     For Each vItem In vCols
         ' 핵심: 단일 항목이든 배열이든 동일한 로직으로 처리하기 위해 내부 함수처럼 분리
         Call Internal_ProcessItem(vItem, sFinal)
     Next vItem
-    
+
     ' 3. 최종 결과 할당
     m_sTargetColumns = IIf(Len(sFinal) = 0, "*", sFinal)
     Set SelectColumns = Me
@@ -422,19 +416,19 @@ End Function
 ' [Internal] 타입 오류를 방지하며 아이템을 분석하여 sFinal에 추가
 Private Sub Internal_ProcessItem(ByVal vInput As Variant, ByRef sFinal As String)
     Dim vSub As Variant, arrTemp As Variant, sCol As String
-    
+
     ' A. 배열인 경우 (SelectFinal에서 넘겨준 경우 등)
     If IsArray(vInput) Then
         For Each vSub In vInput
             Call Internal_ProcessItem(vSub, sFinal) ' 재귀적 처리를 통해 중첩 배열 해결
         Next vSub
-        
+
     ' B. 단일 값인 경우 (에러, Null, 객체 방어)
     Else
         ' 1. 기초 방어 (Error, Null, Empty 체크)
         If IsError(vInput) Or IsNull(vInput) Or IsEmpty(vInput) Then Exit Sub
         If IsObject(vInput) Then Exit Sub
-        
+
         ' 2. 콤마 포함 여부 확인 및 분리
         If InStr(CStr(vInput), ",") > 0 Then
             arrTemp = Split(CStr(vInput), ",")
@@ -461,8 +455,7 @@ End Sub
 ' 활용: 기존 clsTable의 QuickSort 엔진을 재사용합니다.
 ' ==============================================================================
 Public Function OrderBy(ByVal sColName As String, Optional ByVal bDesc As Boolean = False) As clsQuery
-    RequireColumn sColName, "clsQuery.OrderBy"
-    m_sSortColumn = Trim$(sColName)
+    m_sSortColumn = sColName
     m_bSortDesc = bDesc
     Set OrderBy = Me
 End Function
@@ -501,16 +494,21 @@ End Function
 ' 반환: 변경된 행의 개수
 ' ------------------------------------------------------------------------------
 Public Function Update() As Long
-    Dim vCol As Variant
+    Dim vRowID As Variant, vCol As Variant
+    Dim lCount As Long
 
     EnsureCandidatesCurrent
     If m_setCandidates Is Nothing Then InitializeAllRows
-    For Each vCol In m_dicUpdates
-        RequireColumn CStr(vCol), "clsQuery.Update"
-    Next vCol
     If m_dicUpdates.Count = 0 Or m_setCandidates.Count = 0 Then Update = 0: Exit Function
-    
-    Update = m_SourceTable.UpdateRows(m_setCandidates, m_dicUpdates)
+
+    For Each vRowID In m_setCandidates.ToArray
+        For Each vCol In m_dicUpdates.Keys
+            m_SourceTable.Value(CLng(vRowID), CStr(vCol)) = m_dicUpdates(vCol)
+        Next vCol
+        lCount = lCount + 1
+    Next vRowID
+
+    Update = lCount
 End Function
 
 ' ------------------------------------------------------------------------------
@@ -519,9 +517,10 @@ End Function
 ' 반환: 삭제된 행의 개수
 ' ------------------------------------------------------------------------------
 Public Function Delete() As Long
-    Dim keepIds() As Long
-    Dim i As Long, R As Long
-    Dim lTotalRows As Long
+    Dim vSource As Variant
+    Dim vNewData As Variant
+    Dim i As Long, j As Long, R As Long
+    Dim lTotalRows As Long, lTotalCols As Long
     Dim lDeleteCount As Long
     Dim lKeepCount As Long
 
@@ -530,22 +529,28 @@ Public Function Delete() As Long
     lDeleteCount = m_setCandidates.Count
     If lDeleteCount = 0 Then Delete = 0: Exit Function
 
-    ' 1. 남길 행 목록 (삭제 대상은 후보 RowSet의 ContainsRow로 직접 판정)
-    lTotalRows = m_SourceTable.RowCount
-    lKeepCount = lTotalRows - 1 - lDeleteCount
-    If lKeepCount > 0 Then ReDim keepIds(0 To lKeepCount - 1) Else ReDim keepIds(0 To 0)
-    R = 0
+    ' 1. 데이터 재구성 (삭제 대상은 후보 RowSet의 ContainsRow로 직접 판정)
+    vSource = m_SourceTable.RawArray
+    lTotalRows = UBound(vSource, 1)
+    lTotalCols = UBound(vSource, 2)
+    lKeepCount = lTotalRows - lDeleteCount
+
+    ReDim vNewData(1 To lKeepCount, 1 To lTotalCols)
+
+    R = 1
+    For j = 1 To lTotalCols: vNewData(1, j) = vSource(1, j): Next j ' 헤더
+
     For i = 2 To lTotalRows
         If Not m_setCandidates.ContainsRow(i) Then
-            keepIds(R) = i
             R = R + 1
+            For j = 1 To lTotalCols: vNewData(R, j) = vSource(i, j): Next j
         End If
     Next i
 
-    ' 2. 테이블이 자기 배열을 재작성 (기존 셀 재배치 - 세대 증가 포함)
-    m_SourceTable.KeepRows keepIds, lKeepCount
+    ' 2. 테이블 갱신 (기존 셀 재배치라 이미 정규화됨 - 입양 경로)
+    m_SourceTable.AdoptArray vNewData, True
     Set m_setCandidates = Nothing: m_bIsFirstCondition = True
-    
+
     Delete = lDeleteCount
 End Function
 
@@ -555,29 +560,44 @@ End Function
 ' 반환: 추가된 행의 개수 (성공 시 1)
 ' ------------------------------------------------------------------------------
 Public Function Insert() As Long
-    Dim vNewRow() As Variant
+    Dim vSource As Variant
+    Dim vNewData As Variant
+    Dim lTotalRows As Long, lTotalCols As Long
+    Dim i As Long, j As Long
     Dim dicHeaders As Object
     Dim vKey As Variant
     Dim sCol As String
-    
+    Dim lColIdx As Long
+
     If m_dicUpdates.Count = 0 Then Insert = 0: Exit Function
-    
-    ' 1. 새 행 매핑 (미존재 컬럼은 테이블 변경 전에 fail-fast)
+
+    ' 1. 원본 데이터 및 헤더 확보
+    vSource = m_SourceTable.RawArray
+    lTotalRows = UBound(vSource, 1)
+    lTotalCols = UBound(vSource, 2)
     Set dicHeaders = m_SourceTable.Headers
-    ReDim vNewRow(1 To m_SourceTable.ColCount)
+
+    ' 2. 배열 확장 (행 추가) 및 데이터 복사
+    ReDim vNewData(1 To lTotalRows + 1, 1 To lTotalCols)
+    For i = 1 To lTotalRows
+        For j = 1 To lTotalCols: vNewData(i, j) = vSource(i, j): Next j
+    Next i
+
+    ' 3. 새 데이터 매핑
     For Each vKey In m_dicUpdates.Keys
         sCol = UCase(Trim(CStr(vKey)))
         If dicHeaders.exists(sCol) Then
-            vNewRow(dicHeaders(sCol)) = m_dicUpdates(vKey)
+            lColIdx = dicHeaders(sCol)
+            vNewData(lTotalRows + 1, lColIdx) = m_dicUpdates(vKey)
         Else
             Err.Raise 9999, "clsQuery", "Insert Error: Column not found [" & sCol & "]"
         End If
     Next vKey
-    
-    ' 2. 테이블 끝에 1행 추가 (1회 결합 복사, 새 행의 문자열 셀만 Trim$, 세대 증가)
-    m_SourceTable.AppendRowValues vNewRow
+
+    ' 4. 테이블 갱신
+    m_SourceTable.LoadFromArray vNewData, True
     m_dicUpdates.RemoveAll
-    
+
     Insert = 1
 End Function
 
@@ -594,36 +614,32 @@ Public Function SelectTable() As clsTable
     Dim tResult As New clsTable
     Dim vResultData As Variant
     Dim vRowIDs As Variant
-    Dim rowIds() As Long
+    Dim vRawSource As Variant
 
     Dim arrColNames() As String
     Dim arrSourceIndices() As Long ' Target Index -> Source Index 매핑
     Dim lTargetCols As Long
     Dim lResultRows As Long
-    
+
     Dim i As Long, j As Long, R As Long
     Dim sCol As String
-    
+
     ' 1. [Candidate Check] 후보군 확인 (stale 후보군은 세대 계약으로 즉시 실패)
     EnsureCandidatesCurrent
     If m_setCandidates Is Nothing Then
         InitializeAllRows
     End If
     lResultRows = m_setCandidates.Count
-    
-    ' 후보 rowID 정렬 -> Top -> projection. 출력에 정렬 열이 없어도 의미를 보존한다.
-    vRowIDs = m_setCandidates.ToArray
-    If Len(m_sSortColumn) > 0 Then m_SourceTable.SortRowIds vRowIDs, m_sSortColumn, m_bSortDesc
 
-    ' 출력 크기는 정렬 여부와 무관하게 Top으로 제한한다.
-    If m_lLimit > 0 Then
+    ' [Optimized Limit] 정렬이 없는 경우, 미리 개수를 제한하여 성능 최적화 (Early Exit)
+    If Len(m_sSortColumn) = 0 And m_lLimit > 0 Then
         If lResultRows > m_lLimit Then lResultRows = m_lLimit
     End If
-    
+
     ' 2. [Column Parsing] 프로젝션 대상 컬럼 분석
     Dim dicHeaders As Object
     Set dicHeaders = m_SourceTable.Headers
-    
+
     If m_sTargetColumns = "*" Or m_sTargetColumns = "" Then
         ' [Case A] 전체 컬럼 선택
         lTargetCols = m_SourceTable.ColCount
@@ -634,7 +650,7 @@ Public Function SelectTable() As clsTable
         arrColNames = Split(m_sTargetColumns, ",")
         lTargetCols = UBound(arrColNames) + 1
         ReDim arrSourceIndices(1 To lTargetCols)
-        
+
         For j = 0 To UBound(arrColNames)
             sCol = UCase(Trim(arrColNames(j)))
             If dicHeaders.exists(sCol) Then
@@ -644,42 +660,68 @@ Public Function SelectTable() As clsTable
             End If
         Next j
     End If
-    
+
     ' 3. [Allocation] 결과 배열 할당 (Limit이 적용된 lResultRows 사용)
     ReDim vResultData(1 To lResultRows + 1, 1 To lTargetCols)
+    vRawSource = m_SourceTable.RawArray
 
     ' 4. [Header Copy] 헤더 작성
     If m_sTargetColumns = "*" Then
-        rowIds = HeaderRowIds()
-        m_SourceTable.GatherRows rowIds, 1, arrSourceIndices, vResultData, 1, 1
+        For j = 1 To lTargetCols: vResultData(1, j) = vRawSource(1, j): Next j
     Else
         For j = 0 To UBound(arrColNames): vResultData(1, j + 1) = Trim(arrColNames(j)): Next j
     End If
 
-    ' 5. [Data Fetch] 후보 행만 원본에서 직접 수집 (원본 전체 사본 없음)
-    ' lResultRows만큼만 수집 (정렬 없는 경우 Limit까지만), vRowIDs는 0-based
+    ' 5. [Data Fetch] 데이터 고속 복사
     If lResultRows > 0 Then
-        rowIds = vRowIDs
-        m_SourceTable.GatherRows rowIds, lResultRows, arrSourceIndices, vResultData, 2, 1
+        vRowIDs = m_setCandidates.ToArray
+
+        ' [핵심] lResultRows만큼만 루프 수행 (정렬 없는 경우 Limit까지만 돎)
+        ' vRowIDs는 0-based array이므로 0부터 시작
+        For i = 0 To lResultRows - 1
+            R = vRowIDs(i)
+            For j = 1 To lTargetCols
+                vResultData(i + 2, j) = vRawSource(R, arrSourceIndices(j))
+            Next j
+        Next i
     End If
-    
+
     ' 결과 로드 (원본 셀 프로젝션이라 이미 정규화됨 - 입양 경로)
     tResult.AdoptArray vResultData, True
-    
+
+    ' 6. [Post-Process] 정렬 및 정렬 후 Limit 처리
+    If Len(m_sSortColumn) > 0 Then
+        ' (1) 정렬 수행 (전체 데이터 대상)
+        If tResult.Headers.exists(UCase(m_sSortColumn)) Then
+            tResult.OrderBy m_sSortColumn, m_bSortDesc
+        End If
+
+        ' (2) 정렬 후 잘라내기 (Slicing) - 정렬이 있을 때만 수행되는 후처리
+        If m_lLimit > 0 And tResult.RowCount > m_lLimit Then
+            Dim vSliced As Variant
+            Dim vSorted As Variant
+
+            vSorted = tResult.RawArray
+            ReDim vSliced(1 To m_lLimit + 1, 1 To lTargetCols)
+
+            ' 헤더 + 상위 N개 복사
+            For i = 1 To m_lLimit + 1
+                For j = 1 To lTargetCols
+                    vSliced(i, j) = vSorted(i, j)
+                Next j
+            Next i
+
+            ' 잘라낸 데이터로 다시 로드 (정렬 결과 슬라이스 - 입양 경로)
+            tResult.AdoptArray vSliced, True
+        End If
+    End If
+
     Set SelectTable = tResult
 End Function
 
 ' ==============================================================================
 ' [Internal] 헬퍼 함수
 ' ==============================================================================
-
-' 헤더 행(1행)만 담은 GatherRows용 rowId 목록
-Private Function HeaderRowIds() As Long()
-    Dim ids() As Long
-    ReDim ids(0 To 0)
-    ids(0) = 1
-    HeaderRowIds = ids
-End Function
 
 ' 전체 행을 후보군으로 초기화 (Where 없이 Filter 먼저 호출 시)
 Private Sub InitializeAllRows()
@@ -700,18 +742,18 @@ End Sub
 Public Sub DebugPrint()
     Dim T As clsTable
     Set T = Me.SelectTable()
-    
+
     If T.RowCount = 0 Then
         Debug.Print "[Query Result] No rows returned."
         Exit Sub
     End If
-    
+
     Dim vData As Variant
     vData = T.RawArray
-    
+
     Dim i As Long, j As Long
     Dim sLine As String
-    
+
     ' 헤더 출력
     sLine = ""
     For j = 1 To UBound(vData, 2)
@@ -719,7 +761,7 @@ Public Sub DebugPrint()
     Next j
     Debug.Print sLine
     Debug.Print String(Len(sLine) + (UBound(vData, 2) * 4), "-") ' 구분선
-    
+
     ' 데이터 출력
     For i = 2 To UBound(vData, 1)
         sLine = ""
@@ -728,24 +770,4 @@ Public Sub DebugPrint()
         Next j
         Debug.Print sLine
     Next i
-End Sub
-
-
-Private Sub RequireColumn(ByVal name As String, ByVal source As String)
-    If Not m_SourceTable.HasColumn(name) Then
-        Err.Raise 9999, source, "Column not found: " & name
-    End If
-End Sub
-
-Private Sub ValidateFilterArm(ByVal column As String, ByVal op As String, ByVal value As Variant, ByVal source As String)
-    RequireColumn column, source
-    If IsObject(value) Or IsArray(value) Then
-        Err.Raise 9999, source, "Filter compare value must be scalar"
-    End If
-    Select Case op
-        Case "=", "<>", ">", "<", ">=", "<="
-            If Not IsNumeric(value) Then
-                Err.Raise 9999, source, "Numeric operator requires a numeric compare value"
-            End If
-    End Select
 End Sub

@@ -11,8 +11,6 @@ Attribute VB_Exposed = True
 ' Class: clsReportBuilder
 ' 설명: UnivDB 기반의 리포트 생성 전용 빌더 (복잡한 로직 단순화)
 ' ==============================================================================
-' SPDX-License-Identifier: MIT
-' Copyright (c) 2026 JM - see LICENSE
 Option Explicit
 
 Private m_tWork As clsTable      ' 작업 중인 테이블
@@ -47,7 +45,7 @@ End Function
 ' [Internal] 원본 데이터 보호를 위한 복사본 생성 (Copy-on-Write)
 Private Sub EnsureSafeCopy()
     If m_bIsSafeCopy Then Exit Sub
-    
+
     Dim tClone As New clsTable
     Dim vClone As Variant
     ' 원본 배열을 복사하여 새로운 테이블 생성 (원본은 이미 정규화됨 - 입양 경로)
@@ -70,7 +68,11 @@ End Function
 ' [NEW] 컬럼 삭제 (쉼표 구분 문자열 지원)
 Public Function RemoveColumns(ByVal sColList As String) As clsReportBuilder
     EnsureSafeCopy ' 데이터 구조 변경 전 복사
-    m_tWork.RemoveColumns sColList
+    Dim vCol As Variant
+    For Each vCol In Split(sColList, ",")
+        ' m_tWork는 Builder 내부의 clsTable 객체입니다.
+        m_tWork.RemoveColumn Trim(vCol)
+    Next vCol
     Set RemoveColumns = Me
 End Function
 
@@ -94,24 +96,22 @@ Public Function JoinTable(ByVal tRef As clsTable, _
                           Optional ByVal jType As joinType = jtLeft, _
                           Optional ByVal sRightPrefix As String = "", _
                           Optional ByVal sRightKey As String = "") As clsReportBuilder
-                          
+
     ' UnivDB.Join을 호출하여 테이블 병합 수행
     ' [UPDATE] 추가된 jType과 sRightPrefix를 파사드(UnivDB)로 전달
     Set m_tWork = UnivDB.Join(m_tWork, tRef, sKey, jType, sRightPrefix, sRightKey)
     m_bIsSafeCopy = True ' Join 결과는 항상 새로운 테이블임
-    
+
     ' 메서드 체이닝을 위해 자기 자신(Me)을 반환
     Set JoinTable = Me
 End Function
 
 ' [5] 매핑 값 채우기 (Map Value)
 Public Function FillFromMap(ByVal sTargetCol As String, ByVal sSrcCol As String, Optional ByVal vDefault As Variant = "") As clsReportBuilder
-    m_tWork.ColumnIndex sSrcCol
-    m_tWork.ColumnIndex sTargetCol
     EnsureSafeCopy ' 데이터 값 변경 전 복사
     Dim i As Long
     Dim vVal As Variant
-    
+
     For i = 2 To m_tWork.RowCount
         vVal = m_tWork.Value(i, sSrcCol)
         If IsEmpty(vVal) Then vVal = vDefault
@@ -125,12 +125,12 @@ Public Function ConvertDates(ParamArray vCols() As Variant) As clsReportBuilder
     EnsureSafeCopy ' 데이터 값 변경 전 복사
     Dim i As Long, j As Long
     Dim sCol As String
-    
+
     If UBound(vCols) < 0 Then
         Set ConvertDates = Me
         Exit Function
     End If
-    
+
     For i = 2 To m_tWork.RowCount
         For j = LBound(vCols) To UBound(vCols)
             sCol = CStr(vCols(j))
@@ -138,7 +138,7 @@ Public Function ConvertDates(ParamArray vCols() As Variant) As clsReportBuilder
             m_tWork.Value(i, sCol) = Internal_ConvertToDate(m_tWork.Value(i, sCol))
         Next j
     Next i
-    
+
     Set ConvertDates = Me
 End Function
 
@@ -186,7 +186,7 @@ Public Function UpdateValue(ByVal sTargetCol As String, ByVal vNewVal As Variant
           .Filter(sCondCol, sOp, vCondVal) _
           .SetValue(sTargetCol, vNewVal) _
           .Update
-          
+
     Set UpdateValue = Me
 End Function
 
@@ -204,29 +204,29 @@ End Function
 Private Function Internal_ConvertToDate(vValue As Variant) As Variant
     Dim sVal As String
     sVal = Trim(CStr(vValue))
-    
+
     ' 1. 빈 값 처리
     If sVal = "" Or sVal = "-" Then
         Internal_ConvertToDate = Empty
         Exit Function
     End If
-    
+
     On Error Resume Next
-    
+
     ' 2. YYYYMMDD (8자리 숫자)
     If Len(sVal) = 8 And IsNumeric(sVal) Then
         Internal_ConvertToDate = DateSerial(Left(sVal, 4), Mid(sVal, 5, 2), Right(sVal, 2))
         If Err.Number = 0 Then Exit Function
         Err.Clear
     End If
-    
+
     ' 3. 구분자가 있는 날짜
     If IsDate(sVal) Then
         Internal_ConvertToDate = CDate(sVal)
     Else
         Internal_ConvertToDate = vValue
     End If
-    
+
     On Error GoTo 0
 End Function
 
@@ -250,7 +250,7 @@ Public Function SelectColumns(ParamArray vCols() As Variant) As clsReportBuilder
     '    완벽하게 지원하므로, vCols 배열을 그대로 전달합니다.
     ' 2. SelectTable()을 통해 추출된 결과로 작업 테이블을 교체합니다.
     Set m_tWork = UnivDB.Query(m_tWork).SelectColumns(vCols).SelectTable()
-    
+
     ' 3. SelectTable 결과는 항상 새로운 테이블이므로 안전 복사 상태로 마킹합니다.
     m_bIsSafeCopy = True
     Set SelectColumns = Me
@@ -275,12 +275,12 @@ Public Function DefineColumn(ByVal sColName As String, _
                              Optional ByVal vHeaderAlias As Variant) As clsReportBuilder
     Dim sKey As String
     sKey = UCase(Trim(sColName))
-    
+
     If Not IsMissing(vWidth) Then m_dicWidths(sKey) = vWidth
     If Not IsMissing(vFormat) Then m_dicFormats(sKey) = vFormat
     If Not IsMissing(vAlign) Then m_dicAligns(sKey) = vAlign
     If Not IsMissing(vHeaderAlias) Then m_dicHeaders(sKey) = vHeaderAlias
-    
+
     Set DefineColumn = Me
 End Function
 
@@ -294,63 +294,63 @@ Public Sub BuildToSheet(ByVal ws As Worksheet, ByVal sAddr As String, Optional B
     ' 1. 기존 데이터 클리어
     ws.AutoFilterMode = False
     ws.Range(sAddr).CurrentRegion.ClearContents
-    
+
     ' 2. 서식 초기화 (General) - 이전 실행의 잔여 @ 서식 제거. 이후 가드가 텍스트 열만 선택적 @
     '    (구 blanket @는 숫자 열까지 텍스트로 강등시켜 DefineColumn 숫자서식이 무효였음)
     ws.Range(sAddr).Resize(m_tWork.RowCount, m_tWork.ColCount).NumberFormat = "General"
 
     ' 3. 덤프 - 문자열 서브타입은 텍스트 보존(leading-zero/긴 코드), 진짜 숫자 열은 숫자 유지
     m_tWork.DumpToSheet ws.Range(sAddr), False, dbGuardAllNumericText, bClearRegion:=False
-    
+
     ' 4. 헤더 리네이밍
     If Not IsMissing(arrHeaders) Then
         If IsArray(arrHeaders) Then
             ws.Range(sAddr).Resize(1, UBound(arrHeaders) + 1).Value = arrHeaders
         End If
     End If
-    
+
     ' 5. UI 정리
     With ws.Range(sAddr).Resize(1, m_tWork.ColCount)
         .VerticalAlignment = xlBottom
         .HorizontalAlignment = xlCenter
     End With
-    
+
     If Not ws.AutoFilterMode Then ws.Range(sAddr).AutoFilter
     '오토핏 적용(주석처리)
     'ws.Range(sAddr).CurrentRegion.EntireColumn.AutoFit
-    
+
     ' [NEW] 6. 사용자 정의 서식 적용 (DefineColumn 설정 반영)
     Set rngTable = ws.Range(sAddr).CurrentRegion
     lRows = rngTable.Rows.Count
-    
+
     If lRows > 0 Then
     For iCol = 1 To rngTable.Columns.Count
         sKey = UCase(Trim(rngTable.Cells(1, iCol).Value))
-        
+
         ' (1) 표시 형식 (데이터 영역만)
         If lRows > 1 And m_dicFormats.exists(sKey) Then
             rngTable.Columns(iCol).Offset(1, 0).Resize(lRows - 1).NumberFormat = m_dicFormats(sKey)
         End If
-        
+
         ' (2) 정렬 (데이터 영역에만 적용하여 헤더의 중앙 정렬 유지)
         If lRows > 1 And m_dicAligns.exists(sKey) Then
             Dim targetRng As Range
             Set targetRng = rngTable.Columns(iCol).Offset(1, 0).Resize(lRows - 1)
-            
+
             Select Case UCase(m_dicAligns(sKey))
                 Case "L", "LEFT": targetRng.HorizontalAlignment = xlLeft
                 Case "C", "CENTER": targetRng.HorizontalAlignment = xlCenter
                 Case "R", "RIGHT": targetRng.HorizontalAlignment = xlRight
             End Select
         End If
-            
+
             ' (3) 너비 (AutoFit 덮어쓰기)
             If m_dicWidths.exists(sKey) Then rngTable.Columns(iCol).ColumnWidth = m_dicWidths(sKey)
-            
+
             ' (4) 헤더 별칭 (마지막에 적용)
             If m_dicHeaders.exists(sKey) Then rngTable.Cells(1, iCol).Value = m_dicHeaders(sKey)
         Next iCol
     End If
-    
+
     Application.ScreenUpdating = True
 End Sub

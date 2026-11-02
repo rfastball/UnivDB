@@ -7,8 +7,6 @@ Attribute VB_GlobalNameSpace = False
 Attribute VB_Creatable = False
 Attribute VB_PredeclaredId = False
 Attribute VB_Exposed = True
-' SPDX-License-Identifier: MIT
-' Copyright (c) 2026 JM - see LICENSE
 Option Explicit
 
 Private mRows() As Long
@@ -48,7 +46,7 @@ Public Sub Append(ByVal rowId As Long)
     ElseIf mCount = UBound(mRows) Then
         ReDim Preserve mRows(1 To UBound(mRows) * 2)
     End If
-    
+
     mCount = mCount + 1
     mRows(mCount) = rowId
 End Sub
@@ -61,24 +59,24 @@ Public Function RowAt(ByVal index As Long) As Long
     If index < 1 Or index > mCount Then
         Err.Raise 9, "DbRowList.RowAt", "Row index out of range"
     End If
-    
+
     RowAt = mRows(index)
 End Function
 
 Public Function ToArray() As Variant
     Dim result() As Long
     Dim i As Long
-    
+
     If mCount = 0 Then
         ToArray = Array()
         Exit Function
     End If
-    
+
     ReDim result(1 To mCount)
     For i = 1 To mCount
         result(i) = mRows(i)
     Next i
-    
+
     ToArray = result
 End Function
 
@@ -103,10 +101,10 @@ End Sub
 
 Public Sub LoadFromCollection(ByVal rows As Collection)
     Dim rowId As Variant
-    
+
     Clear
     If rows Is Nothing Then Exit Sub
-    
+
     For Each rowId In rows
         Append CLng(rowId)
     Next rowId
@@ -115,10 +113,10 @@ End Sub
 Public Function ToCollection() As Collection
     Dim rows As New Collection
     Dim i As Long
-    
+
     For i = 1 To mCount
         rows.Add mRows(i)
     Next i
-    
+
     Set ToCollection = rows
 End Function

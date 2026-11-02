@@ -4,6 +4,9 @@
 
 대상 워크북: UnivDB.xlsm (구 dev_UnivDB.xlsb에서 이름 변경 및 xlsm 마이그레이션됨)
 
+현재 라이브러리 기준: **2.8.0 / fe5f1d9** (2026-11-02 사용자 요청으로 원복).
+제품 소스와 기존 테스트를 해당 빌드로 복원했으며 vbaloop 및 관리 LogShim은 현재 버전을 유지한다.
+
 테스트는 `Public Sub Test_*()`가 전량 자동 수집·실행된다(개별 선택 실행 없음).
 벤치마크는 `TestBenchDb.bas` - 결과는 `LogShim.LogJ`로 jsonl에 baseline 보존.
 
@@ -52,8 +55,8 @@ rowID는 특정 테이블의 특정 세대 안에서만 유효한 물리 행 번
   clsSet 사용 금지는 그대로 유지**된다 (아래 금지 사항 참조).
 - 두 파일의 공개 API/키 의미론(Variant 키: 숫자 1과 문자 "1" 구분, vbTextCompare)을
   바꿀 때는 UnivFilter 쪽 재스냅샷 필요 여부를 함께 판단할 것.
-- **2026-10-31 (2.10.0 성능 계획 단계 6)**: `modIndexKey.bas`에 `FoldIndexKey`(하이브리드 키 접기, LCMapStringW Declare를
-  모듈 안에 둠 - Core_* 비의존) 추가 = **UnivFilter 재스냅샷 필요**. clsSet은 이번 범위 밖(접기 미적용).
+- **2026-11-02 원복**: 2.10.0의 `FoldIndexKey` 추가는 철회되어 현재 `modIndexKey.bas`는 2.8.0 기준이다.
+  하류 UnivFilter가 이후 스냅샷을 사용한다면 이 원복과 별도로 재스냅샷 필요 여부를 판단한다.
 
 ## 금지 사항 (설계 결정으로 확정됨)
 

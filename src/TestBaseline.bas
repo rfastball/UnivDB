@@ -1,6 +1,4 @@
 Attribute VB_Name = "TestBaseline"
-' SPDX-License-Identifier: MIT
-' Copyright (c) 2026 JM - see LICENSE
 Option Explicit
 
 ' Phase 0 baseline tests discovered by the VBA harness.
@@ -84,91 +82,6 @@ Public Sub Test_Baseline_GroupBy()
     LogShim.AssertEq "baseline_groupby_rowcount", 4, tResult.RowCount
     LogShim.AssertEq "baseline_groupby_cols", 3, tResult.ColCount
     LogShim.AssertEq "baseline_groupby_it_rows", 1, tResult.SelectRows("Dept", "IT").Count
-End Sub
-
-Public Sub Test_Baseline_AppendFrom_PreservesRows()
-    Dim T As clsTable, source As clsTable, emptyTable As New clsTable
-    Dim a(1 To 2, 1 To 2) As Variant, b(1 To 5, 1 To 2) As Variant
-    Dim idx As DbHashIndex, rdr As DbColumnReader, q As clsQuery
-    Dim backend As Long, generation As Long, n As Long, r As Long
-    a(1, 1) = "ID": a(1, 2) = "Value": a(2, 1) = 1: a(2, 2) = "old"
-    b(1, 1) = "value": b(1, 2) = "id"
-    b(2, 1) = CVErr(xlErrNA): b(2, 2) = 1
-    b(3, 1) = DateSerial(2026, 1, 2): b(3, 2) = 1
-    b(4, 2) = 2: b(5, 1) = "text": b(5, 2) = 3
-    For backend = dbBackendDict To dbBackendCore
-        Set T = New clsTable: T.LoadFromArray a: T.IndexBackend = backend
-        Set source = New clsTable: source.LoadFromArray b
-        source.Value(5, "Value") = "  exact  "
-        Set idx = T.GetHashIndex("ID"): Set rdr = T.GetColumnReader("Value")
-        Set q = UnivDB.Query(T).Where("ID", 1)
-        generation = T.Generation
-        T.AppendFrom source
-        LogShim.AssertEq "append_generation_" & backend, generation + 1, T.Generation
-        LogShim.AssertEq "append_rows_" & backend, 6, T.RowCount
-        LogShim.AssertEq "append_old_" & backend, "old", T.Value(2, "Value")
-        LogShim.AssertEq "append_duplicate_" & backend, 3, T.SelectRows("ID", 1).Count
-        LogShim.AssertEq "append_error_" & backend, True, IsError(T.Value(3, "Value"))
-        LogShim.AssertEq "append_date_" & backend, vbDate, VarType(T.Value(4, "Value"))
-        LogShim.AssertEq "append_empty_" & backend, True, IsEmpty(T.Value(5, "Value"))
-        LogShim.AssertEq "append_exact_" & backend, "  exact  ", T.Value(6, "Value")
-        LogShim.AssertEq "append_source_" & backend, 5, source.RowCount
-        On Error Resume Next
-        Err.Clear: idx.EnsureCurrent T: n = Err.Number
-        On Error GoTo 0
-        LogShim.AssertEq "append_stale_index_" & backend, 9998, n
-        On Error Resume Next
-        Err.Clear: rdr.EnsureCurrent T: n = Err.Number
-        On Error GoTo 0
-        LogShim.AssertEq "append_stale_reader_" & backend, 9998, n
-        On Error Resume Next
-        Err.Clear: q.Filter "ID", "=", 1: n = Err.Number
-        On Error GoTo 0
-        LogShim.AssertEq "append_stale_query_" & backend, 9998, n
-        T.AppendFrom T
-        LogShim.AssertEq "append_self_rows_" & backend, 11, T.RowCount
-        For r = 2 To 6
-            LogShim.AssertEq "append_self_order_" & backend & "_" & r, T.Value(r, "ID"), T.Value(r + 5, "ID")
-        Next r
-        generation = T.Generation
-        T.AppendFrom emptyTable
-        LogShim.AssertEq "append_empty_noop_" & backend, generation, T.Generation
-    Next backend
-End Sub
-
-Public Sub Test_Baseline_AppendFrom_ValidatesBeforeWrite()
-    Dim T As clsTable, source As clsTable, missing As clsTable
-    Dim a(1 To 2, 1 To 2) As Variant, b(1 To 2, 1 To 2) As Variant
-    Dim headerOnly(1 To 1, 1 To 2) As Variant, raw As Variant
-    Dim names As Variant, name As Variant, generation As Long, n As Long
-    a(1, 1) = "ID": a(1, 2) = "Value": a(2, 1) = 1: a(2, 2) = "old"
-    Set T = New clsTable: T.LoadFromArray a
-    generation = T.Generation
-    names = Array("Other", "ID", "")
-    For Each name In names
-        b(1, 1) = "ID": b(1, 2) = name: b(2, 1) = 2: b(2, 2) = "new"
-        raw = b: Set source = New clsTable: source.AdoptArray raw
-        On Error Resume Next
-        Err.Clear: T.AppendFrom source: n = Err.Number
-        On Error GoTo 0
-        LogShim.AssertEq "append_bad_schema_" & CStr(name), 9999, n
-        LogShim.AssertEq "append_bad_rows_" & CStr(name), 2, T.RowCount
-        LogShim.AssertEq "append_bad_generation_" & CStr(name), generation, T.Generation
-        LogShim.AssertEq "append_bad_value_" & CStr(name), "old", T.Value(2, "Value")
-    Next name
-    On Error Resume Next
-    Err.Clear: T.AppendFrom missing: n = Err.Number
-    On Error GoTo 0
-    LogShim.AssertEq "append_nothing", 9999, n
-    headerOnly(1, 1) = "Value": headerOnly(1, 2) = "ID"
-    Set source = New clsTable: source.LoadFromArray headerOnly
-    T.AppendFrom source
-    LogShim.AssertEq "append_header_only_noop", generation, T.Generation
-    Set T = New clsTable: T.LoadFromArray a, False
-    T.AppendFrom T
-    LogShim.AssertEq "append_headerless_rows", 4, T.RowCount
-    LogShim.AssertEq "append_headerless_first", "ID", T.Value(3, "COLUMN1")
-    LogShim.AssertEq "append_headerless_last", "old", T.Value(4, "COLUMN2")
 End Sub
 
 Private Function NewBaseTable() As clsTable
@@ -308,19 +221,6 @@ Public Sub Test_Load_FailPreservesState()
     ' 예외 후에도 기존 데이터/헤더가 그대로 보존됨
     LogShim.AssertEq "load_preserve_postcount", 3, T.RowCount
     LogShim.AssertEq "load_preserve_header", True, T.Headers.exists("NAME")
-
-    Dim duplicate(1 To 1, 1 To 2) As Variant, gen As Long, n As Long
-    duplicate(1, 1) = " Dept ": duplicate(1, 2) = "DEPT"
-    gen = T.Generation
-    On Error Resume Next
-    Err.Clear
-    T.LoadFromArray duplicate
-    n = Err.Number
-    On Error GoTo 0
-    LogShim.AssertEq "load_duplicate_preflight", 9999, n
-    LogShim.AssertEq "load_duplicate_preserve_generation", gen, T.Generation
-    LogShim.AssertEq "load_duplicate_preserve_rows", 3, T.RowCount
-    LogShim.AssertEq "load_duplicate_preserve_value", "Ann", T.Value(2, "Name")
 End Sub
 
 ' 내부 신뢰 경로(AdoptArray)는 중복 헤더를 거부하지 않고 last-wins 유지 (비대칭 회귀 고정)
@@ -343,64 +243,4 @@ Public Sub Test_LibVersion_Reports_Something()
     Dim sVer As String
     sVer = UnivDB.LibVersion()
     LogShim.AssertEq "libversion_nonempty", True, Len(sVer) > 0
-End Sub
-
-' vbaloop dist 스탬프(vbaloop_*)를 읽는다 - 구 vbaflow_* 이름만 읽으면 배포본이 "dev"로 보고되어
-' 소비 측 최소 버전 검사가 조용히 통과한다. 속성은 테스트 동안만 메모리에 추가(ephemeral은 저장 안 함).
-Public Sub Test_LibVersion_ReadsVbaloopStamp()
-    Dim props As Object
-    Set props = ThisWorkbook.CustomDocumentProperties
-    RemoveStampProps props
-    LogShim.AssertEq "libversion_unstamped_dev", "dev", UnivDB.LibVersion()
-
-    props.Add "vbaflow_BuildVersion", False, 4, "2.8.0"
-    props.Add "vbaflow_BuildRev", False, 4, "aaaaaaa"
-    props.Add "vbaflow_BuiltAt", False, 4, "2026-07-01 00:00:00"
-    LogShim.AssertEq "libversion_vbaflow_fallback", "2.8.0+aaaaaaa (2026-07-01 00:00:00)", UnivDB.LibVersion()
-
-    props.Add "vbaloop_BuildVersion", False, 4, "9.9.9"
-    props.Add "vbaloop_BuildRev", False, 4, "abc1234"
-    props.Add "vbaloop_BuiltAt", False, 4, "2026-10-31 00:00:00"
-    LogShim.AssertEq "libversion_vbaloop_wins", "9.9.9+abc1234 (2026-10-31 00:00:00)", UnivDB.LibVersion()
-
-    RemoveStampProps props
-End Sub
-
-Private Sub RemoveStampProps(ByVal props As Object)
-    Dim vName As Variant
-    For Each vName In Array("vbaloop_BuildVersion", "vbaloop_BuildRev", "vbaloop_BuiltAt", _
-                            "vbaflow_BuildVersion", "vbaflow_BuildRev", "vbaflow_BuiltAt")
-        On Error Resume Next
-        props(CStr(vName)).Delete
-        On Error GoTo 0
-    Next vName
-End Sub
-
-' Headers 사본을 수정해도 원본 스키마/인덱스/값은 영향을 받지 않는다.
-Public Sub Test_Headers_SnapshotIsolation()
-    Dim T As clsTable, headers As Object, result As clsTable, gen As Long, n As Long, col As Long
-    Set T = NewBaseTable()
-    Set headers = T.Headers
-    gen = T.Generation
-    headers("NAME") = 999
-    headers.RemoveAll
-    T.Headers("NAME") = 999
-    T.Headers.RemoveAll
-    LogShim.AssertEq "headers_original_count", 4, T.Headers.Count
-    LogShim.AssertEq "headers_original_name_col", 2, T.ColumnIndex(" name ")
-    LogShim.AssertEq "headers_has_column_normalized", True, T.HasColumn(" name ")
-    LogShim.AssertEq "headers_missing_column", False, T.HasColumn("__bad__")
-    On Error Resume Next
-    Err.Clear
-    col = T.ColumnIndex("__bad__")
-    n = Err.Number
-    On Error GoTo 0
-    LogShim.AssertEq "headers_bad_index_failfast", 9999, n
-    LogShim.AssertEq "headers_original_generation", gen, T.Generation
-    Set result = UnivDB.Query(T).Where("Name", "Ann").ToTable()
-    LogShim.AssertEq "headers_query_unaffected", "Ann", result.Value(2, "Name")
-
-    Set headers = T.Headers
-    T.AddColumn "Extra"
-    LogShim.AssertEq "headers_snapshot_no_new_column", False, headers.exists("EXTRA")
 End Sub

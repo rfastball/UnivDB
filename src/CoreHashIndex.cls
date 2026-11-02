@@ -9,8 +9,6 @@ Attribute VB_PredeclaredId = False
 Attribute VB_Exposed = True
 ' @desc FastHash 엔진 기반 실험 해시 인덱스 백엔드 담당
 ' @depends DbHashIndex, modDbContract, modIndexKey, Core_clsFastHash, Core_modMemCore
-' SPDX-License-Identifier: MIT
-' Copyright (c) 2026 JM - see LICENSE
 Option Explicit
 
 Implements DbHashIndex
@@ -28,7 +26,6 @@ Private mPayload As DbCsrPayload
 ' 세대 계약 결속 (ObjPtr 스냅샷 - 객체 참조 아님, 순환 참조 방지)
 Private mOwnerPtr As LongPtr
 Private mGeneration As Long
-Private mInvalidated As Boolean
 
 Private Sub Class_Initialize()
     Set mEngine = New Core_clsFastHash
@@ -37,7 +34,6 @@ End Sub
 
 ' @desc 키와 rowID를 받아 인덱스에 적재함
 Public Sub AddRow(ByVal key As Variant, ByVal rowId As Long)
-    RequireValid
     Dim vKey As Variant
     Dim sKey As String
     Dim slot As Long
@@ -51,44 +47,20 @@ Public Sub AddRow(ByVal key As Variant, ByVal rowId As Long)
     mPayload.AddEntry slot, rowId
 End Sub
 
-' 일괄 빌드: data(firstRow..lastRow, col)을 직접 읽는다 (열 사본, 행당 ByVal 복사와 인터페이스 디스패치 없음).
-' 문자열 셀은 그대로, 그 외는 NormalizeIndexKey, Error 셀 skip - AddRow 계약과 동치.
-Friend Sub BuildFromArray(ByRef data As Variant, ByVal col As Long, ByVal firstRow As Long, ByVal lastRow As Long)
-    RequireValid
-    Dim i As Long, sKey As String, vKey As Variant, slot As Long, isNew As Boolean
-
-    For i = firstRow To lastRow
-        If VarType(data(i, col)) = vbString Then
-            sKey = data(i, col)
-        ElseIf IsError(data(i, col)) Then
-            GoTo NextRow
-        Else
-            sKey = modIndexKey.NormalizeIndexKey(data(i, col))
-        End If
-        vKey = sKey
-        slot = mEngine.EnsureKeyH(vKey, Core_HashKeyText(sKey), isNew)
-        mPayload.AddEntry slot, i
-NextRow:
-    Next i
-End Sub
-
 ' @desc 테이블을 받아 현재 세대에 결속함
 Public Sub BindTo(ByVal tbl As clsTable)
-    RequireValid
     mOwnerPtr = ObjPtr(tbl)
     mGeneration = tbl.Generation
 End Sub
 
 ' @desc 테이블을 받아 결속 세대와 일치 검증함, stale 시 9998 에러
 Public Sub EnsureCurrent(ByVal tbl As clsTable)
-    RequireValid
     modDbContract.AssertCurrentGeneration mOwnerPtr, mGeneration, tbl, "CoreHashIndex.EnsureCurrent"
 End Sub
 
 ' @desc 키 받아 RowList 반환 여부 반환, 미존재/Error 키 시 False
 ' 반환 리스트는 세대 결속을 탑재한 fresh 복사본 (인덱스 내부 상태와 분리)
 Public Function TryGetRows(ByVal key As Variant, ByRef outRows As DbRowList) As Boolean
-    RequireValid
     Dim vKey As Variant
     Dim slot As Long
 
@@ -109,7 +81,6 @@ End Function
 
 ' @desc 키의 rowId span을 버퍼에 복사 여부 반환, 미존재/Error 키 시 False에 0건
 Public Function TryGetRowIdSpan(ByVal key As Variant, ByRef outRowIds() As Long, ByRef outCount As Long) As Boolean
-    RequireValid
     Dim vKey As Variant
     Dim slot As Long
 
@@ -126,7 +97,6 @@ End Function
 
 ' @desc 키의 행 수만 반환 여부 반환(복사 없음), 미존재/Error 키 시 False에 0건
 Public Function TryGetRowCount(ByVal key As Variant, ByRef outCount As Long) As Boolean
-    RequireValid
     Dim vKey As Variant
     Dim slot As Long
 
@@ -143,7 +113,6 @@ End Function
 
 ' @desc 키의 첫 rowId 반환 여부 반환, 미존재/Error 키 시 False
 Public Function TryGetFirstRowId(ByVal key As Variant, ByRef outRowId As Long) As Boolean
-    RequireValid
     Dim vKey As Variant
     Dim slot As Long
 
@@ -158,19 +127,16 @@ Public Function TryGetFirstRowId(ByVal key As Variant, ByRef outRowId As Long) A
 End Function
 
 Public Property Get CountKeys() As Long
-    RequireValid
     CountKeys = mEngine.Count
 End Property
 
 Public Sub Clear()
-    RequireValid
     mEngine.Clear
     mPayload.Clear
 End Sub
 
 ' @desc 키-RowList 순회용 커서 반환 (CSR 경로 - 삽입 순서 보존)
 Public Function Cursor() As DbIndexCursor
-    RequireValid
     Dim vKeys As Variant
     Dim cur As New DbIndexCursor
 
@@ -224,14 +190,4 @@ End Function
 
 Private Sub DbHashIndex_EnsureCurrent(ByVal tbl As clsTable)
     EnsureCurrent tbl
-End Sub
-
-Private Sub DbHashIndex_Invalidate()
-    mInvalidated = True
-End Sub
-
-Private Sub RequireValid()
-    If mInvalidated Then
-        Err.Raise modDbContract.DB_ERR_STALE_GENERATION, "DbHashIndex", "Index invalidated: reacquire from table"
-    End If
 End Sub

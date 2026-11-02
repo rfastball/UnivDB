@@ -1,8 +1,6 @@
 Attribute VB_Name = "TestColumnReader"
 ' @desc 컬럼 reader 표면(값 패리티, stale fail-fast) 검증 담당
 ' @depends modDbContract, UnivDB
-' SPDX-License-Identifier: MIT
-' Copyright (c) 2026 JM - see LICENSE
 Option Explicit
 
 ' Phase 6.8 tests for the sealed column access surface.
@@ -29,14 +27,6 @@ Public Sub Test_ColumnReader_ValueParity()
     LogShim.AssertEq "rdr_values_ubound", T.RowCount, UBound(vCol)
     LogShim.AssertEq "rdr_first_row", 2, rdr.FirstDataRow
     LogShim.AssertEq "rdr_last_row", T.RowCount, rdr.LastDataRow
-    Dim candidates As Variant, compact As Variant, result As clsTable
-    candidates = Array(4, 2)
-    compact = T.CopyCandidateColumn(T.ColumnIndex("Score"), candidates)
-    LogShim.AssertEq "candidate_position_empty", True, IsEmpty(compact(0))
-    LogShim.AssertEq "candidate_position_value", 10, compact(1)
-    Set result = UnivDB.Query(T).Where("Dept", "IT").Filter("Score", ">", 0).ToTable()
-    LogShim.AssertEq "candidate_filter_rows", 2, result.RowCount
-    LogShim.AssertEq "candidate_filter_value", 1, result.Value(2, "ID")
 End Sub
 
 Public Sub Test_ColumnReader_MissingColumn_ReturnsNothing()
@@ -129,34 +119,3 @@ Private Function NewBigTable(ByVal lRows As Long) As clsTable
     T.LoadFromArray vData
     Set NewBigTable = T
 End Function
-
-' 같은 열의 값 변경만 reader 현재성을 깨뜨린다. 배열 사본 자체는 보존한다.
-Public Sub Test_ColumnReader_ValueChanges_FailFast()
-    Dim T As clsTable, rdr As DbColumnReader, other As DbColumnReader, fresh As DbColumnReader
-    Dim mutation As Long, gen As Long, n As Long
-    For mutation = 0 To 4
-        Set T = NewReaderTable()
-        Set rdr = T.GetColumnReader("Score")
-        Set other = T.GetColumnReader("Dept")
-        gen = T.Generation
-        Select Case mutation
-            Case 0: T.Value(2, "Score") = 9999
-            Case 1: T.UpdateBatch "Score", 9999, "ID", 1
-            Case 2: T.CopyColumn "ID", "Score"
-            Case 3: T.Compute "Score", "ID", "*", 2
-            Case 4: UnivDB.Query(T).Where("ID", 1).SetVal("Score", 9999).Update
-        End Select
-        LogShim.AssertEq "rdr_value_generation_" & mutation, gen, T.Generation
-        LogShim.AssertEq "rdr_snapshot_preserved_" & mutation, 10, rdr.ValueAt(2)
-        On Error Resume Next
-        Err.Clear
-        rdr.EnsureCurrent T
-        n = Err.Number
-        On Error GoTo 0
-        LogShim.AssertEq "rdr_value_stale_" & mutation, 9998, n
-        other.EnsureCurrent T
-        Set fresh = T.GetColumnReaderByIndex(3)
-        fresh.EnsureCurrent T
-        LogShim.AssertEq "rdr_value_fresh_" & mutation, T.Value(2, "Score"), fresh.ValueAt(2)
-    Next mutation
-End Sub

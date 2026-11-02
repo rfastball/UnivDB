@@ -1,8 +1,6 @@
 Attribute VB_Name = "TestChainingSemantics"
 ' @desc 체이닝 API 조용한 실패 양식 회귀 고정 담당
 ' @depends UnivDB, LogShim
-' SPDX-License-Identifier: MIT
-' Copyright (c) 2026 JM - see LICENSE
 Option Explicit
 
 ' 체이닝 API 전수조사 (docs/tasks/2026-07-10_chaining_api_audit.md) Phase C0:
@@ -247,8 +245,6 @@ End Sub
 Public Sub Test_Chain_TableAddRemoveColumns()
     Dim T As clsTable
     Dim vData(1 To 2, 1 To 1) As Variant
-    Dim generation As Long, n As Long, raw As Variant
-    Dim wide(1 To 2, 1 To 3) As Variant
 
     vData(1, 1) = "A"
     vData(2, 1) = 1
@@ -267,36 +263,8 @@ Public Sub Test_Chain_TableAddRemoveColumns()
     LogShim.AssertEq "chain_b_addcols_multi", 5, T.ColCount
 
     ' 제거: csv + 체인 + 멱등 drop (없는 X 무시)
-    generation = T.Generation
     T.RemoveColumns("D, E").RemoveColumns "X"
     LogShim.AssertEq "chain_b_removecols", 3, T.ColCount
-    LogShim.AssertEq "chain_b_remove_generation", generation + 1, T.Generation
-    generation = T.Generation
-    On Error Resume Next
-    Err.Clear: T.RemoveColumns "A", "B", "C": n = Err.Number
-    On Error GoTo 0
-    LogShim.AssertEq "chain_b_remove_all_rejected", 9999, n
-    LogShim.AssertEq "chain_b_remove_all_atomic", 3, T.ColCount
-    LogShim.AssertEq "chain_b_remove_all_generation", generation, T.Generation
-    LogShim.AssertEq "chain_b_remove_all_value", 1, T.Value(2, "A")
-    T.RemoveColumns "B", "B", "Missing"
-    LogShim.AssertEq "chain_b_remove_duplicate_arg", 2, T.ColCount
-    wide(1, 1) = "A": wide(1, 2) = "B": wide(1, 3) = "B"
-    wide(2, 1) = 10: wide(2, 2) = 20: wide(2, 3) = 30
-    raw = wide: T.AdoptArray raw
-    T.RemoveColumns "B", "B"
-    LogShim.AssertEq "chain_b_remove_duplicate_headers", 1, T.ColCount
-    LogShim.AssertEq "chain_b_remove_duplicate_value", 10, T.Value(2, "A")
-    T.LoadFromArray wide, False
-    T.RemoveColumns "COLUMN1", "COLUMN1"
-    LogShim.AssertEq "chain_b_remove_headerless_cols", 1, T.ColCount
-    LogShim.AssertEq "chain_b_remove_headerless_first", "B", T.Value(1, "COLUMN1")
-    LogShim.AssertEq "chain_b_remove_headerless_last", 30, T.Value(2, "COLUMN1")
-    wide(1, 2) = "B,C": wide(1, 3) = "C"
-    T.LoadFromArray wide
-    T.RemoveColumn "B,C"
-    LogShim.AssertEq "chain_b_remove_literal_comma", 2, T.ColCount
-    LogShim.AssertEq "chain_b_remove_literal_keeps_c", 30, T.Value(2, "C")
 End Sub
 
 ' F17 (계약): clsQuery.Join - 조인을 쿼리 체인에 합류. 물질화 장벽 의미론.
@@ -507,8 +475,6 @@ End Sub
 Public Sub Test_Chain_FilterAnySameColumnIn()
     Dim T As clsTable
     Dim tR As clsTable
-    Dim fallback As clsTable, data() As Variant, values As Variant, expected As Variant
-    Dim i As Long, seeded As Long
 
     Set T = NewOrGroupTable()
 
@@ -516,33 +482,6 @@ Public Sub Test_Chain_FilterAnySameColumnIn()
         .FilterAny(Array("Dept", "IS", "IT"), Array("Dept", "IS", "HR")) _
         .ToTable()
     LogShim.AssertEq "chain_c1_in_rows", 4, tR.RowCount
-
-    values = Array(Empty, CVErr(xlErrNA), DateSerial(2026, 1, 1), Null, False, _
-                   0, "0", -1, "001", CCur(1.5), CDec("9007199254740993"))
-    ReDim data(1 To UBound(values) + 2, 1 To 2)
-    data(1, 1) = "ID": data(1, 2) = "N"
-    For i = 0 To UBound(values)
-        data(i + 2, 1) = i: data(i + 2, 2) = values(i)
-    Next i
-    T.LoadFromArray data
-    For seeded = 0 To 1
-        ' ID=-1 arm은 비매칭이지만 교차 열 일반 경로를 강제한다.
-        Set tR = UnivDB.Query(T).Filter("ID", ">=", seeded * 7) _
-            .FilterAny(Array("N", "=", 0), Array(" n ", " = ", "1.0"), _
-                       Array("N", "=", 1.5), Array("N", "=", CCur(1)), _
-                       Array("N", "=", 9007199254740992#)).ToTable()
-        Set fallback = UnivDB.Query(T).Filter("ID", ">=", seeded * 7) _
-            .FilterAny(Array("N", "=", 0), Array("N", "=", 1), _
-                       Array("N", "=", 1.5), Array("N", "=", 9007199254740992#), _
-                       Array("ID", "=", -1)).ToTable()
-        If seeded = 0 Then expected = Array(4, 5, 6, 8, 9, 10) Else expected = Array(8, 9, 10)
-        LogShim.AssertEq "numeric_in_count_" & seeded, UBound(expected) + 2, tR.RowCount
-        LogShim.AssertEq "numeric_in_fallback_count_" & seeded, tR.RowCount, fallback.RowCount
-        For i = 0 To UBound(expected)
-            LogShim.AssertEq "numeric_in_order_" & seeded & "_" & i, expected(i), tR.Value(i + 2, "ID")
-            LogShim.AssertEq "numeric_in_fallback_" & seeded & "_" & i, expected(i), fallback.Value(i + 2, "ID")
-        Next i
-    Next seeded
 End Sub
 
 ' 동적 arm 목록 (arm 배열 1개) = ParamArray 개별 인자와 동일 결과
@@ -713,198 +652,4 @@ Public Sub Test_Chain_ComputeConstConcatAndNullSkip()
     LogShim.AssertEq "chain_c2_skip_ok1", 11, T.Value(2, "R")
     LogShim.AssertEq "chain_c2_skip_cell", True, IsEmpty(T.Value(3, "R"))
     LogShim.AssertEq "chain_c2_skip_ok2", 31, T.Value(4, "R")
-End Sub
-
-' 정렬 키가 투영에 없어도 정렬/Top 의미를 보존하며 원본은 바뀌지 않는다.
-Public Sub Test_Chain_SortProjectionAndEmpty()
-    Dim T As clsTable, result As clsTable, gen As Long
-    Set T = NewOrGroupTable()
-    gen = T.Generation
-    Set result = UnivDB.Query(T).Where("Active", "Y").OrderBy("Amt", True).SelectColumns("Dept").Top(1).ToTable()
-    LogShim.AssertEq "sort_projection_top", "IT", result.Value(2, "Dept")
-    LogShim.AssertEq "sort_projection_cols", 1, result.ColCount
-    LogShim.AssertEq "sort_projection_rows", 2, result.RowCount
-    LogShim.AssertEq "sort_source_generation", gen, T.Generation
-    LogShim.AssertEq "sort_source_first", 500, T.Value(2, "Amt")
-
-    Set result = UnivDB.Query(T).Where("Dept", "__none__").OrderBy("Amt").Top(1).ToTable()
-    LogShim.AssertEq "sort_empty_rows", 1, result.RowCount
-    result.OrderBy "Amt", True
-    LogShim.AssertEq "sort_empty_direct", 1, result.RowCount
-End Sub
-
-' 문장 오류는 후보 0행에서도 동일하게 실패한다.
-Public Sub Test_Chain_ValidationBeforeEmpty()
-    Dim T As clsTable, q As clsQuery, result As clsTable
-    Dim emptyFirst As Long, n As Long
-    Set T = NewOrGroupTable()
-    For emptyFirst = 0 To 1
-        Set q = UnivDB.Query(T)
-        If emptyFirst = 1 Then q.Where "Dept", "__none__"
-        On Error Resume Next
-        Err.Clear
-        q.Where "__bad__", "IT"
-        n = Err.Number
-        On Error GoTo 0
-        LogShim.AssertEq "where_bad_column", 9999, n
-
-        On Error Resume Next
-        Err.Clear
-        q.Filter "__bad__", "IS", "IT"
-        n = Err.Number
-        On Error GoTo 0
-        LogShim.AssertEq "filter_bad_column", 9999, n
-
-        On Error Resume Next
-        Err.Clear
-        q.Filter "Amt", ">", "abc"
-        n = Err.Number
-        On Error GoTo 0
-        LogShim.AssertEq "filter_bad_value", 9999, n
-
-        On Error Resume Next
-        Err.Clear
-        Set result = q.OrderBy("__bad__").ToTable()
-        n = Err.Number
-        On Error GoTo 0
-        LogShim.AssertEq "sort_bad_column", 9999, n
-    Next emptyFirst
-End Sub
-
-' 모든 SET 컬럼을 쓰기 전에 검증한다.
-Public Sub Test_Chain_UpdateValidatesAllColumns()
-    Dim T As clsTable, q As clsQuery, n As Long, emptyFirst As Long
-    For emptyFirst = 0 To 1
-        Set T = NewOrGroupTable()
-        Set q = UnivDB.Query(T)
-        If emptyFirst = 1 Then q.Where "Dept", "__none__"
-        q.SetVal("Amt", 111).SetVal "__bad__", 1
-        On Error Resume Next
-        Err.Clear
-        q.Update
-        n = Err.Number
-        On Error GoTo 0
-        LogShim.AssertEq "update_bad_column", 9999, n
-        LogShim.AssertEq "update_no_partial_write", 500, T.Value(2, "Amt")
-    Next emptyFirst
-End Sub
-
-' @desc 매핑 열 오타를 빈 테이블에서도 복사 전에 거부함
-Public Sub Test_Chain_FillFromMapValidatesBeforeCopy()
-    Dim T As clsTable, report As clsReportBuilder, result As clsTable
-    Dim data As Variant, dataRows As Long, badTarget As Long, n As Long
-    Dim src As String, dst As String, label As String
-
-    For dataRows = 0 To 1
-        ReDim data(1 To dataRows + 1, 1 To 2)
-        data(1, 1) = "Src": data(1, 2) = "Dst"
-        If dataRows = 1 Then
-            data(2, 1) = 10: data(2, 2) = 99
-        End If
-        For badTarget = 0 To 1
-            Set T = UnivDB.CreateTable()
-            T.LoadFromArray data
-            Set report = UnivDB.Report(T)
-            src = "Src": dst = "Dst"
-            If badTarget = 0 Then src = "Typo" Else dst = "Typo"
-            label = "fill_invalid_" & dataRows & "_" & badTarget
-            On Error Resume Next
-            Err.Clear
-            report.FillFromMap dst, src
-            n = Err.Number
-            On Error GoTo 0
-            LogShim.AssertEq label & "_errno", 9999, n
-            Set result = report.ToTable()
-            LogShim.AssertEq label & "_no_copy", True, result Is T
-            If dataRows = 1 Then LogShim.AssertEq label & "_unchanged", 99, result.Value(2, "Dst")
-        Next badTarget
-    Next dataRows
-End Sub
-
-' @desc 정상 매핑은 Empty에만 기본값을 적용하고 원본을 보존함
-Public Sub Test_Chain_FillFromMapDefaultsAndCopy()
-    Dim T As clsTable, result As clsTable
-    Dim data(1 To 5, 1 To 2) As Variant, i As Long
-    data(1, 1) = "Src": data(1, 2) = "Dst"
-    data(2, 1) = DateSerial(2026, 10, 23)
-    data(3, 1) = Empty
-    data(4, 1) = ""
-    data(5, 1) = 0
-    For i = 2 To 5
-        data(i, 2) = "original"
-    Next i
-    Set T = UnivDB.CreateTable()
-    T.LoadFromArray data
-    Set result = UnivDB.Report(T).FillFromMap(" dst ", " sRC ", "fallback").ToTable()
-    LogShim.AssertEq "fill_valid_copy", False, result Is T
-    LogShim.AssertEq "fill_date", data(2, 1), result.Value(2, "Dst")
-    LogShim.AssertEq "fill_empty_default", "fallback", result.Value(3, "Dst")
-    LogShim.AssertEq "fill_string_not_empty", "", result.Value(4, "Dst")
-    LogShim.AssertEq "fill_zero_not_empty", 0, result.Value(5, "Dst")
-    For i = 2 To 5
-        LogShim.AssertEq "fill_source_preserved_" & i, "original", T.Value(i, "Dst")
-    Next i
-    Set result = UnivDB.Report(T).FillFromMap("Dst", "Src").ToTable()
-    LogShim.AssertEq "fill_omitted_default", "", result.Value(3, "Dst")
-End Sub
-
-' @desc 소스 중복 키를 정규화 기준으로 거부하고 부분 쓰기를 방지함
-Public Sub Test_Chain_UpsertRejectsDuplicateSourceBeforeWrite()
-    Dim T As clsTable, source As clsTable, result As clsTable
-    Dim idx As DbHashIndex, pairs As Variant, pair As Variant
-    Dim targetData(1 To 3, 1 To 2) As Variant
-    Dim sourceData(1 To 5, 1 To 2) As Variant
-    Dim existing As Long, caseNo As Long, n As Long, gen As Long, label As String
-
-    pairs = Array(Array("A", "A"), Array("A", "a"), Array(42, "42"), _
-                  Array(Empty, ""), Array(DateSerial(2026, 10, 23), "2026-10-23"))
-    targetData(1, 1) = "ID": targetData(1, 2) = "Val"
-    targetData(2, 1) = "KEEP": targetData(2, 2) = 1
-    targetData(3, 2) = 2
-    sourceData(1, 1) = "ID": sourceData(1, 2) = "Val"
-    sourceData(2, 1) = "KEEP": sourceData(2, 2) = 99
-    sourceData(3, 1) = "NEW": sourceData(3, 2) = 88
-    sourceData(4, 2) = 10: sourceData(5, 2) = 20
-
-    For caseNo = LBound(pairs) To UBound(pairs)
-        pair = pairs(caseNo)
-        sourceData(4, 1) = pair(0): sourceData(5, 1) = pair(1)
-        Set source = UnivDB.CreateTable()
-        source.LoadFromArray sourceData
-        For existing = 0 To 1
-            targetData(3, 1) = "OTHER"
-            If existing = 1 Then targetData(3, 1) = pair(0)
-            Set T = UnivDB.CreateTable()
-            T.LoadFromArray targetData
-            Set idx = T.GetHashIndex("Val")
-            gen = T.Generation
-            label = "upsert_duplicate_" & caseNo & "_" & existing
-            On Error Resume Next
-            Err.Clear
-            UnivDB.Upsert T, source, "ID"
-            n = Err.Number
-            On Error GoTo 0
-            LogShim.AssertEq label & "_errno", 9999, n
-            LogShim.AssertEq label & "_no_update", 1, T.Value(2, "Val")
-            LogShim.AssertEq label & "_other_unchanged", 2, T.Value(3, "Val")
-            LogShim.AssertEq label & "_no_insert", 3, T.RowCount
-            LogShim.AssertEq label & "_generation", gen, T.Generation
-            On Error Resume Next
-            Err.Clear
-            idx.EnsureCurrent T
-            n = Err.Number
-            On Error GoTo 0
-            LogShim.AssertEq label & "_index_current", 0, n
-        Next existing
-    Next caseNo
-
-    ' Unique keys still update/insert; Error cells are not comparable keys.
-    sourceData(4, 1) = CVErr(xlErrNA): sourceData(5, 1) = CVErr(xlErrNA)
-    source.LoadFromArray sourceData
-    Set result = T.UpsertFrom(source, "ID")
-    LogShim.AssertEq "upsert_valid_chain", True, result Is T
-    LogShim.AssertEq "upsert_valid_update", 99, T.Value(2, "Val")
-    LogShim.AssertEq "upsert_valid_insert", 6, T.RowCount
-    LogShim.AssertEq "upsert_valid_new_value", 88, T.Value(4, "Val")
-    LogShim.AssertEq "upsert_error_key_preserved", True, IsError(T.Value(5, "ID"))
 End Sub

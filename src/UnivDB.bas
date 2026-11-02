@@ -1,6 +1,4 @@
 Attribute VB_Name = "UnivDB"
-' SPDX-License-Identifier: MIT
-' Copyright (c) 2026 JM - see LICENSE
 Option Explicit
 
 ' [Internal] 테이블 저장소 (Key: 테이블명, Value: clsTable 객체)
@@ -17,29 +15,22 @@ Private m_dicTables As Object
 ' 컴파일 오류가 나 프로젝트 전체가 멈춘다:
 '   On Error Resume Next
 '   sVer = Application.Run("UnivDB.xlam!UnivDB.LibVersion")   ' Err면 구버전
-' 스탬프는 vbaloop dist가 산출물에 심는 CustomDocumentProperties(vbaloop_*)에서 읽고,
-' 없으면 구 vbaflow dist 빌드(2.8.x)의 vbaflow_*로 폴백한다
+' 스탬프는 vbaflow dist가 산출물에 심는 CustomDocumentProperties에서 읽는다
 ' (BUILD_* 상수는 합성 모듈 modBuildInfo에만 있어 src에서 직접 참조할 수 없다).
 Public Function LibVersion() As String
-    Dim sVer As String, sRev As String, sAt As String, sPrefix As String
+    Dim sVer As String, sRev As String, sAt As String
 
-    sPrefix = "vbaloop_"
-    If Len(BuildStamp(sPrefix & "BuildVersion")) = 0 Then sPrefix = "vbaflow_"
-    sVer = BuildStamp(sPrefix & "BuildVersion")
-    sRev = BuildStamp(sPrefix & "BuildRev")
-    sAt = BuildStamp(sPrefix & "BuiltAt")
+    On Error Resume Next
+    sVer = CStr(ThisWorkbook.CustomDocumentProperties("vbaflow_BuildVersion").Value)
+    sRev = CStr(ThisWorkbook.CustomDocumentProperties("vbaflow_BuildRev").Value)
+    sAt = CStr(ThisWorkbook.CustomDocumentProperties("vbaflow_BuiltAt").Value)
+    On Error GoTo 0
 
     If Len(sVer) = 0 Then
         LibVersion = "dev"
     Else
         LibVersion = sVer & "+" & sRev & " (" & sAt & ")"
     End If
-End Function
-
-' [Internal] 빌드 스탬프 문서 속성 값, 없으면 ""
-Private Function BuildStamp(ByVal sName As String) As String
-    On Error Resume Next
-    BuildStamp = CStr(ThisWorkbook.CustomDocumentProperties(sName).Value)
 End Function
 
 ' ==============================================================================
@@ -54,23 +45,21 @@ Public Sub InitDB()
 End Sub
 
 ' 시트 데이터를 이름을 지정하여 테이블로 등록
-' bTrim: 문자열 셀 앞뒤 공백 Trim$ (기본 True). False면 생략 - Reference 6.1절 공백 경계 참고
-' @desc 테이블명과 Range/2D 배열 받아 테이블로 등록함, bTrim=False면 셀 공백 유지
-Public Sub RegisterTable(ByVal sTableName As String, ByVal Source As Variant, _
-                         Optional ByVal bTrim As Boolean = True)
+' [UnivDB.bas] 수정된 RegisterTable
+Public Sub RegisterTable(ByVal sTableName As String, ByVal Source As Variant)
     Dim T As New clsTable
-    
+
     ' 소스 타입에 따라 분기 처리
     If TypeOf Source Is Range Then
         ' Range 객체인 경우 (시트 로드)
-        T.LoadFromSheet Source, bTrim
+        T.LoadFromSheet Source
     ElseIf IsArray(Source) Then
-        ' 배열인 경우 (메모리 직접 로드) - Source는 이 프로시저의 ByVal 사본이라 소유권을 넘긴다
-        T.LoadOwnedArray Source, True, bTrim
+        ' 배열인 경우 (메모리 직접 로드)
+        T.LoadFromArray Source
     Else
         Err.Raise 9999, , "지원하지 않는 소스 타입입니다. (Range 또는 Array 필요)"
     End If
-    
+
     If m_dicTables Is Nothing Then InitDB
     Set m_dicTables(UCase(Trim(sTableName))) = T
 End Sub
@@ -171,7 +160,7 @@ End Function
 Public Function EditTable(ByVal sTableName As String, ByVal sKeyCol As String) As clsTableBuilder
     Dim B As clsTableBuilder
     Set B = New clsTableBuilder
-    
+
     B.KeyColumn = sKeyCol
     B.InitFromTable GetTable(sTableName)
     Set EditTable = B

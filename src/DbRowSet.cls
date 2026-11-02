@@ -7,8 +7,6 @@ Attribute VB_GlobalNameSpace = False
 Attribute VB_Creatable = False
 Attribute VB_PredeclaredId = False
 Attribute VB_Exposed = True
-' SPDX-License-Identifier: MIT
-' Copyright (c) 2026 JM - see LICENSE
 Option Explicit
 
 Private mFlags() As Boolean
@@ -68,10 +66,10 @@ End Property
 
 Public Sub FromAllRows(ByVal tableRowCount As Long, Optional ByVal firstDataRow As Long = 2)
     Dim rowId As Long
-    
+
     Clear
     If tableRowCount < firstDataRow Then Exit Sub
-    
+
     EnsureCapacity tableRowCount
     For rowId = firstDataRow To tableRowCount
         AddRow rowId
@@ -84,7 +82,7 @@ Public Sub LoadFromRowList(ByVal rows As DbRowList)
     AdoptOrVerifyBinding rows
     Clear
     If rows Is Nothing Then Exit Sub
-    
+
     For i = 1 To rows.Count
         AddRow rows.RowAt(i)
     Next i
@@ -93,7 +91,7 @@ End Sub
 Public Sub AddRow(ByVal rowId As Long)
     If rowId < 1 Then Exit Sub
     EnsureCapacity rowId
-    
+
     If Not mFlags(rowId) Then
         mFlags(rowId) = True
         mCount = mCount + 1
@@ -113,15 +111,11 @@ Public Sub IntersectWithRowList(ByVal rows As DbRowList)
 
     AdoptOrVerifyBinding rows
     If mCount = 0 Then Exit Sub
-    If rows Is Nothing Then
+    If rows Is Nothing Or rows.Count = 0 Then
         Clear
         Exit Sub
     End If
-    If rows.Count = 0 Then
-        Clear
-        Exit Sub
-    End If
-    
+
     ReDim keep(1 To mMaxRow)
     For i = 1 To rows.Count
         rowId = rows.RowAt(i)
@@ -132,7 +126,7 @@ Public Sub IntersectWithRowList(ByVal rows As DbRowList)
             End If
         End If
     Next i
-    
+
     mFlags = keep
     mCount = newCount
 End Sub
@@ -171,12 +165,12 @@ Public Function ToArray() As Variant
     Dim result() As Long
     Dim rowId As Long
     Dim pos As Long
-    
+
     If mCount = 0 Then
         ToArray = Array()
         Exit Function
     End If
-    
+
     ReDim result(0 To mCount - 1)
     For rowId = 1 To mMaxRow
         If mFlags(rowId) Then
@@ -184,18 +178,18 @@ Public Function ToArray() As Variant
             pos = pos + 1
         End If
     Next rowId
-    
+
     ToArray = result
 End Function
 
 Private Sub EnsureCapacity(ByVal rowId As Long)
     Dim oldMax As Long
-    
+
     If rowId <= mMaxRow Then Exit Sub
-    
+
     oldMax = mMaxRow
     mMaxRow = rowId
-    
+
     If oldMax = 0 Then
         ReDim mFlags(1 To mMaxRow)
     Else

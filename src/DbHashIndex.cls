@@ -8,8 +8,6 @@ Attribute VB_Creatable = False
 Attribute VB_PredeclaredId = False
 Attribute VB_Exposed = True
 ' @desc 해시 인덱스 백엔드 교체용 인터페이스 표면 담당
-' SPDX-License-Identifier: MIT
-' Copyright (c) 2026 JM - see LICENSE
 Option Explicit
 
 ' 인터페이스 계약 (구현: DictHashIndex, 후속 후보: CoreHashIndex)
@@ -54,8 +52,4 @@ End Function
 
 ' @desc 테이블을 받아 결속 세대와 일치 검증함, stale 시 9998 에러
 Public Sub EnsureCurrent(ByVal tbl As clsTable)
-End Sub
-
-' @desc 캐시에서 폐기된 인덱스를 무효화함, 이후 사용 시 9998 에러
-Public Sub Invalidate()
 End Sub

@@ -7,8 +7,6 @@ Attribute VB_GlobalNameSpace = False
 Attribute VB_Creatable = False
 Attribute VB_PredeclaredId = False
 Attribute VB_Exposed = True
-' SPDX-License-Identifier: MIT
-' Copyright (c) 2026 JM - see LICENSE
 Option Explicit
 
 ' ==============================================================================
@@ -36,7 +34,6 @@ End Enum
 Private m_lRowCount As Long
 Private m_lColCount As Long
 Private m_lHeaderRowIndex As Long   ' 헤더가 위치한 행 번호 (기본 1)
-Private m_vColumnVersions As Variant ' 현재 구조 세대 내 열별 값 버전, 첫 쓰기 때 Long 배열 할당
 Private m_lGeneration As Long       ' 구조 변경(행 수/순서/컬럼 배치)마다 증가하는 세대 번호
 
 ' [초기화]
@@ -61,17 +58,15 @@ End Sub
 ' 사용법 1: t.LoadFromSheet Sheets("Data")        -> 시트 전체 데이터 자동 탐색 (추천)
 ' 사용법 2: t.LoadFromSheet Range("A1")           -> A1부터 끝까지 자동 탐색 (추천)
 ' 사용법 3: t.LoadFromSheet Range("A1:F500")      -> 지정된 범위만 강제 로드
-' bTrim: LoadFromArray와 같은 문자열 셀 Trim$ 계약 (False면 생략 - Reference 6.1절 공백 경계)
 ' ==============================================================================
-' @desc 시트/범위를 테이블로 적재함, bTrim=False면 문자열 셀 앞뒤 공백 유지
-Public Sub LoadFromSheet(ByVal vSource As Variant, Optional ByVal bTrim As Boolean = True)
+Public Sub LoadFromSheet(ByVal vSource As Variant)
     Dim rngTarget As Range
-    
+
     ' 1. 입력 타입 확인 및 범위 확정
     If TypeOf vSource Is Worksheet Then
         ' [Case A] 시트 객체가 넘어온 경우 -> 데이터 있는 전체 범위 자동 탐색
         Set rngTarget = GetRealUsedRange(vSource)
-        
+
     ElseIf TypeOf vSource Is Range Then
         ' [Case B] Range 객체가 넘어온 경우
         If vSource.Cells.Count = 1 Then
@@ -84,20 +79,20 @@ Public Sub LoadFromSheet(ByVal vSource As Variant, Optional ByVal bTrim As Boole
     Else
         Err.Raise 9999, , "LoadFromSheet: Worksheet 또는 Range 객체만 지원합니다."
     End If
-    
+
     ' 2. 데이터 유효성 검사
     If rngTarget Is Nothing Then
         m_lRowCount = 0
         Exit Sub
     End If
-    
+
     ' 3. 메모리 적재 (배열로 변환)
-    ' Value2 계약: 서식과 무관하게 날짜/통화는 Double. ISO 키는 vbDate 입력에만 적용.
+    ' * Value2가 Value보다 속도가 빠름 (통화/날짜 변환 오버헤드 없음)
     Dim vData As Variant
     vData = rngTarget.Value2
-    
-    ' 4. 배열 로드 실행 (ByRef 헬퍼 - 공개 LoadFromArray의 ByVal 인자 복사 1회 생략)
-    LoadArrayCore vData, True, bTrim
+
+    ' 4. 배열 로드 실행
+    LoadFromArray vData
 End Sub
 ' ==============================================================================
 ' Find(xlPrevious) 기반 실사용 범위 탐색 - 중간 공백행에 흔들리지 않음
@@ -106,14 +101,14 @@ Private Function GetRealUsedRange(ByVal ws As Worksheet, Optional ByVal rngStart
     Dim lLastRow As Long, lLastCol As Long
     Dim lStartRow As Long, lStartCol As Long
     Dim rngFindRow As Range, rngFindCol As Range
-    
+
     ' 1. 시작점 설정 (기본 A1)
     If rngStart Is Nothing Then
         lStartRow = 1: lStartCol = 1
     Else
         lStartRow = rngStart.Row: lStartCol = rngStart.Column
     End If
-    
+
     ' 2. 데이터가 있는 '진짜' 마지막 행 찾기 (뒤에서부터 검색)
     ' * xlFormulas 옵션: 숨겨진 수식이나 값 모두 감지
     Set rngFindRow = ws.Cells.Find(What:="*", _
@@ -122,7 +117,7 @@ Private Function GetRealUsedRange(ByVal ws As Worksheet, Optional ByVal rngStart
                                    LookAt:=xlPart, _
                                    SearchOrder:=xlByRows, _
                                    SearchDirection:=xlPrevious)
-                                   
+
     ' 3. 데이터가 있는 '진짜' 마지막 열 찾기
     Set rngFindCol = ws.Cells.Find(What:="*", _
                                    After:=ws.Cells(1, 1), _
@@ -130,48 +125,31 @@ Private Function GetRealUsedRange(ByVal ws As Worksheet, Optional ByVal rngStart
                                    LookAt:=xlPart, _
                                    SearchOrder:=xlByColumns, _
                                    SearchDirection:=xlPrevious)
-    
+
     ' 4. 데이터가 아예 없는 빈 시트일 경우 방어
     If rngFindRow Is Nothing Or rngFindCol Is Nothing Then
         ' 데이터 없음 -> 시작 셀 하나만 반환 (에러 방지)
         Set GetRealUsedRange = ws.Cells(lStartRow, lStartCol)
         Exit Function
     End If
-    
+
     lLastRow = rngFindRow.Row
     lLastCol = rngFindCol.Column
-    
+
     ' 시작점보다 데이터가 앞쪽에 있으면 보정
     If lLastRow < lStartRow Then lLastRow = lStartRow
     If lLastCol < lStartCol Then lLastCol = lStartCol
-    
+
     ' 5. 사각형 범위 확정 (중간에 구멍이 뚫려도 직사각형으로 잡음)
     Set GetRealUsedRange = ws.Range(ws.Cells(lStartRow, lStartCol), ws.Cells(lLastRow, lLastCol))
 End Function
 
 ' 1-2. 배열에서 직접 로드 (데이터 정규화 포함 버전)
-' @desc 2D 배열을 테이블로 적재함, 중복 헤더 거부, bTrim=False면 문자열 셀 앞뒤 공백 유지
-Public Sub LoadFromArray(ByVal vArr As Variant, Optional ByVal bHasHeader As Boolean = True, _
-                         Optional ByVal bTrim As Boolean = True)
-    LoadArrayCore vArr, bHasHeader, bTrim
-End Sub
-
-' [Internal] 호출자가 소유권을 넘긴 배열 적재 (RegisterTable의 ByVal 사본 등) - 인자 복사 1회 생략.
-' vArr는 헤더 Trim으로 그 자리에서 바뀔 수 있다.
-Friend Sub LoadOwnedArray(ByRef vArr As Variant, ByVal bHasHeader As Boolean, ByVal bTrim As Boolean)
-    LoadArrayCore vArr, bHasHeader, bTrim
-End Sub
-
-' [Internal] LoadFromArray/LoadFromSheet 공통 본체. ByRef로 받아 호출 시점 복사를 생략한다
-' (vArr의 헤더 행은 BuildHeaders가 그 자리에서 Trim - 호출자는 자기 소유 배열만 넘길 것).
-' 사용자 입력 경계: 중복 헤더 거부(bTrim과 무관) + 문자열 셀 Trim$(bTrim=True, 기본).
-Private Sub LoadArrayCore(ByRef vArr As Variant, ByVal bHasHeader As Boolean, ByVal bTrim As Boolean)
+Public Sub LoadFromArray(ByVal vArr As Variant, Optional ByVal bHasHeader As Boolean = True)
     Dim i As Long, j As Long
 
     ' 입력 검증은 Clear 앞에서 - 잘못된 입력이 기존 테이블 상태를 파괴하지 않도록 fail-fast
     Require2DArray vArr, "clsTable.LoadFromArray"
-    Dim headers As Object
-    Set headers = BuildHeaders(vArr, bHasHeader, True)
 
     Clear ' 기존 데이터 초기화
 
@@ -179,22 +157,17 @@ Private Sub LoadArrayCore(ByRef vArr As Variant, ByVal bHasHeader As Boolean, By
     m_lRowCount = UBound(m_vData, 1)
     m_lColCount = UBound(m_vData, 2)
 
-    ' [전처리] 전체 데이터 트림 (문자열 셀만 - vbString에만 Trim$ 수행), bTrim=False면 생략
-    ' 열 우선 순회 = VBA 배열 메모리 순서 (첫 첨자가 연속)
-    If bTrim Then
+    ' [전처리] 전체 데이터 트림 (문자열 셀만 - vbString에만 Trim$ 수행)
+    For i = LBound(m_vData, 1) To UBound(m_vData, 1)
         For j = LBound(m_vData, 2) To UBound(m_vData, 2)
-            For i = LBound(m_vData, 1) To UBound(m_vData, 1)
-                If VarType(m_vData(i, j)) = vbString Then
-                    m_vData(i, j) = Trim$(m_vData(i, j))
-                End If
-            Next i
+            If VarType(m_vData(i, j)) = vbString Then
+                m_vData(i, j) = Trim$(m_vData(i, j))
+            End If
         Next j
-    End If
+    Next i
 
-    ' 선검증한 헤더 매핑을 커밋
-    Set m_dicHeaders = headers
-    m_lHeaderRowIndex = LBound(m_vData, 1)
-    If Not bHasHeader Then m_lHeaderRowIndex = m_lHeaderRowIndex - 1
+    ' 헤더 매핑 생성 - 사용자 입력 경계이므로 중복 헤더명은 fail-fast 거부
+    BuildHeaders bHasHeader, True
 End Sub
 
 ' 1-3. [Internal] 이미 정규화된 배열 입양 (내부 물질화 전용)
@@ -204,8 +177,6 @@ End Sub
 Friend Sub AdoptArray(ByRef vArr As Variant, Optional ByVal bHasHeader As Boolean = True)
     ' 입력 검증은 Clear 앞에서 - LoadFromArray와 동일 계약
     Require2DArray vArr, "clsTable.AdoptArray"
-    Dim headers As Object
-    Set headers = BuildHeaders(vArr, bHasHeader, False)
 
     Clear ' 기존 데이터 초기화 (세대 증가 포함 - 파생 구조 실효)
 
@@ -215,9 +186,7 @@ Friend Sub AdoptArray(ByRef vArr As Variant, Optional ByVal bHasHeader As Boolea
 
     ' 내부 신뢰 경로 - 중복 헤더는 last-wins 유지 (조인/SelectColumns가 정당하게
     ' 동명 열을 낼 수 있어 거부하지 않음. 사용자 입력 경계 검증은 LoadFromArray 담당)
-    Set m_dicHeaders = headers
-    m_lHeaderRowIndex = LBound(m_vData, 1)
-    If Not bHasHeader Then m_lHeaderRowIndex = m_lHeaderRowIndex - 1
+    BuildHeaders bHasHeader, False
 End Sub
 
 ' 1-4. [Internal] 입력이 2차원 할당 배열인지 검증 - 로드 경계 fail-fast
@@ -244,37 +213,36 @@ Private Sub Require2DArray(ByRef vArr As Variant, ByVal sCtx As String)
     On Error GoTo 0
 End Sub
 
-' 1-5. [Internal] 테이블을 변경하지 않고 헤더 매핑을 검증/생성
+' 1-5. [Internal] 헤더 행을 열 매핑(m_dicHeaders)으로 등록
 ' LoadFromArray/AdoptArray 공통. bRejectDup=True면 중복 헤더명(UCase 기준)을 Err.Raise 9999로
 ' 거부(사용자 입력 경계), False면 last-wins 유지(내부 신뢰 경로). 헤더 셀은 여기서 Trim$된다.
-Private Function BuildHeaders(ByRef data As Variant, ByVal bHasHeader As Boolean, ByVal bRejectDup As Boolean) As Object
+Private Sub BuildHeaders(ByVal bHasHeader As Boolean, ByVal bRejectDup As Boolean)
     Dim j As Long, sColName As String, sKey As String
-    Dim headers As Object
-    Set headers = CreateObject("Scripting.Dictionary")
 
     If bHasHeader Then
-        Dim lHeadRow As Long: lHeadRow = LBound(data, 1)
-        For j = LBound(data, 2) To UBound(data, 2)
-            If VarType(data(lHeadRow, j)) = vbString Then
-                data(lHeadRow, j) = Trim$(data(lHeadRow, j))
+        Dim lHeadRow As Long: lHeadRow = LBound(m_vData, 1)
+        For j = LBound(m_vData, 2) To UBound(m_vData, 2)
+            If VarType(m_vData(lHeadRow, j)) = vbString Then
+                m_vData(lHeadRow, j) = Trim$(m_vData(lHeadRow, j))
             End If
-            sColName = CStr(data(lHeadRow, j))
+            sColName = CStr(m_vData(lHeadRow, j))
             If Len(sColName) > 0 Then
                 sKey = UCase(sColName)
-                If bRejectDup And headers.exists(sKey) Then
+                If bRejectDup And m_dicHeaders.exists(sKey) Then
                     Err.Raise 9999, "clsTable.LoadFromArray", _
-                        "중복 헤더명 '" & sColName & "' (열 " & headers(sKey) & " 와 " & j & ")"
+                        "중복 헤더명 '" & sColName & "' (열 " & m_dicHeaders(sKey) & " 와 " & j & ")"
                 End If
-                headers(sKey) = j
+                m_dicHeaders(sKey) = j
             End If
         Next j
+        m_lHeaderRowIndex = lHeadRow
     Else
-        For j = LBound(data, 2) To UBound(data, 2)
-            headers("COLUMN" & j) = j
+        For j = LBound(m_vData, 2) To UBound(m_vData, 2)
+            m_dicHeaders("COLUMN" & j) = j
         Next j
+        m_lHeaderRowIndex = LBound(m_vData, 1) - 1
     End If
-    Set BuildHeaders = headers
-End Function
+End Sub
 
 ' 초기화
 Public Sub Clear()
@@ -290,40 +258,22 @@ End Sub
 ' 세대를 올리지 않고 per-column 무효화만 수행한다.
 Private Sub BumpGeneration()
     m_lGeneration = m_lGeneration + 1
-    m_vColumnVersions = Empty
     InvalidateAllIndices
 End Sub
 
 Private Sub InvalidateAllIndices()
-    Dim key As Variant, idx As DbHashIndex
-    If m_dicHashIndices Is Nothing Then Exit Sub
-    For Each key In m_dicHashIndices
-        Set idx = m_dicHashIndices(key)
-        idx.Invalidate
-    Next key
-    m_dicHashIndices.RemoveAll
+    If Not m_dicHashIndices Is Nothing Then m_dicHashIndices.RemoveAll
 End Sub
 
 Private Sub InvalidateIndexByColumnName(ByVal sColName As String)
     Dim lCol As Long
 
     sColName = UCase(Trim(sColName))
-    Dim idx As DbHashIndex
-    If m_dicHashIndices.exists(sColName) Then
-        Set idx = m_dicHashIndices(sColName)
-        idx.Invalidate
-        m_dicHashIndices.Remove sColName
-    End If
+    If m_dicHashIndices.exists(sColName) Then m_dicHashIndices.Remove sColName
 
     If m_dicHeaders.exists(sColName) Then
         lCol = m_dicHeaders(sColName)
-        If IsEmpty(m_vColumnVersions) Then ReDim m_vColumnVersions(1 To m_lColCount) As Long
-        m_vColumnVersions(lCol) = m_vColumnVersions(lCol) + 1
-        If m_dicHashIndices.exists(lCol) Then
-            Set idx = m_dicHashIndices(lCol)
-            idx.Invalidate
-            m_dicHashIndices.Remove lCol
-        End If
+        If m_dicHashIndices.exists(lCol) Then m_dicHashIndices.Remove lCol
     End If
 End Sub
 
@@ -335,7 +285,7 @@ End Sub
 Public Function GetValue(ByVal lRow As Long, ByVal sColName As String) As Variant
     Dim lCol As Long
     sColName = UCase(Trim(sColName))
-    
+
     If m_dicHeaders.exists(sColName) Then
         lCol = m_dicHeaders(sColName)
         ' 배열 범위 방어
@@ -349,18 +299,18 @@ End Function
 Public Function GetRecord(ByVal lRow As Long) As Variant
     Dim vRow() As Variant
     Dim j As Long, lStartCol As Long, lEndCol As Long
-    
+
     If lRow < LBound(m_vData, 1) Or lRow > m_lRowCount Then Exit Function
-    
+
     lStartCol = LBound(m_vData, 2)
     lEndCol = UBound(m_vData, 2)
-    
+
     ReDim vRow(lStartCol To lEndCol)
-    
+
     For j = lStartCol To lEndCol
         vRow(j) = m_vData(lRow, j)
     Next j
-    
+
     GetRecord = vRow
 End Function
 
@@ -372,30 +322,31 @@ End Function
 Public Function GetHashIndex(ByVal sColName As String) As DbHashIndex
     Dim lCol As Long
     Dim idxResult As DbHashIndex
-    
+
     sColName = UCase(Trim(sColName))
-    
+
     If m_dicHashIndices.exists(sColName) Then
         Set idxResult = m_dicHashIndices(sColName)
         idxResult.EnsureCurrent Me ' 불변식 방어: 캐시된 인덱스는 항상 현재 세대여야 함
         Set GetHashIndex = idxResult
         Exit Function
     End If
-    
+
     If Not m_dicHeaders.exists(sColName) Then Exit Function
     lCol = m_dicHeaders(sColName)
-    
+
     Set idxResult = GetHashIndexByIndex(lCol)
     If Not idxResult Is Nothing Then
         Set m_dicHashIndices(sColName) = idxResult
     End If
-    
+
     Set GetHashIndex = idxResult
 End Function
 
 ' 3-1b. 인덱스 생성 및 획득 (By 숫자 인덱스)
 ' 빌드는 IndexBackend가 고른 구체 백엔드로, 반환은 인터페이스로
 Public Function GetHashIndexByIndex(ByVal lCol As Long) As DbHashIndex
+    Dim i As Long
     Dim idx As DbHashIndex
 
     If m_dicHashIndices.exists(lCol) Then
@@ -407,27 +358,34 @@ Public Function GetHashIndexByIndex(ByVal lCol As Long) As DbHashIndex
 
     If lCol < 1 Or lCol > m_lColCount Then Exit Function
 
-    ' 일괄 빌드: 구체 백엔드가 m_vData를 직접 읽는다 (밀봉 예외 - 열 사본과 행당 AddRow
-    ' 인터페이스 디스패치 제거, 2026-10-31 계획 단계 6). 인터페이스에는 Friend를 둘 수 없어 분기한다.
-    Dim lFirst As Long
-    lFirst = m_lHeaderRowIndex + 1
-    If m_lIndexBackend = dbBackendCore Then
-        Dim idxCore As CoreHashIndex
-        Set idxCore = New CoreHashIndex
-        idxCore.BindTo Me
-        If m_lRowCount >= lFirst Then idxCore.BuildFromArray m_vData, lCol, lFirst, m_lRowCount
-        Set idx = idxCore
-    Else
-        Dim idxDict As DictHashIndex
-        Set idxDict = New DictHashIndex
-        idxDict.BindTo Me
-        If m_lRowCount >= lFirst Then idxDict.BuildFromArray m_vData, lCol, lFirst, m_lRowCount
-        Set idx = idxDict
-    End If
+    Set idx = NewBoundIndex()
+
+    ' Phase 6.8 밀봉 - 컬럼 접근은 CopyColumn1D 경유
+    Dim vCol As Variant
+    vCol = CopyColumn1D(lCol)
+    For i = (m_lHeaderRowIndex + 1) To m_lRowCount
+        idx.AddRow vCol(i), i
+    Next i
 
     Set m_dicHashIndices(lCol) = idx
     Set GetHashIndexByIndex = idx
 End Function
+
+' [Internal] IndexBackend 선택에 따라 현재 세대에 결속된 빈 인덱스 생성
+Private Function NewBoundIndex() As DbHashIndex
+    If m_lIndexBackend = dbBackendCore Then
+        Dim idxCore As CoreHashIndex
+        Set idxCore = New CoreHashIndex
+        idxCore.BindTo Me
+        Set NewBoundIndex = idxCore
+    Else
+        Dim idxDict As DictHashIndex
+        Set idxDict = New DictHashIndex
+        idxDict.BindTo Me
+        Set NewBoundIndex = idxDict
+    End If
+End Function
+
 
 ' 3-2a. 특정 조건에 맞는 행 번호들 찾기 (By 컬럼명) - DictHashIndex 어댑터 (호환 shim)
 Public Function SelectRows(ByVal sColName As String, ByVal vValue As Variant) As Collection
@@ -523,7 +481,7 @@ Public Function GetColumnReaderByIndex(ByVal lCol As Long) As DbColumnReader
     If lCol < 1 Or lCol > m_lColCount Then Exit Function
 
     Set rdr = New DbColumnReader
-    rdr.BindData CopyColumn1D(lCol), ObjPtr(Me), m_lGeneration, lCol, ColumnValueVersion(lCol)
+    rdr.BindData CopyColumn1D(lCol), ObjPtr(Me), m_lGeneration
     Set GetColumnReaderByIndex = rdr
 End Function
 
@@ -573,127 +531,13 @@ Public Property Get ColCount() As Long
     ColCount = m_lColCount
 End Property
 
-' @desc 컬럼명-열 번호 매핑 사본 반환, 사본 수정은 원본 스키마에 영향 없음
 Public Property Get Headers() As Object
-    Dim snapshot As Object, key As Variant
-    Set snapshot = CreateObject("Scripting.Dictionary")
-    snapshot.CompareMode = m_dicHeaders.CompareMode
-    For Each key In m_dicHeaders
-        snapshot.Add key, m_dicHeaders(key)
-    Next key
-    Set Headers = snapshot
+    Set Headers = m_dicHeaders
 End Property
-
-' @desc 컬럼명 받아 존재 여부 반환, 대소문자와 앞뒤 공백 무시
-Public Function HasColumn(ByVal sColName As String) As Boolean
-    HasColumn = m_dicHeaders.exists(UCase$(Trim$(sColName)))
-End Function
-
-' @desc 컬럼명 받아 열 번호 반환, 미존재 시 9999 에러
-Public Function ColumnIndex(ByVal sColName As String) As Long
-    sColName = UCase$(Trim$(sColName))
-    If Not m_dicHeaders.exists(sColName) Then
-        Err.Raise 9999, "clsTable.ColumnIndex", "Column not found: " & sColName
-    End If
-    ColumnIndex = m_dicHeaders(sColName)
-End Function
-
-' reader는 구조 세대를 먼저 검증한 뒤 저장된 열 번호로 값 버전을 비교한다.
-Friend Function ColumnValueVersion(ByVal lCol As Long) As Long
-    If Not IsEmpty(m_vColumnVersions) Then ColumnValueVersion = m_vColumnVersions(lCol)
-End Function
 
 Public Property Get RawArray() As Variant
     RawArray = m_vData
 End Property
-
-Friend Property Get FirstDataRow() As Long
-    FirstDataRow = m_lHeaderRowIndex + 1
-End Property
-
-' 후보 위치와 같은 첨자의 사본을 반환한다. rowID 세대 검사는 쿼리 진입점이 담당한다.
-Friend Function CopyCandidateColumn(ByVal col As Long, ByRef rowIds As Variant) As Variant
-    Dim values() As Variant, i As Long
-    If col < 1 Or col > m_lColCount Then Err.Raise 9999, "clsTable.CopyCandidateColumn", "Column out of range"
-    ReDim values(LBound(rowIds) To UBound(rowIds))
-    For i = LBound(rowIds) To UBound(rowIds)
-        values(i) = m_vData(rowIds(i), col)
-    Next i
-    CopyCandidateColumn = values
-End Function
-
-' rowIds(0..n-1)의 각 행을 srcCols 순서로 dest(destRow + i, destCol + k)에 복사한다.
-' rowId = 0이면 대상 셀을 건드리지 않는다(outer 조인의 Empty 측). 전체 배열 사본(RawArray) 없이
-' 자기 m_vData를 직접 읽는 수집 경로. rowID 세대 검증은 호출 진입점 책임(Friend, 호출자 신뢰).
-Friend Sub GatherRows(ByRef rowIds() As Long, ByVal n As Long, ByRef srcCols() As Long, _
-                      ByRef dest As Variant, ByVal destRow As Long, ByVal destCol As Long)
-    Dim i As Long, k As Long, r As Long, c As Long, dc As Long
-    If n <= 0 Then Exit Sub
-    dc = destCol
-    For k = LBound(srcCols) To UBound(srcCols)
-        c = srcCols(k)
-        For i = 0 To n - 1
-            r = rowIds(i)
-            If r <> 0 Then dest(destRow + i, dc) = m_vData(r, c)
-        Next i
-        dc = dc + 1
-    Next k
-End Sub
-
-' 헤더 행과 rowIds(0..n-1)의 행만 이 순서로 남기도록 자기 배열을 재작성한다(구조 변경 - 세대 증가).
-' 헤더 매핑은 그대로 유효하다. rowID 세대 검증은 호출 진입점 책임(Friend, 호출자 신뢰).
-Friend Sub KeepRows(ByRef rowIds() As Long, ByVal n As Long)
-    Dim v() As Variant, r As Long, c As Long, i As Long, lo As Long, base As Long
-    lo = LBound(m_vData, 1)
-    base = m_lHeaderRowIndex + 1
-    If base + n - 1 < lo Then Err.Raise 9999, "clsTable.KeepRows", "Headerless table cannot become empty"
-    ReDim v(lo To base + n - 1, LBound(m_vData, 2) To m_lColCount)
-    For c = LBound(m_vData, 2) To m_lColCount
-        For r = lo To m_lHeaderRowIndex
-            v(r, c) = m_vData(r, c)
-        Next r
-        For i = 0 To n - 1
-            v(base + i, c) = m_vData(rowIds(i), c)
-        Next i
-    Next c
-    m_vData = v
-    m_lRowCount = base + n - 1
-    BumpGeneration
-End Sub
-
-' @desc 동일 스키마 테이블의 행을 순서대로 추가함, 스키마 불일치 시 9999
-Public Function AppendFrom(ByVal source As clsTable) As clsTable
-    Dim combined() As Variant, map() As Long, ids() As Long
-    Dim headers As Object, key As Variant, r As Long, c As Long, count As Long, firstRow As Long
-    If source Is Nothing Then Err.Raise 9999, "clsTable.AppendFrom", "Source table required"
-    Set AppendFrom = Me
-    If source.ColCount = 0 And source.RowCount = 0 Then Exit Function
-    Set headers = source.Headers
-    If m_lColCount = 0 Or source.ColCount <> m_lColCount Or _
-       headers.Count <> source.ColCount Or m_dicHeaders.Count <> m_lColCount Then
-        Err.Raise 9999, "clsTable.AppendFrom", "Matching, uniquely named columns required"
-    End If
-    ReDim map(1 To m_lColCount)
-    For Each key In m_dicHeaders
-        If Not headers.exists(key) Then Err.Raise 9999, "clsTable.AppendFrom", "Missing column: " & key
-        map(m_dicHeaders(key)) = headers(key)
-    Next key
-    firstRow = source.FirstDataRow
-    count = source.RowCount - firstRow + 1
-    If count = 0 Then Exit Function
-    ReDim ids(0 To count - 1)
-    For r = 0 To count - 1: ids(r) = firstRow + r: Next r
-    ReDim combined(LBound(m_vData, 1) To m_lRowCount + count, 1 To m_lColCount)
-    For c = 1 To m_lColCount
-        For r = LBound(m_vData, 1) To m_lRowCount
-            combined(r, c) = m_vData(r, c)
-        Next r
-    Next c
-    source.GatherRows ids, count, map, combined, m_lRowCount + 1, 1
-    m_vData = combined
-    m_lRowCount = m_lRowCount + count
-    BumpGeneration
-End Function
 
 
 ' [clsTable.cls] 추가 코드
@@ -784,31 +628,33 @@ End Function
 ' sGroupCols: 그룹핑할 컬럼명 (콤마로 구분, 예: "Dept, Team")
 ' sAggList: 집계할 컬럼과 함수 (콤마로 구분, 예: "Salary:SUM, Age:AVG, ID:COUNT")
 Public Function GroupBy(ByVal sGroupCols As String, ByVal sAggList As String) As clsTable
-    
+
     Dim dicAccumulator As Object ' Key -> Array(Running Stats)
     Dim dicGroupParts As Object  ' Key -> 정규화된 그룹 값 파트 (첫 등장 표기, 렌더용)
     Dim arrParts() As String
     Dim vRow As Variant
     Dim vStats As Variant
     Dim sKey As String, sVal As String
-    
+
     ' 파싱 변수
     Dim arrGroupCols() As String, arrGroupIndices() As Long
     Dim arrAggItems() As String, arrAggIndices() As Long, arrAggFuncs() As String
     Dim lGroupCount As Long, lAggCount As Long
-    
+
     Dim i As Long, j As Long, R As Long
     Dim vCell As Variant
     Dim bSkipRow As Boolean
 
-    ' 초기화 - 키 의미론은 인덱스 계약(modIndexKey)과 동일: 파트별 FoldIndexKey 접기 + binary 비교
+    ' 초기화 - 키 의미론은 인덱스 계약(modIndexKey)과 동일: 대소문자 무시
     Set dicAccumulator = CreateObject("Scripting.Dictionary")
+    dicAccumulator.CompareMode = vbTextCompare
     Set dicGroupParts = CreateObject("Scripting.Dictionary")
+    dicGroupParts.CompareMode = vbTextCompare
     arrGroupCols = Split(sGroupCols, ",")
     arrAggItems = Split(sAggList, ",")
     lGroupCount = UBound(arrGroupCols) + 1
     lAggCount = UBound(arrAggItems) + 1
-    
+
     ' 1. [Parsing] 컬럼 인덱스 및 함수 매핑
     ReDim arrGroupIndices(0 To lGroupCount - 1)
     For i = 0 To lGroupCount - 1
@@ -819,10 +665,10 @@ Public Function GroupBy(ByVal sGroupCols As String, ByVal sAggList As String) As
             Err.Raise 9999, , "Group Column Not Found: " & sVal
         End If
     Next i
-    
+
     ReDim arrAggIndices(0 To lAggCount - 1)
     ReDim arrAggFuncs(0 To lAggCount - 1)
-    
+
     Dim arrTemp() As String
     For i = 0 To lAggCount - 1
         sVal = Trim(arrAggItems(i))
@@ -838,14 +684,14 @@ Public Function GroupBy(ByVal sGroupCols As String, ByVal sAggList As String) As
             ' 함수 명시 없으면 기본 COUNT로 처리
             arrAggFuncs(i) = "COUNT"
         End If
-        
+
         If m_dicHeaders.exists(UCase(sVal)) Then
             arrAggIndices(i) = m_dicHeaders(UCase(sVal))
         Else
             Err.Raise 9999, , "Agg Column Not Found: " & sVal
         End If
     Next i
-    
+
     ' 2-0. [Hoisting] 컬럼 접근 밀봉 (Phase 6.8) - 대상 컬럼만 1D 사본으로 물질화
     Dim vGroupCols() As Variant
     Dim vAggCols() As Variant
@@ -863,7 +709,7 @@ Public Function GroupBy(ByVal sGroupCols As String, ByVal sAggList As String) As
 
     ' 2-S. [R2 엔진 경로] 단일 그룹 컬럼: 해시 인덱스(키->RowList)가 이미 그룹 파티션.
     ' 커서 순회로 그룹별 RowList만 읽어 전체 행 재스캔과 로컬 누적기를 제거한다.
-    ' 키 의미론(대소문자/폭 접기, Empty->"", Error skip)은 인덱스 계약이 그대로 보장한다.
+    ' 키 의미론(vbTextCompare/Empty->""/Error skip)은 인덱스 계약이 그대로 보장한다.
     If lGroupCount = 1 Then
         Dim idx As DbHashIndex
         Dim cur As DbIndexCursor
@@ -889,8 +735,8 @@ Public Function GroupBy(ByVal sGroupCols As String, ByVal sAggList As String) As
 
             ReDim vStats(0 To (lAggCount * 2) - 1)
             For j = 0 To lAggCount - 1
-                If arrAggFuncs(j) = "SUM" Or arrAggFuncs(j) = "AVG" Then vStats(j * 2) = 0#
-                ' MIN/MAX retain the Empty sentinel.
+                If arrAggFuncs(j) = "MIN" Then vStats(j * 2) = Empty
+                If arrAggFuncs(j) = "MAX" Then vStats(j * 2) = Empty
             Next j
 
             For k = 1 To cntRows
@@ -904,10 +750,10 @@ Public Function GroupBy(ByVal sGroupCols As String, ByVal sAggList As String) As
                         ' MIN/MAX=Error 제외(raw 비교 크래시 차단).
                         Select Case arrAggFuncs(j)
                             Case "SUM"
-                                If IsNumeric(vCell) Then vStats(j * 2) = CDbl(vStats(j * 2)) + CDbl(vCell)
+                                If IsNumeric(vCell) Then vStats(j * 2) = vStats(j * 2) + vCell
                             Case "AVG"
                                 If IsNumeric(vCell) Then
-                                    vStats(j * 2) = CDbl(vStats(j * 2)) + CDbl(vCell)
+                                    vStats(j * 2) = vStats(j * 2) + vCell
                                     vStats(j * 2 + 1) = vStats(j * 2 + 1) + 1
                                 End If
                             Case "COUNT"
@@ -965,7 +811,7 @@ Public Function GroupBy(ByVal sGroupCols As String, ByVal sAggList As String) As
     ' AVG 계산을 위해 모든 항목에 대해 Count를 별도로 관리합니다.
 
     For R = (m_lHeaderRowIndex + 1) To m_lRowCount
-        ' 2-1. 복합 키(Composite Key) 생성 - 길이 접두 인코딩(R3)으로 구분자 충돌 차단
+        ' 2-1. 복합 키(Composite Key) 생성 - 길이 접두 인코딩(modIndexKey, R3)으로 구분자 충돌 차단
         ' 인덱스 계약 준수: Empty->"", Error 키 행은 그룹핑에서 제외 (인덱스 AddRow skip과 동치)
         sKey = ""
         bSkipRow = False
@@ -974,10 +820,7 @@ Public Function GroupBy(ByVal sGroupCols As String, ByVal sAggList As String) As
                 bSkipRow = True
                 Exit For
             End If
-            ' 파트별 접기 후 접힌 길이로 접두 - 접기가 다른 파트 내용에 좌우되지 않음
-            sVal = modIndexKey.NormalizeIndexKey(vGroupCols(i)(R))
-            sVal = modIndexKey.FoldIndexKey(sVal)
-            sKey = sKey & CStr(Len(sVal)) & ":" & sVal & "|"
+            sKey = sKey & modIndexKey.EncodeCompositeKeyPart(vGroupCols(i)(R)) & "|"
         Next i
 
         If Not bSkipRow Then
@@ -986,8 +829,8 @@ Public Function GroupBy(ByVal sGroupCols As String, ByVal sAggList As String) As
                 ReDim vStats(0 To (lAggCount * 2) - 1) ' [Val, Cnt, Val, Cnt...]
                 ' MIN/MAX 초기화 로직 필요시 추가 (여기선 간단히 0/Empty 처리)
                 For j = 0 To lAggCount - 1
-                    If arrAggFuncs(j) = "SUM" Or arrAggFuncs(j) = "AVG" Then vStats(j * 2) = 0#
-                    ' MIN/MAX retain the Empty sentinel.
+                    If arrAggFuncs(j) = "MIN" Then vStats(j * 2) = Empty
+                    If arrAggFuncs(j) = "MAX" Then vStats(j * 2) = Empty
                 Next j
                 dicAccumulator(sKey) = vStats
 
@@ -1009,10 +852,10 @@ Public Function GroupBy(ByVal sGroupCols As String, ByVal sAggList As String) As
                 If Not IsEmpty(vCell) Then
                     Select Case arrAggFuncs(j)
                         Case "SUM"
-                            If IsNumeric(vCell) Then vStats(j * 2) = CDbl(vStats(j * 2)) + CDbl(vCell)
+                            If IsNumeric(vCell) Then vStats(j * 2) = vStats(j * 2) + vCell
                         Case "AVG"
                             If IsNumeric(vCell) Then
-                                vStats(j * 2) = CDbl(vStats(j * 2)) + CDbl(vCell)
+                                vStats(j * 2) = vStats(j * 2) + vCell
                                 vStats(j * 2 + 1) = vStats(j * 2 + 1) + 1
                             End If
                         Case "COUNT"
@@ -1040,11 +883,11 @@ Public Function GroupBy(ByVal sGroupCols As String, ByVal sAggList As String) As
             dicAccumulator(sKey) = vStats ' Value타입이므로 다시 넣어줘야 함 (Variant Array 특성)
         End If
     Next R
-    
+
     ' 3. [Render] 결과 테이블 생성
     lResultRows = dicAccumulator.Count
     ReDim vResultData(1 To lResultRows + 1, 1 To lResultCols)
-    
+
     ' 3-1. 헤더 작성
     For i = 0 To lGroupCount - 1
         vResultData(1, i + 1) = arrGroupCols(i)
@@ -1053,19 +896,19 @@ Public Function GroupBy(ByVal sGroupCols As String, ByVal sAggList As String) As
         ' 헤더명: "Salary_SUM" 형태로 자동 생성
         vResultData(1, lGroupCount + i + 1) = Trim(Split(arrAggItems(i), ":")(0)) & "_" & arrAggFuncs(i)
     Next i
-    
+
     ' 3-2. 데이터 채우기
     vKeys = dicAccumulator.Keys
     For R = 0 To lResultRows - 1
         sKey = vKeys(R)
         vStats = dicAccumulator(sKey)
-        
+
         ' 그룹 컬럼 복원 - 키 재분해(Split) 대신 첫 등장 시 보존한 파트 사용 (인코딩 무관)
         arrTemp = dicGroupParts(sKey)
         For i = 0 To lGroupCount - 1
             vResultData(R + 2, i + 1) = arrTemp(i)
         Next i
-        
+
         ' 집계 결과 계산 및 입력
         For i = 0 To lAggCount - 1
             Select Case arrAggFuncs(i)
@@ -1084,7 +927,7 @@ Public Function GroupBy(ByVal sGroupCols As String, ByVal sAggList As String) As
             End Select
         Next i
     Next R
-    
+
     tResult.AdoptArray vResultData
     Set GroupBy = tResult
 
@@ -1099,32 +942,28 @@ End Function
 ' 특정 컬럼 기준 정렬 (QuickSort Wrapper)
 Public Function OrderBy(ByVal sColName As String, Optional ByVal bDescending As Boolean = False) As clsTable
     Dim lColIdx As Long
-    Dim arrIndices As Variant
+    Dim arrIndices() As Long
     Dim i As Long
-    
+
     ' 1. 컬럼 확인
     sColName = UCase(Trim(sColName))
     If Not m_dicHeaders.exists(sColName) Then
         Err.Raise 9999, , "Sort Column Not Found: " & sColName
     End If
     lColIdx = m_dicHeaders(sColName)
-    If m_lRowCount <= m_lHeaderRowIndex Then
-        Set OrderBy = Me
-        Exit Function
-    End If
-    
+
     ' 2. 인덱스 배열 생성 (헤더 제외 데이터 행 번호만)
     ' m_vData의 실제 행 인덱스를 담습니다.
-    ReDim arrIndices(0 To m_lRowCount - (m_lHeaderRowIndex + 1)) As Long
+    ReDim arrIndices(0 To m_lRowCount - (m_lHeaderRowIndex + 1))
     For i = 0 To UBound(arrIndices)
         arrIndices(i) = m_lHeaderRowIndex + 1 + i
     Next i
-    
+
     ' 3. 퀵 정렬 실행 (인덱스만 정렬)
     If UBound(arrIndices) >= 0 Then
         Call QuickSort(arrIndices, 0, UBound(arrIndices), lColIdx, bDescending)
     End If
-    
+
     ' 4. 데이터 재구성 (Rebuild)
     Call RebuildData(arrIndices)
 
@@ -1137,228 +976,141 @@ End Function
 
 ' 8-1. Upsert (Merge): 다른 테이블의 데이터를 키 기준으로 병합 (Insert + Update)
 ' 설명: 키가 같으면 덮어쓰고(Update), 없으면 추가(Insert)합니다.
-' 전략: 1패스에서 소스 행마다 대상 행을 1회 조회해 기록하고 중복 소스 키를 전부 검증(쓰기 전 fail-fast),
-'       2패스에서 조회 없이 셀을 쓴다. Insert는 결합 배열 1회 할당 후 소스에서 직접 수집.
+' 전략: Update는 In-place로 즉시 처리, Insert는 모아서 배치로 처리 (배열 재할당 비용 최소화)
 Public Function UpsertFrom(ByVal tSource As clsTable, ByVal sKeyCol As String) As clsTable
     Dim idxKey As DbHashIndex
-    Dim vSrcHeader As Variant, vSrcKeys As Variant, vKey As Variant
-    Dim lSourceRow As Long, lTargetRow As Long, lSrcRows As Long
-    Dim i As Long, j As Long, R As Long
-    Dim sColName As String, normalizedKey As String
-    
-    ' 1. 컬럼 매핑 (Source Index -> Target Index), 소스 헤더 순서
+    Dim vSourceData As Variant
+    Dim vKey As Variant
+    Dim lSourceRow As Long, lTargetRow As Long
+    Dim i As Long, j As Long
+    Dim bUpdated As Boolean
+
+    Dim colNewRows As Collection ' 신규 행 임시 저장소
+    Dim vNewRow As Variant
+
+    ' 1. 컬럼 매핑 (Source Index -> Target Index)
     ' 헤더 이름이 일치하는 컬럼만 업데이트 대상이 됩니다.
-    Dim srcIdx() As Long, dstIdx() As Long, nMap As Long
-    ReDim srcIdx(1 To tSource.ColCount + 1)
-    ReDim dstIdx(1 To tSource.ColCount + 1)
-    vSrcHeader = tSource.GetRecord(1)
+    Dim dicColMap As Object
+    Dim lSourceColIdx As Long, lTargetColIdx As Long
+    Dim sColName As String
+
+    Set dicColMap = CreateObject("Scripting.Dictionary")
+
+    vSourceData = tSource.RawArray ' 1회 물질화 (RawArray는 호출마다 전체 복사)
+
+    ' Source의 헤더를 순회하며 Target에 존재하는지 확인
     For i = 1 To tSource.ColCount
-        sColName = UCase(Trim(vSrcHeader(i)))
+        sColName = UCase(Trim(vSourceData(1, i)))
         If m_dicHeaders.exists(sColName) Then
-            nMap = nMap + 1
-            srcIdx(nMap) = i
-            dstIdx(nMap) = m_dicHeaders(sColName)
+            dicColMap(i) = m_dicHeaders(sColName)
         End If
     Next i
-    If nMap > 0 Then
-        ReDim Preserve srcIdx(1 To nMap)
-        ReDim Preserve dstIdx(1 To nMap)
-    End If
-    
+
     ' 키 컬럼 인덱스 확보
     Dim lKeyColSource As Long
-    If tSource.HasColumn(sKeyCol) Then
-        lKeyColSource = tSource.ColumnIndex(sKeyCol)
+    If tSource.Headers.exists(UCase(sKeyCol)) Then
+        lKeyColSource = tSource.Headers(UCase(sKeyCol))
     Else
         Err.Raise 9999, , "Upsert Error: Source table missing key column [" & sKeyCol & "]"
     End If
-    
+
     ' 2. 타겟 테이블 인덱싱 (고속 검색 준비)
     Set idxKey = Me.GetHashIndex(sKeyCol)
     If idxKey Is Nothing Then Err.Raise 9999, , "Upsert Error: Target table missing key column"
 
-    ' 3. [1패스] 대상 행 조회 + 중복 소스 키 검증 (모든 쓰기 전에 끝남 - fail-fast 계약)
-    ' 서로 다른 정규화 키는 서로 다른 첫 행으로 가므로 같은 대상 행 재점유 = 중복 소스 키.
-    ' 미존재 키(삽입 대상)끼리의 중복만 Dictionary로 검사. Error 키는 비교 불가 - 항상 삽입.
-    Dim updSrc() As Long, updDst() As Long, nUpd As Long
-    Dim insSrc() As Long, insDst() As Long, nIns As Long
-    Dim stamp() As Long, newKeys As Object
-    
-    lSrcRows = tSource.RowCount
-    If lSrcRows >= 2 Then
-        ReDim updSrc(0 To lSrcRows - 2): ReDim updDst(0 To lSrcRows - 2)
-        ReDim insSrc(0 To lSrcRows - 2)
-        vSrcKeys = tSource.CopyColumnValues(lKeyColSource)
-    End If
-    ReDim stamp(0 To m_lRowCount)
-    Set newKeys = CreateObject("Scripting.Dictionary") ' 접기 키 + binary (인덱스 계약과 동일)
-    
-    ' 키 정규화(Empty/CStr/접기)는 TryGetFirstRowId가 담당
-    For lSourceRow = 2 To lSrcRows
-        vKey = vSrcKeys(lSourceRow)
-        If IsError(vKey) Then
-            insSrc(nIns) = lSourceRow: nIns = nIns + 1
-        ElseIf idxKey.TryGetFirstRowId(vKey, lTargetRow) Then
-            ' [UPDATE] 키 존재 -> 기존 행 덮어쓰기 (대상 중복 키는 첫 번째 매칭 행만)
-            If stamp(lTargetRow) <> 0 Then
-                RaiseDuplicateSourceKey vKey, sKeyCol, stamp(lTargetRow), lSourceRow
-            End If
-            stamp(lTargetRow) = lSourceRow
-            updSrc(nUpd) = lSourceRow: updDst(nUpd) = lTargetRow: nUpd = nUpd + 1
+    Set colNewRows = New Collection
+
+    ' 3. Source 데이터 순회 및 분류 (Update vs Insert)
+    ' 키 정규화(Empty/CStr/vbTextCompare)는 TryGetFirstRowId가 담당
+    For lSourceRow = 2 To tSource.RowCount
+        vKey = vSourceData(lSourceRow, lKeyColSource)
+
+        If idxKey.TryGetFirstRowId(vKey, lTargetRow) Then
+            ' [UPDATE] 키 존재 -> 기존 행 덮어쓰기 (In-place)
+            ' 주의: 중복 키가 있다면 첫 번째 매칭 행만 업데이트
+
+            For Each vKey In dicColMap.Keys
+                lSourceColIdx = vKey
+                lTargetColIdx = dicColMap(vKey)
+                m_vData(lTargetRow, lTargetColIdx) = vSourceData(lSourceRow, lSourceColIdx)
+            Next vKey
+            bUpdated = True
         Else
-            ' [INSERT] 키 미존재 -> 신규 행
-            normalizedKey = modIndexKey.NormalizeIndexKey(vKey)
-            normalizedKey = modIndexKey.FoldIndexKey(normalizedKey)
-            If newKeys.exists(normalizedKey) Then
-                RaiseDuplicateSourceKey vKey, sKeyCol, newKeys(normalizedKey), lSourceRow
-            End If
-            newKeys.Add normalizedKey, lSourceRow
-            insSrc(nIns) = lSourceRow: nIns = nIns + 1
+            ' [INSERT] 키 미존재 -> 신규 행 임시 저장
+            ' 전체 컬럼 크기만큼 배열 확보
+            ReDim vNewRow(1 To m_lColCount)
+            For Each vKey In dicColMap.Keys
+                lSourceColIdx = vKey
+                lTargetColIdx = dicColMap(vKey)
+                vNewRow(lTargetColIdx) = vSourceData(lSourceRow, lSourceColIdx)
+            Next vKey
+            colNewRows.Add vNewRow
         End If
     Next lSourceRow
-    Set newKeys = Nothing
-    Erase stamp
-    
-    ' 4. [2패스] 갱신 - 조회 없이 기록된 대상 행에 소스 셀을 직접 쓴다 (In-place)
-    If nUpd > 0 And nMap > 0 Then
-        tSource.CopyCellsInto m_vData, updSrc, updDst, nUpd, srcIdx, dstIdx
-    End If
-    
-    ' 5. 신규 데이터 병합 (Array Resize)
+
+    ' 4. 신규 데이터 병합 (Array Resize)
     ' VBA 2차원 배열은 첫 번째 차원(Row) 확장이 불가능하므로, 새 배열을 만들어 이사해야 함
-    If nIns > 0 Then
-        Dim lOldCount As Long
-        Dim vNewData() As Variant
-        
+    If colNewRows.Count > 0 Then
+        Dim lOldCount As Long, lNewTotal As Long
+        Dim vNewData As Variant
+
         lOldCount = m_lRowCount
-        ReDim vNewData(1 To lOldCount + nIns, 1 To m_lColCount)
-        
+        lNewTotal = lOldCount + colNewRows.Count
+
+        ReDim vNewData(1 To lNewTotal, 1 To m_lColCount)
+
         ' (1) 기존 데이터 복사 (헤더 포함)
-        For j = 1 To m_lColCount
-            For i = 1 To lOldCount
+        For i = 1 To lOldCount
+            For j = 1 To m_lColCount
                 vNewData(i, j) = m_vData(i, j)
-            Next i
-        Next j
-        
-        ' (2) 신규 데이터 추가 (매핑 열만, 나머지는 Empty)
-        ReDim insDst(0 To nIns - 1)
-        For R = 0 To nIns - 1: insDst(R) = lOldCount + 1 + R: Next R
-        If nMap > 0 Then tSource.CopyCellsInto vNewData, insSrc, insDst, nIns, srcIdx, dstIdx
-        
+            Next j
+        Next i
+
+        ' (2) 신규 데이터 추가
+        i = lOldCount + 1
+        For Each vNewRow In colNewRows
+            For j = 1 To m_lColCount
+                vNewData(i, j) = vNewRow(j)
+            Next j
+            i = i + 1
+        Next vNewRow
+
         ' (3) 교체 및 상태 갱신
         m_vData = vNewData
-        m_lRowCount = lOldCount + nIns
+        m_lRowCount = lNewTotal
+
+        ' 중요: 행 번호가 바뀌거나 추가되었으므로 세대 증가 (전체 파생물 실효)
+        BumpGeneration
+    ElseIf bUpdated Then
+        BumpGeneration
     End If
-    
-    ' 중요: 행이 추가되었거나 값이 덮어써졌으므로 세대 증가 (전체 파생물 실효)
-    If nIns > 0 Or nUpd > 0 Then BumpGeneration
 
     Set UpsertFrom = Me
-End Function
-
-Private Sub RaiseDuplicateSourceKey(ByVal vKey As Variant, ByVal sKeyCol As String, _
-                                    ByVal firstRow As Long, ByVal secondRow As Long)
-    Err.Raise 9999, "clsTable.UpsertFrom", _
-        "Duplicate source key [" & modIndexKey.NormalizeIndexKey(vKey) & "] in column [" & sKeyCol & _
-        "] at rows " & firstRow & " and " & secondRow
-End Sub
-
-' 열 값 1D 사본 (첨자 = rowId, 데이터 행만). 행 데이터가 없으면 Empty.
-Friend Function CopyColumnValues(ByVal lCol As Long) As Variant
-    If lCol < 1 Or lCol > m_lColCount Then Err.Raise 9999, "clsTable.CopyColumnValues", "Column out of range"
-    CopyColumnValues = CopyColumn1D(lCol)
-End Function
-
-' 행 1개(rowVals(1..ColCount))를 끝에 추가한다. 사용자 값 경계 - 새 행의 문자열 셀만 Trim$
-' (기존 행은 재트림하지 않음). 1회 결합 복사, 구조 변경이므로 세대 증가.
-Friend Sub AppendRowValues(ByRef rowVals As Variant)
-    Dim combined() As Variant, r As Long, c As Long, lo As Long, newRow As Long
-    lo = LBound(m_vData, 1)
-    newRow = m_lRowCount + 1
-    ReDim combined(lo To newRow, 1 To m_lColCount)
-    For c = 1 To m_lColCount
-        For r = lo To m_lRowCount
-            combined(r, c) = m_vData(r, c)
-        Next r
-        If VarType(rowVals(c)) = vbString Then
-            combined(newRow, c) = Trim$(rowVals(c))
-        Else
-            combined(newRow, c) = rowVals(c)
-        End If
-    Next c
-    m_vData = combined
-    m_lRowCount = newRow
-    BumpGeneration
-End Sub
-
-' 각 k, i에 대해 dest(dstRows(i), dstCols(k)) = 자기 셀(srcRows(i), srcCols(k)). 전체 배열 사본 없음.
-' rowID 세대 검증은 호출 진입점 책임(Friend, 호출자 신뢰).
-Friend Sub CopyCellsInto(ByRef dest As Variant, ByRef srcRows() As Long, ByRef dstRows() As Long, _
-                         ByVal n As Long, ByRef srcCols() As Long, ByRef dstCols() As Long)
-    Dim i As Long, k As Long, sc As Long, dc As Long
-    If n <= 0 Then Exit Sub
-    For k = LBound(srcCols) To UBound(srcCols)
-        sc = srcCols(k): dc = dstCols(k)
-        For i = 0 To n - 1
-            dest(dstRows(i), dc) = m_vData(srcRows(i), sc)
-        Next i
-    Next k
-End Sub
-
-' Query 전용: 세대/열/행을 선검증하고 변경 열만 한 번씩 무효화한다.
-Friend Function UpdateRows(ByVal rows As DbRowSet, ByVal updates As Object) As Long
-    Dim writes As Object, key As Variant, name As String, col As Long
-    Dim rowIds As Variant, rowId As Variant, value As Variant
-    rows.EnsureCurrent Me
-    Set writes = CreateObject("Scripting.Dictionary")
-    For Each key In updates
-        name = UCase$(Trim$(CStr(key)))
-        col = ColumnIndex(name)
-        writes(name) = updates(key)
-    Next key
-    If writes.Count = 0 Or rows.Count = 0 Then Exit Function
-    rowIds = rows.ToArray
-    For Each rowId In rowIds
-        If rowId <= m_lHeaderRowIndex Or rowId > m_lRowCount Then
-            Err.Raise 9999, "clsTable.UpdateRows", "Row out of range: " & rowId
-        End If
-    Next rowId
-    For Each key In writes
-        name = CStr(key)
-        col = ColumnIndex(name)
-        value = writes(key)
-        ' 쓰기 도중 오류가 나더라도 기존 인덱스/reader로 잘못 읽지 못하게 한다.
-        InvalidateIndexByColumnName name
-        For Each rowId In rowIds
-            m_vData(CLng(rowId), col) = value
-        Next rowId
-    Next key
-    UpdateRows = rows.Count
 End Function
 
 ' 8-2. Batch Update: 조건에 맞는 행의 특정 값을 일괄 변경
 ' 예: UpdateBatch "Status", "Inactive", "LastLogin", "< 2023-01-01" (현재는 Equal 조건만 지원)
 Public Function UpdateBatch(ByVal sSetCol As String, ByVal vSetVal As Variant, _
                             ByVal sWhereCol As String, ByVal vWhereVal As Variant) As clsTable
-    
+
     Dim colTargetRows As Collection
     Dim vRowID As Variant
     Dim lSetColIdx As Long
-    
+
     ' 컬럼 존재 확인
     sSetCol = UCase(Trim(sSetCol))
     If Not m_dicHeaders.exists(sSetCol) Then Err.Raise 9999, , "Column Not Found: " & sSetCol
     lSetColIdx = m_dicHeaders(sSetCol)
-    
+
     ' 조건 검색 (기존 SelectRows 활용 - 인덱스 기반 고속 검색)
     Set colTargetRows = Me.SelectRows(sWhereCol, vWhereVal)
-    
+
     ' 데이터 수정
     If colTargetRows.Count > 0 Then
         For Each vRowID In colTargetRows
             m_vData(CLng(vRowID), lSetColIdx) = vSetVal
         Next vRowID
-        
+
         ' 해당 컬럼의 데이터가 변했으므로 관련 인덱스 캐시를 제거
         InvalidateIndexByColumnName sSetCol
     End If
@@ -1375,32 +1127,32 @@ Public Function DeleteBatch(ByVal sWhereCol As String, ByVal vWhereVal As Varian
     Dim vNewData As Variant
     Dim lNewRowCount As Long
     Dim i As Long, j As Long, lCurrentRow As Long
-    
+
     ' 삭제 대상 검색 (0건 매칭은 데이터 수준 - 무동작이 계약)
     Set colDeleteRows = Me.SelectRows(sWhereCol, vWhereVal)
     If colDeleteRows.Count = 0 Then Set DeleteBatch = Me: Exit Function
-    
+
     ' 빠른 조회를 위해 Dictionary로 변환 (O(1) Lookup)
     Set dicDeleteMap = CreateObject("Scripting.Dictionary")
     For Each vRowID In colDeleteRows
         dicDeleteMap(vRowID) = Empty
     Next vRowID
-    
+
     ' 새 배열 크기 계산
     lNewRowCount = m_lRowCount - colDeleteRows.Count
     If lNewRowCount < 1 Then lNewRowCount = 1 ' 최소 헤더 1행 유지
-    
+
     ReDim vNewData(1 To lNewRowCount, 1 To m_lColCount)
-    
+
     ' 데이터 이관
     lCurrentRow = 1
-    
+
     ' (1) 헤더는 무조건 복사 (Row 1)
     For j = 1 To m_lColCount
         vNewData(1, j) = m_vData(1, j)
     Next j
     lCurrentRow = 2
-    
+
     ' (2) 데이터 복사 (삭제 대상 제외)
     For i = 2 To m_lRowCount
         If Not dicDeleteMap.exists(i) Then
@@ -1410,11 +1162,11 @@ Public Function DeleteBatch(ByVal sWhereCol As String, ByVal vWhereVal As Varian
             lCurrentRow = lCurrentRow + 1
         End If
     Next i
-    
+
     ' 교체 및 상태 갱신
     m_vData = vNewData
     m_lRowCount = lNewRowCount
-    
+
     ' 행 번호가 완전히 바뀌었으므로 세대 증가 (전체 파생물 실효)
     BumpGeneration
 
@@ -1431,7 +1183,7 @@ End Function
 Public Property Let Value(ByVal lRow As Long, ByVal sColName As String, ByVal vVal As Variant)
     Dim lCol As Long
     sColName = UCase(Trim(sColName))
-    
+
     If m_dicHeaders.exists(sColName) Then
         lCol = m_dicHeaders(sColName)
         ' 행 범위 체크
@@ -1453,16 +1205,16 @@ Public Function CopyColumn(ByVal sSourceCol As String, ByVal sTargetCol As Strin
     ' 소스 컬럼 오타는 문장 수준 오류 - fail-fast (audit 추보 F23, 이전엔 조용한 무동작)
     If Not m_dicHeaders.exists(UCase(sSourceCol)) Then Err.Raise 9999, "clsTable.CopyColumn", "Column not found: " & sSourceCol
     idxSrc = m_dicHeaders(UCase(sSourceCol))
-    
+
     ' 타겟 컬럼 없으면 생성, 있으면 인덱스 확보
     If Not m_dicHeaders.exists(UCase(sTargetCol)) Then AddColumn sTargetCol
     idxDst = m_dicHeaders(UCase(sTargetCol))
-    
+
     ' 배열 직접 접근 (가장 빠름)
     For i = (m_lHeaderRowIndex + 1) To m_lRowCount
         m_vData(i, idxDst) = m_vData(i, idxSrc)
     Next i
-    
+
     InvalidateIndexByColumnName sTargetCol
 
     Set CopyColumn = Me
@@ -1477,18 +1229,18 @@ Public Function AddColumn(ByVal sColName As String, Optional ByVal vInitialValue
     ' 1. 중복 컬럼명 방지 (멱등 ensure 계약 - 이미 존재하면 무시, 문서화는 C4)
     sColName = Trim(sColName)
     If m_dicHeaders.exists(UCase(sColName)) Then Set AddColumn = Me: Exit Function
-    
+
     ' 2. 컬럼 카운트 증가
     m_lColCount = m_lColCount + 1
-    
+
     ' 3. 배열 확장 (Preserve는 마지막 차원만 변경 가능하므로 Row, Col 구조에서 안전함)
     ReDim Preserve m_vData(1 To m_lRowCount, 1 To m_lColCount)
-    
+
     ' 4. 헤더 등록
     ' 헤더 행에 새 컬럼 이름 입력
     m_vData(m_lHeaderRowIndex, m_lColCount) = sColName
     m_dicHeaders(UCase(sColName)) = m_lColCount
-    
+
     ' 5. 초기값 채우기 (필요한 경우만)
     If Not IsMissing(vInitialValue) Then
         For i = (m_lHeaderRowIndex + 1) To m_lRowCount
@@ -1503,9 +1255,44 @@ End Function
 ' 9-2-2. 기존 컬럼 삭제
 ' sColName: 삭제할 헤더명
 Public Function RemoveColumn(ByVal sColName As String) As clsTable
-    Dim names As New Collection
-    names.Add Trim$(sColName)
-    Set RemoveColumn = RemoveNamedColumns(names)
+    Dim lTargetIdx As Long
+    Dim i As Long, j As Long, k As Long
+    Dim vNewData() As Variant
+
+    sColName = Trim(sColName)
+    ' 멱등 drop 계약 - 없으면 무시 (문서화는 C4)
+    If Not m_dicHeaders.exists(UCase(sColName)) Then Set RemoveColumn = Me: Exit Function
+
+    ' 1. 삭제할 컬럼의 인덱스 확인
+    lTargetIdx = m_dicHeaders(UCase(sColName))
+
+    ' 2. 새로운 배열 선언 (컬럼 수가 1개 줄어듦)
+    ReDim vNewData(1 To m_lRowCount, 1 To m_lColCount - 1)
+
+    ' 3. 데이터 복사 (삭제 대상 컬럼만 제외하고 이동)
+    k = 0
+    For j = 1 To m_lColCount
+        If j <> lTargetIdx Then
+            k = k + 1 ' 새 배열의 컬럼 인덱스
+            For i = 1 To m_lRowCount
+                vNewData(i, k) = m_vData(i, j)
+            Next i
+        End If
+    Next j
+
+    ' 4. 클래스 내부 변수 갱신
+    m_vData = vNewData ' 배열 교체
+    m_lColCount = m_lColCount - 1
+
+    ' 5. 헤더 딕셔너리 재구성 (인덱스가 하나씩 밀리므로 새로 고침)
+    Set m_dicHeaders = CreateObject("Scripting.Dictionary")
+    For j = 1 To m_lColCount
+        m_dicHeaders(UCase(Trim(m_vData(m_lHeaderRowIndex, j)))) = j
+    Next j
+
+    BumpGeneration
+
+    Set RemoveColumn = Me
 End Function
 
 ' ==============================================================================
@@ -1563,52 +1350,13 @@ End Function
 
 ' @desc 컬럼 여러 개 삭제 후 자기 자신 반환, 개별 인자/csv/Array 허용 (멱등 drop)
 Public Function RemoveColumns(ParamArray vCols() As Variant) As clsTable
-    Set RemoveColumns = RemoveNamedColumns(FlattenColumnArgs(vCols))
-End Function
-
-Private Function RemoveNamedColumns(ByVal colNames As Collection) As clsTable
-    Dim headers As Object, vName As Variant
-    Dim dropped() As Boolean, data As Variant, c As Long, k As Long, r As Long, count As Long
-    Dim name As String, hasHeader As Boolean
-    Set RemoveNamedColumns = Me
-    If m_lColCount = 0 Or colNames.Count = 0 Then Exit Function
-    Set headers = Me.Headers
-    hasHeader = (m_lHeaderRowIndex >= LBound(m_vData, 1))
-    ReDim dropped(1 To m_lColCount)
+    Dim colNames As Collection
+    Dim vName As Variant
+    Set colNames = FlattenColumnArgs(vCols)
     For Each vName In colNames
-        name = UCase$(CStr(vName))
-        If headers.exists(name) Then
-            dropped(headers(name)) = True
-            count = count + 1
-            If count = m_lColCount Then Err.Raise 9999, "clsTable.RemoveColumns", "At least one column must remain"
-            ' 순차 삭제의 중복 헤더 last-wins와 COLUMNn 재번호 의미를 유지한다.
-            headers.RemoveAll
-            k = 0
-            For c = 1 To m_lColCount
-                If Not dropped(c) Then
-                    k = k + 1
-                    If hasHeader Then name = UCase$(Trim$(CStr(m_vData(m_lHeaderRowIndex, c)))) Else name = "COLUMN" & k
-                    If Len(name) > 0 Then headers(name) = c
-                End If
-            Next c
-        End If
+        RemoveColumn CStr(vName)
     Next vName
-    If count = 0 Then Exit Function
-    ReDim data(LBound(m_vData, 1) To m_lRowCount, 1 To m_lColCount - count)
-    k = 0
-    For c = 1 To m_lColCount
-        If Not dropped(c) Then
-            k = k + 1
-            For r = LBound(m_vData, 1) To m_lRowCount
-                data(r, k) = m_vData(r, c)
-            Next r
-        End If
-    Next c
-    Set headers = BuildHeaders(data, hasHeader, False)
-    m_vData = data
-    m_lColCount = m_lColCount - count
-    Set m_dicHeaders = headers
-    BumpGeneration
+    Set RemoveColumns = Me
 End Function
 
 Public Function SelectColumns(ParamArray vCols() As Variant) As clsTable
@@ -1625,10 +1373,10 @@ Public Function SelectColumns(ParamArray vCols() As Variant) As clsTable
 
     lNewColCount = colFinalList.Count
     If lNewColCount = 0 Then Set SelectColumns = Me: Exit Function
-    
+
     ' 2. 유효성 검사 및 구(Old) 인덱스 매핑
     ReDim arrOldIndices(1 To lNewColCount)
-    
+
     For j = 1 To lNewColCount
         sColName = colFinalList(j)
         ' 존재하지 않는 컬럼 요청 시 에러 발생
@@ -1637,20 +1385,20 @@ Public Function SelectColumns(ParamArray vCols() As Variant) As clsTable
         End If
         arrOldIndices(j) = m_dicHeaders(UCase(sColName))
     Next j
-    
+
     ' 3. 새 배열 생성 및 데이터 고속 복사
     ReDim vNewData(1 To m_lRowCount, 1 To lNewColCount)
-    
+
     For i = 1 To m_lRowCount
         For j = 1 To lNewColCount
             vNewData(i, j) = m_vData(i, arrOldIndices(j))
         Next j
     Next i
-    
+
     ' 4. 상태 갱신 (Swap & Clear Cache)
     m_vData = vNewData
     m_lColCount = lNewColCount
-    
+
     ' 헤더 딕셔너리 재구축
     m_dicHeaders.RemoveAll
     For j = 1 To m_lColCount
@@ -1744,7 +1492,7 @@ End Sub
 Public Property Get Value(ByVal lRow As Long, ByVal sColName As String) As Variant
     Dim lCol As Long
     sColName = UCase(Trim(sColName))
-    
+
     If m_dicHeaders.exists(sColName) Then
         lCol = m_dicHeaders(sColName)
         If lRow >= LBound(m_vData, 1) And lRow <= m_lRowCount Then
@@ -1754,34 +1502,33 @@ Public Property Get Value(ByVal lRow As Long, ByVal sColName As String) As Varia
 End Property
 
 ' [Internal] 퀵 정렬 알고리즘 (Recursive)
-' 후보 rowID를 원본 열 기준으로 정렬함. 원본 데이터/세대는 변경하지 않는다.
-Friend Sub SortRowIds(ByRef rowIds As Variant, ByVal sColumn As String, ByVal descending As Boolean)
-    sColumn = UCase$(Trim$(sColumn))
-    If Not m_dicHeaders.exists(sColumn) Then
-        Err.Raise 9999, "clsTable.SortRowIds", "Sort Column Not Found: " & sColumn
-    End If
-    If UBound(rowIds) > LBound(rowIds) Then
-        QuickSort rowIds, LBound(rowIds), UBound(rowIds), m_dicHeaders(sColumn), descending
-    End If
-End Sub
-Private Sub QuickSort(ByRef arrIndices As Variant, ByVal L As Long, ByVal R As Long, _
+Private Sub QuickSort(ByRef arrIndices() As Long, ByVal L As Long, ByVal R As Long, _
                       ByVal lKeyCol As Long, ByVal bDesc As Boolean)
     Dim i As Long, j As Long
     Dim vPivot As Variant, vVal As Variant
     Dim lTemp As Long
-    
+
     If L >= R Then Exit Sub
-    
+
     i = L
     j = R
-    
+
     ' 피벗 선택 (중간값)
     ' 주의: arrIndices(x)는 실제 m_vData의 행 번호를 가리킴
     vPivot = m_vData(arrIndices((L + R) \ 2), lKeyCol)
-    
+
     Do While i <= j
-        Do While CompareValues(m_vData(arrIndices(i), lKeyCol), vPivot, bDesc) < 0 And i < R: i = i + 1: Loop
-        Do While CompareValues(m_vData(arrIndices(j), lKeyCol), vPivot, bDesc) > 0 And j > L: j = j - 1: Loop
+        ' 오름차순/내림차순 분기
+        If Not bDesc Then
+            ' Ascending
+            Do While CompareValues(m_vData(arrIndices(i), lKeyCol), vPivot) < 0 And i < R: i = i + 1: Loop
+            Do While CompareValues(m_vData(arrIndices(j), lKeyCol), vPivot) > 0 And j > L: j = j - 1: Loop
+        Else
+            ' Descending
+            Do While CompareValues(m_vData(arrIndices(i), lKeyCol), vPivot) > 0 And i < R: i = i + 1: Loop
+            Do While CompareValues(m_vData(arrIndices(j), lKeyCol), vPivot) < 0 And j > L: j = j - 1: Loop
+        End If
+
         If i <= j Then
             ' Swap Indices (데이터 이동 없음, 인덱스만 교환)
             lTemp = arrIndices(i)
@@ -1791,81 +1538,84 @@ Private Sub QuickSort(ByRef arrIndices As Variant, ByVal L As Long, ByVal R As L
             j = j - 1
         End If
     Loop
-    
+
     If L < j Then Call QuickSort(arrIndices, L, j, lKeyCol, bDesc)
     If i < R Then Call QuickSort(arrIndices, i, R, lKeyCol, bDesc)
 End Sub
 
 ' [Internal] 값 비교 헬퍼 (숫자 vs 문자 처리)
 ' 결과: -1(v1 < v2), 0(Same), 1(v1 > v2)
-Private Function CompareValues(ByVal v1 As Variant, ByVal v2 As Variant, ByVal descending As Boolean) As Integer
-    Dim rank1 As Long, rank2 As Long, result As Integer
-    rank1 = SortTypeRank(v1): rank2 = SortTypeRank(v2)
-
-    ' Error-last is independent of direction.
-    If rank1 = 5 Or rank2 = 5 Then
-        CompareValues = Sgn(rank1 - rank2)
+Private Function CompareValues(ByVal v1 As Variant, ByVal v2 As Variant) As Integer
+    ' Error=safe 계약(D1): Error 셀은 raw CStr로 locale 문자열화돼 은밀히 정렬에 끼지 않도록
+    ' 결정적으로 맨 뒤에 배치한다. (아래 CStr fallback은 CStr(vbError) 예외 위험도 있었다)
+    Dim e1 As Boolean, e2 As Boolean
+    e1 = IsError(v1): e2 = IsError(v2)
+    If e1 Or e2 Then
+        If e1 And e2 Then
+            CompareValues = 0
+        ElseIf e1 Then
+            CompareValues = 1
+        Else
+            CompareValues = -1
+        End If
         Exit Function
     End If
-    If rank1 <> rank2 Then
-        result = Sgn(rank1 - rank2)
-    Else
-        Select Case rank1
-            Case 0, 1, 2 ' Numeric/Empty, Date, Boolean
-                If CDbl(v1) < CDbl(v2) Then result = -1
-                If CDbl(v1) > CDbl(v2) Then result = 1
-            Case 3
-                result = StrComp(CStr(v1), CStr(v2), vbTextCompare)
-            Case 4 ' Null = Null
-                result = 0
-        End Select
-    End If
-    If descending Then result = -result
-    CompareValues = result
-End Function
 
-' A value has one rank regardless of its comparison partner.
-Private Function SortTypeRank(ByVal value As Variant) As Long
-    Select Case VarType(value)
-        Case vbEmpty, vbByte, vbInteger, vbLong, vbSingle, vbDouble, vbCurrency, vbDecimal, 20
-            SortTypeRank = 0
-        Case vbDate: SortTypeRank = 1
-        Case vbBoolean: SortTypeRank = 2
-        Case vbString: SortTypeRank = 3
-        Case vbNull: SortTypeRank = 4
-        Case vbError: SortTypeRank = 5
-        Case Else
-            Err.Raise 9999, "clsTable.OrderBy", "Unsupported sort value type"
-    End Select
+    ' Date=numeric 계약(D3): Date 두 값은 직렬값(CDbl) 수치 비교로 시간순을 보장한다.
+    ' (CStr 텍스트 fallback은 locale 의존이라 시간순이 조용히 깨진다. 문자 혼합은 현행 텍스트 규칙 유지)
+    If VarType(v1) = vbDate And VarType(v2) = vbDate Then
+        If CDbl(v1) < CDbl(v2) Then
+            CompareValues = -1
+        ElseIf CDbl(v1) > CDbl(v2) Then
+            CompareValues = 1
+        Else
+            CompareValues = 0
+        End If
+    ' If one value is a native string, force string comparison for consistency.
+    ElseIf VarType(v1) = vbString Or VarType(v2) = vbString Then
+        CompareValues = StrComp(CStr(v1), CStr(v2), vbTextCompare)
+    ElseIf IsNumeric(v1) And IsNumeric(v2) Then
+        ' Both are numeric types (but not native strings)
+        If CDbl(v1) < CDbl(v2) Then
+            CompareValues = -1
+        ElseIf CDbl(v1) > CDbl(v2) Then
+            CompareValues = 1
+        Else
+            CompareValues = 0
+        End If
+    Else
+        ' Fallback for other types (e.g., numeric vs empty/error)
+        CompareValues = StrComp(CStr(v1), CStr(v2), vbTextCompare)
+    End If
 End Function
 
 ' [Internal] 정렬된 인덱스로 데이터 재배열
-Private Sub RebuildData(ByRef arrSortedIndices As Variant)
+Private Sub RebuildData(ByRef arrSortedIndices() As Long)
     Dim vNewData As Variant
     Dim i As Long, j As Long
     Dim lCols As Long
-    
+
     lCols = m_lColCount
     ReDim vNewData(1 To m_lRowCount, 1 To lCols)
-    
+
     ' 1. 헤더 복사
     For i = 1 To m_lHeaderRowIndex
         For j = 1 To lCols
             vNewData(i, j) = m_vData(i, j)
         Next j
     Next i
-    
+
     ' 2. 데이터 복사 (정렬된 순서대로)
     For i = 0 To UBound(arrSortedIndices)
         Dim lOldRow As Long
         lOldRow = arrSortedIndices(i)
-        
+
         For j = 1 To lCols
             ' 새 배열의 행 인덱스 = (헤더행 + 1 + i)
             vNewData(m_lHeaderRowIndex + 1 + i, j) = m_vData(lOldRow, j)
         Next j
     Next i
-    
+
     ' 3. 교체
     m_vData = vNewData
 

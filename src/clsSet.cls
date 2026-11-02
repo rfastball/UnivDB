@@ -8,8 +8,6 @@ Attribute VB_Creatable = False
 Attribute VB_PredeclaredId = False
 Attribute VB_Exposed = True
 ' @desc 대소문자 무시 dict 기반 고속 집합 연산 담당
-' SPDX-License-Identifier: MIT
-' Copyright (c) 2026 JM - see LICENSE
 Option Explicit
 
 ' ========================================================
@@ -75,9 +73,9 @@ End Property
 Public Sub LoadFromArray(ByVal vArr As Variant)
     Dim i As Long
     Dim vVal As Variant
-    
+
     If Not IsArray(vArr) Then Me.Add vArr: Exit Sub
-    
+
     For i = LBound(vArr) To UBound(vArr)
         vVal = vArr(i)
         ' 빈 값, Null, 에러 값 방어 (UnivFilter 계약 역이식)
@@ -94,20 +92,20 @@ End Sub
 ' ========================================================
 Public Function Compare(ByVal otherSet As clsSet, _
                         Optional ByVal mode As SetRetMode = srAllSplit) As Variant
-    
+
     ' 결과 객체
     Dim setCommon As clsSet, setDiffOther As clsSet, setDiffMe As clsSet
     ' 직접 접근용 변수 (속도 향상 핵심)
     Dim dictCommon As Object, dictDiffOther As Object, dictDiffMe As Object
-    
+
     Dim vKey As Variant, arrOther As Variant
     Dim i As Long
-    
+
     ' 1. 상태 초기화: 기존 마킹(Flag) 제거 (O(N))
     For Each vKey In mDict.Keys
         mDict(vKey) = Empty
     Next vKey
-    
+
     ' 2. 객체 준비 (Lazy Initialization)
     If mode = srIntersect Or mode = srAllSplit Then
         Set setCommon = New clsSet: Set dictCommon = setCommon.InternalDict
@@ -124,7 +122,7 @@ Public Function Compare(ByVal otherSet As clsSet, _
     If UBound(arrOther) >= LBound(arrOther) Then
         For i = LBound(arrOther) To UBound(arrOther)
             vKey = arrOther(i)
-            
+
             If mDict.exists(vKey) Then
                 ' [매칭 성공] 마킹(True) 및 교집합 등록
                 mDict(vKey) = True
@@ -135,7 +133,7 @@ Public Function Compare(ByVal otherSet As clsSet, _
             End If
         Next i
     End If
-    
+
     ' 4. [Secondary Loop] 내 장부 순회 -> 내 차집합(미사용) 결정
     If Not dictDiffMe Is Nothing Then
         For Each vKey In mDict.Keys
@@ -143,7 +141,7 @@ Public Function Compare(ByVal otherSet As clsSet, _
             If IsEmpty(mDict(vKey)) Then dictDiffMe(vKey) = Empty
         Next vKey
     End If
-    
+
     ' 5. 결과 반환
     Select Case mode
         Case srIntersect: Set Compare = setCommon
@@ -151,7 +149,7 @@ Public Function Compare(ByVal otherSet As clsSet, _
         Case srDiffMe:    Set Compare = setDiffMe
         Case srAllSplit:  Compare = Array(setCommon, setDiffMe, setDiffOther)
     End Select
-    
+
 End Function
 
 ' ========================================================
@@ -178,9 +176,9 @@ Public Function Union(ByVal otherSet As clsSet) As clsSet
     Dim NewSet As New clsSet
     Dim TargetDict As Object
     Dim vArr As Variant, i As Long
-    
+
     Set TargetDict = NewSet.InternalDict
-    
+
     ' 내 데이터 주입 (검증 생략)
     If mDict.Count > 0 Then
         vArr = mDict.Keys
@@ -188,7 +186,7 @@ Public Function Union(ByVal otherSet As clsSet) As clsSet
             TargetDict(vArr(i)) = Empty
         Next i
     End If
-    
+
     ' 상대 데이터 주입
     If otherSet.Count > 0 Then
         vArr = otherSet.KeysArray
@@ -196,7 +194,7 @@ Public Function Union(ByVal otherSet As clsSet) As clsSet
             TargetDict(vArr(i)) = Empty
         Next i
     End If
-    
+
     Set Union = NewSet
 End Function
 

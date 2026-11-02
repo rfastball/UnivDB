@@ -1,6 +1,4 @@
 Attribute VB_Name = "TestJoinDirect"
-' SPDX-License-Identifier: MIT
-' Copyright (c) 2026 JM - see LICENSE
 Option Explicit
 
 Public Sub Test_JoinDirect_AllJoinTypes()
@@ -34,32 +32,6 @@ Public Sub Test_JoinDirect_AllJoinTypes()
 
     Set tResult = UnivDB.Join(tLeft, tRight, "Dept", jtRightSemi)
     LogShim.AssertEq "join_direct_right_semi_rows", 3, tResult.RowCount
-
-    Dim backend As Long, expected As Variant, i As Long
-    Dim data(1 To 7, 1 To 2) As Variant
-    data(1, 1) = "ID": data(1, 2) = "Dept"
-    For i = 2 To 7: data(i, 1) = i: Next i
-    data(2, 2) = "A": data(3, 2) = "C": data(4, 2) = "X"
-    data(5, 2) = "A": data(6, 2) = "C": data(7, 2) = "Y"
-    expected = Array(2, 5, 3, 6)
-    For backend = dbBackendDict To dbBackendCore
-        tLeft.LoadFromArray data
-        tLeft.IndexBackend = backend: tRight.IndexBackend = backend
-        Set tResult = JoinTable(tLeft, tRight, "Dept", "Dept", jtLeftSemi, "R_")
-        For i = 0 To 3
-            LogShim.AssertEq "join_semi_order_" & backend & "_" & i, expected(i), tResult.Value(i + 2, "ID")
-        Next i
-        Set tResult = JoinTable(tLeft, tRight, "Dept", "Dept", jtLeftAnti, "R_")
-        LogShim.AssertEq "join_anti_first_" & backend, 4, tResult.Value(2, "ID")
-        LogShim.AssertEq "join_anti_last_" & backend, 7, tResult.Value(3, "ID")
-        Set tResult = JoinTable(tRight, tLeft, "Dept", "Dept", jtRightSemi, "R_")
-        For i = 0 To 3
-            LogShim.AssertEq "join_right_semi_order_" & backend & "_" & i, expected(i), tResult.Value(i + 2, "R_ID")
-        Next i
-        Set tResult = JoinTable(tRight, tLeft, "Dept", "Dept", jtRightAnti, "R_")
-        LogShim.AssertEq "join_right_anti_first_" & backend, 4, tResult.Value(2, "R_ID")
-        LogShim.AssertEq "join_right_anti_last_" & backend, 7, tResult.Value(3, "R_ID")
-    Next backend
 End Sub
 
 Public Sub Test_JoinDirect_DifferentKeyColumnNames()

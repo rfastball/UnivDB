@@ -1,7 +1,7 @@
 # UnivDB Library Reference (Consolidated)
 
 > **For**: Claude Code agent context. Single-file reference replacing CheatSheet, Docs, Guide, Template.
-> **Version**: v2.10.0
+> **Version**: v2.8.0
 
 ---
 
@@ -18,7 +18,6 @@
 ```vb
 UnivDB.InitDB                                          ' 엔진 초기화 (최초 1회)
 UnivDB.RegisterTable "Name", Sheet1.Range("A1")        ' 시트→메모리 등록 (Smart Range)
-UnivDB.RegisterTable "Name", Source, bTrim:=False       ' 문자열 셀 Trim 생략 (5절 적재 Trim 계약)
 UnivDB.GetTable("Name") -> clsTable                    ' 등록된 테이블 직접 참조
 UnivDB.CreateTable() -> clsTable                       ' [Factory] 빈 clsTable 생성 (xlam 참조 시 New 불가 대응)
 UnivDB.ClearDB                                         ' 메모리 정리
@@ -47,9 +46,6 @@ UnivDB.EditTable(TableName, KeyCol) -> clsTableBuilder ' 기존 테이블 스키
 > 3요소이고 연산자는 `Filter`와 같은 화이트리스트를 쓴다. 동일 컬럼 arm을 나열하면
 > SQL IN 의미론이 된다. arm 배열 하나(`FilterAny(vArmList)`)를 넘기는 동적 목록 형태도
 > 허용. 전체 arm이 평가 전에 문장 수준 검증된다 (arm 하나가 틀리면 부분 축소 없이 9999).
-> 동일 열의 숫자 `=` arm만 있는 그룹은 값들을 CDbl로 변환해 한 번 스캔한다.
-> 숫자 문자열/Boolean 비교, Empty·Error·Date·Null 제외, 기존 행 순서는 유지된다.
-> 문자 `IS`, 교차 컬럼, 혼합 연산자 그룹은 기존 arm별 평가를 사용한다.
 >
 > (v2.8.0 정정: 이전 문서의 `FilterIn`/`FilterNotIn`/`FilterLike`/`FilterNotLike`는
 > 구현된 적 없는 유령 표기였다 - IN은 `FilterAny`의 동일 컬럼 arm으로 표현한다.)
@@ -86,32 +82,6 @@ UnivDB.EditTable(TableName, KeyCol) -> clsTableBuilder ' 기존 테이블 스키
 .Update() -> Long             ' Where/Filter 조건 매칭 행 일괄 수정
 .Delete() -> Long
 ```
-
-`Update`는 모든 대상 컬럼을 먼저 검증하고 후보 행을 일괄 수정한다. 같은 실제 열을
-다른 대소문자/공백 표기로 여러 번 지정하면 기존처럼 마지막 값이 적용된다.
-변경 열의 인덱스와 컬럼 reader는 무효화되지만 행 세대와 후보 rowID는 유지된다.
-
-`Insert`는 미존재 컬럼을 테이블 변경 전에 `Err 9999`로 거부하고, 새 행 1개만 끝에 추가한다.
-새 행의 문자열 값은 적재와 같이 앞뒤 `Trim$`되며 기존 행은 다시 트리밍하지 않는다(2.10.0부터 -
-이전엔 Insert마다 전체를 `LoadFromArray`로 재적재). 성공 시 세대가 한 번 증가한다.
-대량 입력에서 단건 `Insert`를 반복하면 매번 기존 테이블 전체를 복사한다.
-**고유 키 기준 병합**이 목적이면 기존 Builder로 행들을 모아 `UpsertFrom`을 한 번 호출한다:
-
-```vb
-Dim target As clsTable, batch As clsTableBuilder, delta As clsTable
-Set target = UnivDB.GetTable("Emp")
-Set batch = UnivDB.Builder("ID")
-batch.InitFromTable target                       ' 스키마만 복제, 기존 행은 가져오지 않음
-batch.Row("E1001").SetVal "Name", "Kim"
-batch.Row("E1002").SetVal "Name", "Lee"
-Set delta = batch.ToTable()                      ' 빌더는 소비되어 초기화됨
-target.UpsertFrom delta, "ID"                    ' 기존 키는 수정, 신규 키는 추가
-```
-
-Builder에서 같은 Row ID는 같은 행을 편집하며, InitFromTable로 가져온 열 중 설정하지 않은
-셀은 Empty다. 기존 키를 병합하면 그 Empty도 덮어쓰므로, 기존 행 수정에는 전체 행 값을
-준비해야 한다. 중복 키를 별도 행으로 보존하는 append에는 이 경로를 사용하지 않는다.
-키가 없는 단순 신규 테이블 구성은 배열을 한 번 `LoadFromArray`하는 경로를 사용한다.
 
 ### Example
 ```vb
@@ -151,9 +121,6 @@ UnivDB.Query("Emp") _
 .FillFromMap(TgtCol, SrcCol, Default)             ' VLOOKUP 효과
 .ConvertDates(Col1, Col2, ...)                    ' 텍스트→날짜 변환
 ```
-
-`FillFromMap`은 원천·대상 컬럼을 복사와 행 순회 전에 검증하며, 없는 컬럼이면 데이터 행이 없어도
-`Err 9999`로 실패합니다. 실제 `Empty` 셀만 기본값(생략 시 빈 문자열)으로 대체합니다.
 
 ### Filter & Update
 ```vb
@@ -197,19 +164,11 @@ UnivDB.Report("SalesData") _
 
 ### I/O
 ```vb
-.LoadFromSheet(Range, [bTrim])               ' 시트에서 로드
-.LoadFromArray(Array, [bHasHeader], [bTrim])  ' 배열에서 로드
+.LoadFromSheet(Range)         ' 시트에서 로드
+.LoadFromArray(Array)         ' 배열에서 로드
 .DumpToSheet(Range, [bAutoFit], [eTextGuard], [bClearRegion])  ' 시트로 출력 (기본 옛 영역 선클리어)
 .RawArray                     ' 내부 2D 배열 접근 (읽기 전용 권장)
 ```
-
-> **적재 Trim 계약**: `LoadFromSheet`/`LoadFromArray`/`RegisterTable`은 기본으로(`bTrim:=True`)
-> 문자열 셀의 앞뒤 공백(ASCII 스페이스)을 `Trim$`한다. 헤더 셀은 항상 Trim되고 중복 헤더 거부도 `bTrim`과 무관하다.
-> `bTrim:=False`(2.10.0)는 데이터 셀 Trim만 생략한다(27k x 34 문자열 위주 적재 약 160 -> 80ms).
-> 이때 공백 포함 셀에서 표면이 갈린다: `Filter`/`Keep`/`Exclude`의 문자열 연산자(`IS`, `IS NOT`, `LIKE`, `NOT LIKE`)는
-> 비교 시 셀을 Trim하므로 `" a "`가 `"a"`와 일치하지만, `Where`/Join/GroupBy/Upsert(인덱스 키, 6.1절)는 Trim하지 않으므로
-> 일치하지 않는다(`Where("K", " a ")`처럼 원문으로만 일치). 공백이 의미 없는 키 열이면 기본값을 쓸 것.
-> 내부 결과(Join/GroupBy/Query 결과 등)는 이미 적재된 셀을 옮기므로 재Trim하지 않는다.
 
 > **DumpToSheet 클리어 계약 (기본 클리어)**: `DumpToSheet`는 기본으로(`bClearRegion:=True`)
 > 쓰기 전 시작셀의 옛 `CurrentRegion`을 선클리어한 뒤 새 데이터를 덮어쓴다. 축소 재덤프에서
@@ -225,7 +184,6 @@ UnivDB.Report("SalesData") _
 (in-place 변형이며 세대(Generation)는 규칙대로 증가한다):
 
 ```vb
-.AppendFrom(SourceTable)           ' 동일 스키마 행 일괄 추가 (중복/순서 보존)
 .UpsertFrom(SourceTable, KeyCol)    ' 키 기준 Insert or Update (Merge)
 .GroupBy(GroupCols, AggList)         ' 집계: "Col:SUM, Col:AVG, Col:COUNT, Col:MAX, Col:MIN"
                                      '   함수 생략 시 COUNT 기본 ("Col" == "Col:COUNT")
@@ -246,43 +204,9 @@ Set tTop = T.GroupBy("Dept", "Amt:SUM").OrderBy("Amt_SUM", True)
 T.AddColumn("Bonus", 0).Compute("Total", "Amt", "+", "Bonus").OrderBy "Total", True
 ```
 
-`AppendFrom`은 대상의 스키마를 유지하면서 소스의 데이터 행을 한 번에 추가합니다.
-열 순서는 달라도 이름(대소문자 무시)으로 매핑하며, 양쪽 모두 모든 열 이름이 유일하고
-비어 있지 않은 동일 스키마여야 합니다. 불일치 또는 Nothing은 쓰기 전 `Err 9999`입니다.
-중복 키·행 순서·셀 타입/공백은 그대로 보존하며, 소스는 변경하지 않습니다.
-자기 자신을 추가할 수도 있습니다. 성공한 비어 있지 않은 추가는 세대를 한 번 증가시키므로
-기존 Query/Index/Reader는 다시 취득해야 합니다. 초기화되지 않은 빈 소스는 무동작이며,
-헤더만 있는 소스는 스키마 검증 후 무동작입니다. 대상 스키마는 먼저 초기화해야 합니다.
-
-```vb
-Dim batch As clsTable
-Set batch = UnivDB.CreateTable()
-batch.LoadFromArray rowsWithHeader
-T.AppendFrom batch
-```
-
-반복 단건 Insert 대신 위와 같이 모아 추가하면 기존 테이블의 반복 전체 복사를 피합니다.
-Builder의 같은 Row ID는 병합되므로, 중복을 보존할 입력에는 서로 다른 Row ID를 사용하거나
-위 2D 배열 경로를 사용하세요. 단건 Insert의 즉시 실행 계약은 그대로입니다.
-
-`RemoveColumns`는 요청 순서로 열 이름을 해석한 뒤 배열을 한 번만 재작성합니다.
-없는 이름은 무시하고, 변경이 있는 호출은 세대를 한 번만 증가시킵니다.
-마지막 열까지 모두 삭제하려는 호출은 **일부 삭제 없이 Err 9999**로 거부합니다.
-헤더 없는 테이블의 `COLUMNn`은 각 요청 뒤 재번호가 매겨집니다.
-`RemoveColumn`의 단일 이름은 쉼표를 포함해도 그대로 해석합니다.
-
-`UpsertFrom`과 `UnivDB.Upsert`는 대상에 쓰기 전에 소스의 중복 키를 `Err 9999`로 거부합니다.
-오류에는 키·키 컬럼·중복된 소스 행 번호(헤더 포함)가 표시되며, 대상 값·행 수·세대는 변경하지 않습니다.
-중복 판정은 인덱스와 같은 정규화 및 대소문자/폭 접기 규칙(6.1절)을 사용합니다
-(숫자 42와 문자열 "42", `Empty`와 빈 문자열, Date와 대응 ISO 문자열은 같은 키).
-`Error` 셀은 비교 가능한 키가 아니므로 중복 검사에서 제외하며, 기존처럼 신규 행으로 추가됩니다.
-대상에 이미 중복 키가 있으면 첫 번째 행만 갱신하는 기존 동작은 유지됩니다.
-
 ### Properties
 ```vb
-.Headers             ' Dictionary 사본 — 컬럼명→인덱스 매핑, 수정해도 원본에 영향 없음
-.HasColumn("Name")   ' 존재 여부, 대소문자/앞뒤 공백 무시
-.ColumnIndex("Name") ' 열 번호, 미존재 시 9999
+.headers    ' Dictionary — 컬럼명→인덱스 매핑
 .data       ' 2D Array (내부 데이터)
 ```
 
@@ -304,35 +228,9 @@ Where/Join/GroupBy 키는 전부 단일 정규화 계약을 탄다:
 | Error (#N/A 등) | 키 없음 — 해당 행이 인덱스/그룹핑에서 skip |
 | 그 외 | `CStr` 문자열화 — 숫자 `42`와 문자 `"42"`는 **같은 키로 병합** |
 
-- 키 비교는 대소문자/폭 무시. 기본 Dict 백엔드, 복합 GroupBy 키, Upsert 중복 검사는 같은 접기
-  `modIndexKey.FoldIndexKey`(정규화 키 -> 접기 키) + binary 비교를 쓴다 (2.10.0, 하이브리드 접기):
-  - 키에 U+3000-30FF, U+3131-318E, U+FF00-FFFF 코드 유닛이 있으면 `LCMapStringW(LCMAP_UPPERCASE | LCMAP_HALFWIDTH)`,
-    없으면 `UCase$`
-  - **같은 키**: 대소문자(`abc`/`ABC`, `e-acute`/`E-acute`, 키릴 등), 전각 라틴/숫자/소문자/공백(`ＡＢＣ`/`ABC`),
-    반각 한글 자모(U+3131/U+FFA1), 반각 가나와 탁음 결합(U+30AC / U+FF76 U+FF9E)
-  - **다른 키**: `e`/`e-acute`, `sharp s`/`ss`, 결합 문자열(U+00E9 / U+0065 U+0301), 가타카나/히라가나,
-    굽은 따옴표(U+2018 등)/ASCII 따옴표
-  - 키 표기(커서 키, `GetUniqueKeys`, GroupBy 그룹 값)는 첫 등장 정규화 키 그대로 (접기 전)
-- **Unicode 한계 / 백엔드 차이**: 2.9.x Dict(`vbTextCompare` Dictionary)는 미할당 문자, 서식 제어 문자(ZWNJ/LRM 등),
-  일부 인도계/아르메니아 문자를 무관한 문자와 같은 키로 합쳤다 - 2.10.0 접기는 이들을 분리한다(BMP 단일 문자 전수
-  대조 1,400자, 실무 문자 0건). 반각 가나 탁음 결합은 2.9.x에서 분리였고 2.10.0에서 합친다.
-  Core 백엔드(`IndexBackend = dbBackendCore`)는 `vbTextCompare` 등가를 유지하므로 **두 백엔드는 이 문자들에서만 다르다**.
-  자동 백엔드 전환은 없다. `Filter`/`OrderBy`의 문자열 비교는 계속 `StrComp(..., vbTextCompare)`다.
-  Core는 [LCMapStringW sort key](https://learn.microsoft.com/en-us/windows/win32/api/winnls/nf-winnls-lcmapstringw)의
-  바이트열을 해싱한다. 기존 2만 행 벤치의 3회 중앙값은 수정 전 23/25ms에서 수정 후 102/103ms로
-  증가했다(저중복/고중복, 동일 세션 실측). 기본 Dict는 49/32ms에서 50/32ms였다.
+- 키 비교는 대소문자 무시 (`vbTextCompare`)
 - 복합 키(GroupBy 다중 컬럼)는 길이 접두 인코딩 `len:value|len:value|...` — 길이가 파싱 권위라 값에 구분자(`|`, `:`)가 있어도 충돌 없음
 - GroupBy 결과의 그룹 컬럼 값은 정규화 키 문자열 그대로 렌더된다 (Date면 ISO 표기)
-
-**시트 로드의 날짜 경계**: ISO 규칙은 Variant의 실제 타입이 `vbDate`일 때만 적용된다.
-`LoadFromSheet`는 [Range.Value2](https://learn.microsoft.com/en-us/office/vba/api/excel.range.value2)를
-사용하므로 날짜/통화 서식의 셀도 Double로 읽는다. 날짜 서식이나 컬럼명으로 타입을 추론하지 않는다.
-이 경로의 날짜 인덱스 키는 숫자 일련값의 `CStr`이고, Date/ISO 키와 자동 병합되지 않는다.
-
-Excel의 서식 기반 Date 타입이 필요하면 호출자가 명시적으로
-`T.LoadFromArray ws.Range("A1:D10").Value`를 사용할 수 있다.
-`Range.Value`는 Currency 타입도 사용하므로 숫자 정밀도 정책까지 함께 선택하는 입력 경계다.
-서식에 의존하지 않으려면 업무 스키마에 따라 Date Variant 배열을 구성해 `LoadFromArray`에 전달한다.
 
 ### 6.2 NULL/타입 계약 (Empty / Error)
 
@@ -355,23 +253,13 @@ Excel의 서식 기반 Date 타입이 필요하면 호출자가 명시적으로
 
 ### 6.4 OrderBy 비교 규칙 (`clsTable.CompareValues`)
 
-비교 상대와 무관한 타입 순서를 사용한다. 오름차순은 다음 순서다.
+우선순위 순서대로:
 
-1. **숫자와 Empty** → CDbl 수치 비교 (Empty는 0)
-2. **Date** → CDbl 직렬값 비교
-3. **Boolean** → False/True의 CDbl 값 비교
-4. **String** → `vbTextCompare` 텍스트 비교 (숫자 문자열도 String 그룹)
-5. **Null**
-6. **Error**
-
-내림차순은 일반 값의 순서를 뒤집으며 **Error는 양방향 모두 마지막**이다.
-기존의 "한쪽이 String이면 문자 비교" 정책은 비교 순환을 만들므로 폐기했다.
-따라서 숫자 `2`, 숫자 `10`, 문자열 `"15"`의 오름차순은 언제나 `2, 10, "15"`다.
-동등 키 사이의 안정 정렬은 보장하지 않는다.
-
-쿼리는 조건 후보의 원본 rowID를 정렬한 뒤 Top과 열 선택을 적용한다.
-정렬 키를 출력 열에서 제외할 수 있고, 원본 데이터/Generation은 바뀌지 않는다.
-0행 결과 정렬은 헤더만 유지한다. 존재하지 않는 정렬 열은 9999로 거부한다.
+1. **Error** → 맨 뒤 (결정적, locale 무관)
+2. **Date + Date** → 직렬값(CDbl) 수치 비교 — 시간순 보장, locale 무관
+3. **한쪽이 String** → 텍스트 비교(`vbTextCompare`) — 숫자 `9` vs 문자 `"10"`이면 `"10"`이 앞선다
+4. **둘 다 IsNumeric** → CDbl 수치 비교 — Empty는 0 취급
+5. **그 외** → 텍스트 fallback
 
 ### 6.5 연산자 화이트리스트와 fail-fast (`modOperators`)
 
@@ -393,20 +281,6 @@ Excel의 서식 기반 Date 타입이 필요하면 호출자가 명시적으로
 v2.8.0에서 추가된 문장 수준 raise: `FilterAny`의 0개 arm/3요소 아닌 arm/비스칼라 arm 요소
 (전체 arm이 평가 앞에서 검증 - 부분 축소 없음), `Compute`의 비String 비숫자 피연산자
 (Empty/Null/Date/배열/객체)와 상수 0 나눗셈 (컬럼 셀의 0 나눗셈은 기존 데이터 수준 관용 유지).
-
-`Where`/`Filter`의 컬럼과 `Filter`의 비교값 검증은 후보 0행에서도 생략하지 않는다.
-`Update`는 모든 SET 컬럼을 첫 쓰기 전에 검증하며, 컬럼 오타로 일부 값만 변경되지 않는다.
-이는 실행 중 발생하는 모든 오류를 롤백하는 트랜잭션 보장은 아니다.
-
-값만 바꾸면 rowID Generation은 유지되지만, 해당 열의 캐시에서 폐기된 인덱스 객체는
-`EnsureCurrent` 및 조회에서 9998로 실패한다. 인덱스는 테이블에서 다시 취득해야 한다.
-`DbColumnReader` 역시 값 사본이지만 `EnsureCurrent(T)`는 구조 세대와 해당 열의 값 버전을
-함께 검사한다. `Value`/`UpdateBatch`/`CopyColumn`/`Compute`가 그 열을 변경하면 9998로 실패한다.
-다른 열만 바뀌면 통과한다. `Values`/`ValueAt`은 자동 갱신되지 않는 사본 읽기이므로,
-현재 값이 필요한 호출자는 `EnsureCurrent`로 확인하거나 reader를 다시 취득한다.
-
-이미 얻은 RowList/RowSet/커서는 기존 선택의 스냅샷이다. 세대 검사는 행 좌표의 유효성만
-검증하며 변경된 값으로 조건을 다시 평가하지 않는다.
 
 ### 6.6 표현력 공백 (명시적 비지원)
 

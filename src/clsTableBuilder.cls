@@ -7,8 +7,6 @@ Attribute VB_GlobalNameSpace = False
 Attribute VB_Creatable = False
 Attribute VB_PredeclaredId = False
 Attribute VB_Exposed = True
-' SPDX-License-Identifier: MIT
-' Copyright (c) 2026 JM - see LICENSE
 Option Explicit
 
 ' 컬럼명 -> 배열 인덱스(1-based) 매핑
@@ -45,8 +43,14 @@ Public Property Let KeyColumn(ByVal sKey As String)
 End Property
 
 Public Sub InitFromTable(ByVal T As clsTable)
-    ' Headers는 호출자 소유 사본이므로 빌더가 그대로 사용한다.
-    Set m_dicHeaders = T.Headers
+    Dim vKey As Variant
+
+    m_dicHeaders.RemoveAll
+    ' 원본 테이블의 Headers 딕셔너리를 안전하게 복제
+    For Each vKey In T.Headers.Keys
+        m_dicHeaders.Add UCase(Trim(CStr(vKey))), T.Headers(vKey)
+    Next vKey
+
     ' 키 컬럼이 누락된 경우 강제 추가
     If Len(m_sKeyColumn) > 0 And Not m_dicHeaders.exists(m_sKeyColumn) Then
         m_dicHeaders.Add m_sKeyColumn, m_dicHeaders.Count + 1
@@ -66,14 +70,14 @@ Private Sub p_ExpandSchema(ByVal sNewCol As String)
     Dim lNewIndex As Long
     lNewIndex = m_dicHeaders.Count + 1
     m_dicHeaders.Add sNewCol, lNewIndex
-    
+
     ' 현재 커서 확장
     If IsArray(m_vCursor) Then
         ReDim Preserve m_vCursor(1 To lNewIndex)
     Else
         ReDim m_vCursor(1 To lNewIndex)
     End If
-    
+
     ' 기존 행들 일괄 확장 (VBA 1D Array ReDim은 빠름)
     Dim vKey As Variant, vTemp As Variant
     For Each vKey In m_dicRows.Keys
@@ -93,7 +97,7 @@ End Sub
 Public Function Row(ByVal ID As String) As clsTableBuilder
     p_CommitCursor
     m_sCursor = CStr(ID)
-    
+
     If m_dicRows.exists(m_sCursor) Then
         m_vCursor = m_dicRows(m_sCursor)
     Else
@@ -104,7 +108,7 @@ Public Function Row(ByVal ID As String) As clsTableBuilder
         End If
         m_dicRows.Add m_sCursor, m_vCursor
     End If
-    
+
     ' 새 행이든 기존 행이든 Key 값은 확실히 박아둠
     If Len(m_sKeyColumn) > 0 Then Me.Val m_sKeyColumn, m_sCursor
     Set Row = Me
@@ -116,25 +120,25 @@ Public Function ExtractRow(ByVal SourceTable As clsTable, ByVal ID As String) As
     Dim vRaw As Variant
     Dim lRow As Long
     Dim vKey As Variant
-    
+
     ' 1. 타겟 Row로 커서 이동 (없으면 생성됨)
     Me.Row ID
-    
+
     ' 2. 원본에서 고속으로 RowID 추출 (O(1))
     Set colRows = SourceTable.SelectRows(m_sKeyColumn, ID)
-    
+
     ' 3. 데이터가 존재하면 고속 복사
     If colRows.Count > 0 Then
         lRow = colRows(1) ' 중복 시 첫 번째 행 기준
-        vRaw = SourceTable.GetRecord(lRow) ' 해당 행만 복사 (전체 배열 사본 없음)
+        vRaw = SourceTable.RawArray
         Set dicSrcHeaders = SourceTable.Headers
 
         For Each vKey In dicSrcHeaders.Keys
             ' 현재 빌더의 Val(Setter)를 이용해 안전하게 복사 (동적 스키마 자동 대응)
-            Me.Val CStr(vKey), vRaw(dicSrcHeaders(vKey))
+            Me.Val CStr(vKey), vRaw(lRow, dicSrcHeaders(vKey))
         Next vKey
     End If
-    
+
     Set ExtractRow = Me
 End Function
 
@@ -144,9 +148,9 @@ End Function
 Public Function Val(ByVal ColName As String, Optional ByVal Value As Variant) As Variant
     Dim sKey As String
     Dim lIndex As Long
-    
+
     sKey = UCase(Trim(ColName))
-    
+
     If IsMissing(Value) Then
         ' --- [GETTER] ---
         If m_dicHeaders.exists(sKey) Then
@@ -161,11 +165,11 @@ Public Function Val(ByVal ColName As String, Optional ByVal Value As Variant) As
     Else
         ' --- [SETTER] ---
         If Len(m_sCursor) = 0 Then Err.Raise 9999, "clsTableBuilder", ".Row(ID)를 먼저 호출하세요."
-        
+
         If Not m_dicHeaders.exists(sKey) Then
             p_ExpandSchema sKey
         End If
-        
+
         m_vCursor(m_dicHeaders(sKey)) = Value
         Set Val = Me ' 체이닝 반환
     End If
@@ -189,7 +193,7 @@ End Function
 Public Function PatchIf(ByVal ColName As String, ByVal Operator As String, ByVal CondVal As Variant, ByVal TargetCol As String, ByVal NewVal As Variant) As clsTableBuilder
     Dim vCurrent As Variant
     Dim bMatched As Boolean
-    
+
     vCurrent = Me.Val(ColName)
 
     ' 미지 연산자는 즉시 raise (audit F4, V1) - On Error 진입 전에 검증
@@ -207,7 +211,7 @@ Public Function PatchIf(ByVal ColName As String, ByVal Operator As String, ByVal
         Case Else: bMatched = False
     End Select
     On Error GoTo 0
-    
+
     If bMatched Then Me.Val TargetCol, NewVal
     Set PatchIf = Me
 End Function
@@ -217,27 +221,27 @@ End Function
 ' ---------------------------------------------------------
 Public Function ToTable() As clsTable
     p_CommitCursor
-    
+
     Dim tNew As New clsTable
     If m_dicRows.Count = 0 Then
         Set ToTable = tNew
         Exit Function
     End If
-    
+
     Dim lRows As Long, lCols As Long
     Dim vResult As Variant
     Dim vKey As Variant, vRow As Variant
     Dim i As Long, j As Long
-    
+
     lRows = m_dicRows.Count
     lCols = m_dicHeaders.Count
     ReDim vResult(1 To lRows + 1, 1 To lCols)
-    
+
     ' 1. 헤더 입력
     For Each vKey In m_dicHeaders.Keys
         vResult(1, m_dicHeaders(vKey)) = vKey
     Next vKey
-    
+
     ' 2. 데이터 입력
     i = 2
     For Each vKey In m_dicRows.Keys
@@ -249,7 +253,7 @@ Public Function ToTable() As clsTable
         End If
         i = i + 1
     Next vKey
-    
+
     ' 3. 반환 및 초기화
     tNew.LoadFromArray vResult
     Set ToTable = tNew
@@ -261,7 +265,7 @@ Public Sub Clear()
     m_dicRows.RemoveAll
     m_sCursor = ""
     Erase m_vCursor
-    
+
     If Len(m_sKeyColumn) > 0 Then
         m_dicHeaders.Add m_sKeyColumn, 1
     End If
