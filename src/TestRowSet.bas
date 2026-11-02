@@ -1,4 +1,6 @@
 Attribute VB_Name = "TestRowSet"
+' SPDX-License-Identifier: MIT
+' Copyright (c) 2026 JM - see LICENSE
 Option Explicit
 
 Public Sub Test_RowSet_FromAllRows_ToArray_Order()
@@ -42,6 +44,8 @@ Public Sub Test_RowSet_Load_Intersect_Contains()
     arr = rowSet.ToArray()
     LogShim.AssertEq "rowset_intersect_order_first", 2, arr(0)
     LogShim.AssertEq "rowset_intersect_order_second", 7, arr(1)
+    rowSet.IntersectWithRowList Nothing
+    LogShim.AssertEq "rowset_intersect_nothing", 0, rowSet.Count
 End Sub
 
 Public Sub Test_Query_RowSet_Candidate_Order_And_Update()

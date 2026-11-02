@@ -1,6 +1,8 @@
 Attribute VB_Name = "modDbContract"
 ' @desc 파생 구조의 테이블-세대 결속 계약 검증 담당
 ' @depends clsTable
+' SPDX-License-Identifier: MIT
+' Copyright (c) 2026 JM - see LICENSE
 Option Explicit
 
 ' 세대 계약 위반(stale 파생 구조 사용) 전용 에러 번호 (일반 에러 9999와 구분)

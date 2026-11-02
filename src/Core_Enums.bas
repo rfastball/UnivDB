@@ -1,5 +1,7 @@
 Attribute VB_Name = "Core_Enums"
 ' @desc UnivCore 공통 Enum/상수 선언
+' SPDX-License-Identifier: MIT
+' Copyright (c) 2026 JM - see LICENSE
 Option Explicit
 
 ' 은퇴한 토글: 해시가 순수 VBA 단일 경로(byte 배열 + 폴딩 테이블)로 통일되어

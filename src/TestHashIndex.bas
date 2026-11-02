@@ -1,6 +1,8 @@
 Attribute VB_Name = "TestHashIndex"
 ' @desc 해시 인덱스 백엔드 동치(키 의미론, 커서, 쿼리 경로) 검증 담당
 ' @depends modIndexKey, modDbContract, UnivDB
+' SPDX-License-Identifier: MIT
+' Copyright (c) 2026 JM - see LICENSE
 Option Explicit
 
 ' 백엔드 파라메트릭 스위트: 동일 케이스를 DictHashIndex/CoreHashIndex 양쪽에 실행해
@@ -205,3 +207,31 @@ Private Function NewHashIndexTable() As clsTable
     T.LoadFromArray vData
     Set NewHashIndexTable = T
 End Function
+
+' 실제 VBA 로캘에서 같은 키는 Core 해시/조회도 같아야 한다.
+Public Sub Test_HashIndex_UnicodeEquality()
+    Dim pairs As Variant, pair As Variant, a As String, b As String
+    Dim idx As DbHashIndex, rows As DbRowList, expected As Long, pairId As Long
+    pairs = Array(Array(ChrW(&HE9), "e" & ChrW(&H301)), _
+                  Array("A", "a"), Array("A", ChrW(&HFF21)), _
+                  Array(ChrW(&HAC00), ChrW(&H1100) & ChrW(&H1161)), _
+                  Array("ab", "a" & ChrW(0) & "b"), Array("", ChrW(0)), _
+                  Array(ChrW(&H3042), ChrW(&H30A2)), Array("a", "b"))
+    For Each pair In pairs
+        pairId = pairId + 1
+        a = pair(0): b = pair(1)
+        expected = StrComp(a, b, vbTextCompare)
+        If expected = 0 Then
+            LogShim.AssertEq "unicode_equal_hash_" & pairId, Core_HashKeyText(a), Core_HashKeyText(b)
+        End If
+        Set idx = New CoreHashIndex
+        idx.AddRow a, 2
+        LogShim.AssertEq "unicode_equal_lookup_" & pairId, (expected = 0), idx.TryGetRows(b, rows)
+        idx.AddRow b, 3
+        If expected = 0 Then
+            LogShim.AssertEq "unicode_equal_count_" & pairId, 1, idx.CountKeys
+        Else
+            LogShim.AssertEq "unicode_distinct_count_" & pairId, 2, idx.CountKeys
+        End If
+    Next pair
+End Sub

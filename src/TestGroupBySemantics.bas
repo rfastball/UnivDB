@@ -1,6 +1,8 @@
 Attribute VB_Name = "TestGroupBySemantics"
 ' @desc GroupBy 키 의미론(대소문자, Empty, 복합 키 충돌) 회귀 검증 담당
 ' @depends UnivDB
+' SPDX-License-Identifier: MIT
+' Copyright (c) 2026 JM - see LICENSE
 Option Explicit
 
 ' Phase R1 (결정 B 적용됨): GroupBy key 의미론은 인덱스 계약(modIndexKey)과 동일하다.

@@ -8,6 +8,8 @@ Attribute VB_Creatable = False
 Attribute VB_PredeclaredId = False
 Attribute VB_Exposed = True
 ' @desc 동적 확장 Long 리스트 프리미티브 제공 담당
+' SPDX-License-Identifier: MIT
+' Copyright (c) 2026 JM - see LICENSE
 Option Explicit
 
 ' Core 공개 프리미티브 (설계 결정 3항: 저수준 컨테이너는 Core 책임).

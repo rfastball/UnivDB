@@ -1,4 +1,6 @@
 Attribute VB_Name = "TestJoinDirect"
+' SPDX-License-Identifier: MIT
+' Copyright (c) 2026 JM - see LICENSE
 Option Explicit
 
 Public Sub Test_JoinDirect_AllJoinTypes()

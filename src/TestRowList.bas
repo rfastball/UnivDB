@@ -1,4 +1,6 @@
 Attribute VB_Name = "TestRowList"
+' SPDX-License-Identifier: MIT
+' Copyright (c) 2026 JM - see LICENSE
 Option Explicit
 
 Public Sub Test_RowList_Append_RowAt_ToArray_Clear()

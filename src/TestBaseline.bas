@@ -1,4 +1,6 @@
 Attribute VB_Name = "TestBaseline"
+' SPDX-License-Identifier: MIT
+' Copyright (c) 2026 JM - see LICENSE
 Option Explicit
 
 ' Phase 0 baseline tests discovered by the VBA harness.
@@ -221,6 +223,19 @@ Public Sub Test_Load_FailPreservesState()
     ' 예외 후에도 기존 데이터/헤더가 그대로 보존됨
     LogShim.AssertEq "load_preserve_postcount", 3, T.RowCount
     LogShim.AssertEq "load_preserve_header", True, T.Headers.exists("NAME")
+
+    Dim duplicate(1 To 1, 1 To 2) As Variant, gen As Long, n As Long
+    duplicate(1, 1) = " Dept ": duplicate(1, 2) = "DEPT"
+    gen = T.Generation
+    On Error Resume Next
+    Err.Clear
+    T.LoadFromArray duplicate
+    n = Err.Number
+    On Error GoTo 0
+    LogShim.AssertEq "load_duplicate_preflight", 9999, n
+    LogShim.AssertEq "load_duplicate_preserve_generation", gen, T.Generation
+    LogShim.AssertEq "load_duplicate_preserve_rows", 3, T.RowCount
+    LogShim.AssertEq "load_duplicate_preserve_value", "Ann", T.Value(2, "Name")
 End Sub
 
 ' 내부 신뢰 경로(AdoptArray)는 중복 헤더를 거부하지 않고 last-wins 유지 (비대칭 회귀 고정)
@@ -243,4 +258,33 @@ Public Sub Test_LibVersion_Reports_Something()
     Dim sVer As String
     sVer = UnivDB.LibVersion()
     LogShim.AssertEq "libversion_nonempty", True, Len(sVer) > 0
+End Sub
+
+' Headers 사본을 수정해도 원본 스키마/인덱스/값은 영향을 받지 않는다.
+Public Sub Test_Headers_SnapshotIsolation()
+    Dim T As clsTable, headers As Object, result As clsTable, gen As Long, n As Long, col As Long
+    Set T = NewBaseTable()
+    Set headers = T.Headers
+    gen = T.Generation
+    headers("NAME") = 999
+    headers.RemoveAll
+    T.Headers("NAME") = 999
+    T.Headers.RemoveAll
+    LogShim.AssertEq "headers_original_count", 4, T.Headers.Count
+    LogShim.AssertEq "headers_original_name_col", 2, T.ColumnIndex(" name ")
+    LogShim.AssertEq "headers_has_column_normalized", True, T.HasColumn(" name ")
+    LogShim.AssertEq "headers_missing_column", False, T.HasColumn("__bad__")
+    On Error Resume Next
+    Err.Clear
+    col = T.ColumnIndex("__bad__")
+    n = Err.Number
+    On Error GoTo 0
+    LogShim.AssertEq "headers_bad_index_failfast", 9999, n
+    LogShim.AssertEq "headers_original_generation", gen, T.Generation
+    Set result = UnivDB.Query(T).Where("Name", "Ann").ToTable()
+    LogShim.AssertEq "headers_query_unaffected", "Ann", result.Value(2, "Name")
+
+    Set headers = T.Headers
+    T.AddColumn "Extra"
+    LogShim.AssertEq "headers_snapshot_no_new_column", False, headers.exists("EXTRA")
 End Sub

@@ -9,6 +9,8 @@ Attribute VB_PredeclaredId = False
 Attribute VB_Exposed = True
 ' @desc 병렬 배열 기반 고속 해시 집합 엔진
 ' @depends Core_modMemCore
+' SPDX-License-Identifier: MIT
+' Copyright (c) 2026 JM - see LICENSE
 Option Explicit
 
 ' 구조: mBuckets(해시 And mMask) = 체인 헤드 엔트리 인덱스(1 기반, 0=빈).

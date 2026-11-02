@@ -9,6 +9,8 @@ Attribute VB_PredeclaredId = False
 Attribute VB_Exposed = True
 ' @desc 대량 데이터용 대소문자 무시 집합 엔진
 ' @depends Core_Enums, Core_clsFastHash
+' SPDX-License-Identifier: MIT
+' Copyright (c) 2026 JM - see LICENSE
 Option Explicit
 
 Private mEngine As Core_clsFastHash
